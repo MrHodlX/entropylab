@@ -202,7 +202,7 @@ the first five dice of a word are skipped (reroll). After 23 words, pick
     <section class="card no-print" id="psbt-card" role="tabpanel" hidden>
       <div class="kicker">Inspect first. Sign elsewhere.</div>
       <h2>Read a PSBT. Check its ECDSA nonces.</h2>
-      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Loading a matching key additionally checks whether supported signatures match plain RFC 6979; a mismatch alone is not evidence of a compromised signer.</p>
+      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Loading a matching key additionally checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
       <label class="field">PSBT v0 (base64 or hex)
         <textarea id="psbt-text" placeholder="cHNidP8B..." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
