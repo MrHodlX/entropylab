@@ -25,7 +25,7 @@ Official website: [entropylab.online](https://entropylab.online)
   requiring private keys.
 - Inspects PSBT v0 transactions, reports PSBT-provided amounts and fees, checks
   for repeated ECDSA nonces from the same public key, and can compare supported
-  SegWit v0 SIGHASH_ALL signatures with plain RFC 6979 in a temporary session.
+  SegWit v0 SIGHASH_ALL signatures with RFC 6979, including Bitcoin Core-style low-r grinding, in a temporary session.
 - Produces recovery information that can be saved or printed for offline use.
 
 ## Usage

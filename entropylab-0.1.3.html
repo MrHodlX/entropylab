@@ -1037,7 +1037,7 @@ the first five dice of a word are skipped (reroll). After 23 words, pick
     <section class="card no-print" id="psbt-card" role="tabpanel" hidden>
       <div class="kicker">Inspect first. Sign elsewhere.</div>
       <h2>Read a PSBT. Check its ECDSA nonces.</h2>
-      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Loading a matching key additionally checks whether supported signatures match plain RFC 6979; a mismatch alone is not evidence of a compromised signer.</p>
+      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Loading a matching key additionally checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
       <label class="field">PSBT v0 (base64 or hex)
         <textarea id="psbt-text" placeholder="cHNidP8B..." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
@@ -3284,7 +3284,7 @@ zoo`.split(`
     <section class="card no-print" id="psbt-card" role="tabpanel" hidden>
       <div class="kicker">Inspect first. Sign elsewhere.</div>
       <h2>Read a PSBT. Check its ECDSA nonces.</h2>
-      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Loading a matching key additionally checks whether supported signatures match plain RFC 6979; a mismatch alone is not evidence of a compromised signer.</p>
+      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Loading a matching key additionally checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
       <label class="field">PSBT v0 (base64 or hex)
         <textarea id="psbt-text" placeholder="cHNidP8B..." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
@@ -5385,6 +5385,27 @@ function hodlRunPsbt(){
   let error=document.getElementById("psbt-error"),output=document.getElementById("psbt-out"),manual=document.getElementById("psbt-key").value;error.textContent="";output.innerHTML="";
   try{if(manual.trim()){hodlLoadPsbtKey(manual,document.getElementById("psbt-pass").value);document.getElementById("psbt-key").value="";document.getElementById("psbt-pass").value=""}document.getElementById("psbt-session").textContent=hodlPsbtNote;let psbt=hodlParsePsbt(hodlPsbtBytes(document.getElementById("psbt-text").value));output.innerHTML=hodlRenderPsbt(psbt)}catch(exception){error.textContent=exception instanceof Error?exception.message:String(exception)}
 }
+function hodlLe32Counter(n){let b=new Uint8Array(32);b[0]=n&255;b[1]=(n>>>8)&255;b[2]=(n>>>16)&255;b[3]=(n>>>24)&255;return b}
+function hodlIsLowR(r){return !!(r&&r.length&&r[0]<0x80)}
+function hodlRfc6979Compare(sighash,privateKey,r){
+  let plain=xe.sign(sighash,privateKey,{prehash:!1,extraEntropy:!1});
+  if(hodlEq(plain.slice(0,32),r)){
+    return hodlIsLowR(r)
+      ?{ok:!0,className:"psbt-ok",message:"Matches RFC 6979 (plain deterministic nonce)."}
+      :{ok:!0,className:"psbt-ok",message:"Matches RFC 6979 (plain deterministic nonce). r is high; Bitcoin Core would grind this one."};
+  }
+  for(let n=1;n<=64;n++){
+    let expected=xe.sign(sighash,privateKey,{prehash:!1,extraEntropy:hodlLe32Counter(n)});
+    if(hodlEq(expected.slice(0,32),r)){
+      return {ok:!0,className:"psbt-ok",message:"Matches RFC 6979 with Bitcoin Core-style low-r grind (retry "+n+"). Saves one byte. Not a leak."};
+    }
+  }
+  let zeros=xe.sign(sighash,privateKey,{prehash:!1,extraEntropy:new Uint8Array(32)});
+  if(hodlEq(zeros.slice(0,32),r)){
+    return {ok:!0,className:"psbt-ok",message:"Matches RFC 6979 with 32 zero extra-entropy bytes (some libraries mix this in)."};
+  }
+  return {ok:!1,className:"psbt-warn",message:"Does not match plain RFC 6979 or Bitcoin Core-style low-r grind. Honest signers may add other auxiliary randomness. A mismatch alone is not evidence of compromise. Reused r on two different messages is the real alarm."};
+}
 function hodlRenderPsbt(psbt){
   let network=hodlSelectedNetwork(document.getElementById("psbt-network")),tx=psbt.tx,inputSum=0n,knownInputs=0,html=[],rValues=[],rows=[],tapSignatureCount=0;
   html.push("<p class='label'>Where this transaction sends bitcoin</p>");tx.outputs.forEach((output,index)=>{html.push("<p class='psbt-kv'><strong>Output "+index+"</strong> · "+hodlSats(output.amount)+" BTC<br>"+$t(hodlAddr(output.script,network))+"</p>")});
@@ -5392,9 +5413,9 @@ function hodlRenderPsbt(psbt){
     let witnessUtxo=hodlWitUtxo(entries);if(witnessUtxo){inputSum+=witnessUtxo.amount;knownInputs++}let previous=tx.inputs[index],destination=witnessUtxo?hodlAddr(witnessUtxo.script,network):"(previous output details unavailable)",signatures=hodlPartialSigs(entries),tapSignatures=hodlTapSigs(entries),finalized=hodlFinalized(entries);tapSignatureCount+=tapSignatures.length;
     html.push("<p class='psbt-kv'><strong>Input "+index+"</strong> · "+hodlHexRev(previous.txid)+" : "+previous.vout+(witnessUtxo?" · "+hodlSats(witnessUtxo.amount)+" BTC":"")+"<br>"+$t(destination)+"<br>"+(signatures.length+tapSignatures.length?signatures.length+tapSignatures.length+" signature(s) present":finalized?"Finalized input data present":"Not signed yet")+"</p>");
     signatures.forEach(signature=>{
-      let parts=hodlSigParts(signature.der),scriptCode=hodlInputScriptCode(entries,witnessUtxo),sighash=witnessUtxo&&scriptCode?hodlBip143(tx,index,scriptCode,witnessUtxo.amount,signature.sighash):null,signatureValid=parts&&sighash?xe.verify(signature.der,sighash,signature.pubkey,{prehash:!1,format:"der",lowS:!1}):null,privateKey=hodlPrivForPub(signature.pubkey)||hodlPrivFromPath(entries,signature.pubkey),message="Need the matching key in this session to check plain RFC 6979.",className="muted";
+      let parts=hodlSigParts(signature.der),scriptCode=hodlInputScriptCode(entries,witnessUtxo),sighash=witnessUtxo&&scriptCode?hodlBip143(tx,index,scriptCode,witnessUtxo.amount,signature.sighash):null,signatureValid=parts&&sighash?xe.verify(signature.der,sighash,signature.pubkey,{prehash:!1,format:"der",lowS:!1}):null,privateKey=hodlPrivForPub(signature.pubkey)||hodlPrivFromPath(entries,signature.pubkey),message="Need the matching key in this session to check RFC 6979 and low-r grind.",className="muted";
       if(!parts){message="Signature is not strict DER and its nonce cannot be inspected.";className="psbt-warn"}
-      else{rValues.push({input:index,r:parts.r,s:parts.s,hex:M.encode(parts.r),pubkey:signature.pubkey,sighash,valid:signatureValid});if(signatureValid===!1){message="This signature does not verify against the reconstructed input digest.";className="psbt-warn"}else if(privateKey&&sighash)try{let expected=xe.sign(sighash,privateKey,{prehash:!1,extraEntropy:!1}),matches=hodlEq(expected.slice(0,32),parts.r);message=matches?"Matches plain RFC 6979 deterministic signing.":"Does not match plain RFC 6979. Honest signers may add auxiliary randomness; a mismatch alone is not evidence of compromise.";className=matches?"psbt-ok":"psbt-warn"}catch(exception){message="Could not recompute this signature: "+(exception.message||String(exception));className="psbt-warn"}else if(privateKey&&signature.sighash!==1){message="Matching key found, but this check currently supports SIGHASH_ALL without ANYONECANPAY only.";className="psbt-warn"}else if(privateKey&&!scriptCode){message="Matching key found, but this input script is not yet supported for RFC 6979 comparison.";className="psbt-warn"}}
+      else{rValues.push({input:index,r:parts.r,s:parts.s,hex:M.encode(parts.r),pubkey:signature.pubkey,sighash,valid:signatureValid});if(signatureValid===!1){message="This signature does not verify against the reconstructed input digest.";className="psbt-warn"}else if(privateKey&&sighash)try{let cmp=hodlRfc6979Compare(sighash,privateKey,parts.r);message=cmp.message;className=cmp.className}catch(exception){message="Could not recompute this signature: "+(exception.message||String(exception));className="psbt-warn"}else if(privateKey&&signature.sighash!==1){message="Matching key found, but this check currently supports SIGHASH_ALL without ANYONECANPAY only.";className="psbt-warn"}else if(privateKey&&!scriptCode){message="Matching key found, but this input script is not yet supported for RFC 6979 comparison.";className="psbt-warn"}}
       rows.push({input:index,message,className,pubkey:M.encode(signature.pubkey)})
     })
   });
@@ -5409,7 +5430,7 @@ function hodlRenderPsbt(psbt){
   if(rValues.length)html.push("<p class='psbt-kv'>r values:<br>"+rValues.map(value=>$t(value.hex)+" (input "+value.input+")").join("<br>")+"</p>");
   rows.forEach(row=>html.push("<p class='"+row.className+"'><strong>Input "+row.input+"</strong> pubkey "+$t(row.pubkey.slice(0,18))+"… — "+$t(row.message)+"</p>"));
   if(tapSignatureCount)html.push("<p class='muted'>This PSBT also contains "+tapSignatureCount+" Taproot / Schnorr signature(s). They are counted but their BIP340 nonces are not analyzed in this version.</p>");
-  html.push("<p class='muted'>Plain RFC 6979 comparison currently covers SegWit v0 P2WPKH and P2WSH signatures using SIGHASH_ALL. Nonce reuse detection compares strict DER ECDSA signatures from the same public key.</p>");return html.join("")
+  html.push("<p class='muted'>RFC 6979 comparison currently covers SegWit v0 P2WPKH and P2WSH signatures using SIGHASH_ALL, including Bitcoin Core-style low-r grinding. Nonce reuse detection compares strict DER ECDSA signatures from the same public key.</p>");return html.join("")
 }
 var hodlAccountId="bip84",hodlNextKeyId=1,hodlNextKeyNumber=1,hodlKeys=[],hodlActiveKey=-1;
 function hodlKeyColor(id){let hue=Math.round((Number(id)*137.508+19)%360);return`oklch(61% 0.08 ${hue})`}
