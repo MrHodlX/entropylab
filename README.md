@@ -32,6 +32,13 @@ Official website: [entropylab.online](https://entropylab.online)
   Every input's declared sighash policy and each signature's appended sighash
   byte are decoded without a key; anything other than exact SIGHASH_ALL is a
   blocking warning.
+- Accepts a fully signed raw Bitcoin transaction (hex or base64) in the same
+  inspector: outputs, extracted ECDSA nonces, and inscription-envelope hints.
+  Fee and RFC 6979 cannot be checked without previous outputs.
+- With a session seed, root xprv, WIF, or hex key, labels each output as
+  change, receive, or not in this wallet (accounts 0–2, 50 receive + 50
+  change, all four script types). A two-or-more-output transaction with no
+  matching change is a blocking warning.
 - Runs a quick barrage of startup sanity checks on the host browser (secure
   context, CSPRNG, BigInt, UTF-8 encoding, and NFKD normalization). If any
   check fails, the page is replaced with a failure report listing the failed

@@ -4,11 +4,13 @@ import { ripemd160 } from "@noble/hashes/legacy.js";
 // is a drop-in for the noble/curves surface this file uses (see
 // src/js/secp256k1.js). App boot waits for the module to be ready.
 import { secp256k1 as xe, secp256k1Ready } from "./secp256k1.js";
+import { parseRawTx, extractEcdsaSignatures, inscriptionHints, isPsbtMagic } from "./tx.js";
+import { indexHdKey, indexSingleKey, matchOwnership, pathLabel } from "./ownership.js";
 import { createBase58check as fi, hex as M } from "@scure/base";
 import { HDKey as Gt } from "@scure/bip32";
 import { entropyToMnemonic as bi, mnemonicToEntropy as Er, mnemonicToSeedSync as wi, validateMnemonic as Pn } from "@scure/bip39";
 import { wordlist as bip39English } from "@scure/bip39/wordlists/english.js";
-import { NETWORK as Ie, OutScript as Oe, TEST_NETWORK as mo, p2pkh as ir, p2sh as Jr, p2tr as en, p2wpkh as Tt, utils as bitcoinUtils } from "@scure/btc-signer";
+import { NETWORK as Ie, OutScript as Oe, TEST_NETWORK as mo, p2pkh as ir, p2sh as Jr, p2tr as en, p2wpkh as Tt, Address as or, utils as bitcoinUtils } from "@scure/btc-signer";
 import { renderSVG as Xs } from "uqr";
 const Ae = Object.freeze(bip39English);
 const tr = Z;
@@ -572,13 +574,13 @@ ec.innerHTML = `
     </section>
     <section class="card no-print" id="psbt-card" role="tabpanel" hidden>
       <div class="kicker">Inspect first. Sign elsewhere.</div>
-      <h2>Read a PSBT. Check its ECDSA nonces.</h2>
-      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Optional Jade anti-exfil transcripts (host nonce \u03C1 and signer opening R) are checked without a key. Loading a matching key additionally checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
-      <label class="field">PSBT v0 (base64 or hex)
-        <textarea id="psbt-text" placeholder="cHNidP8B..." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      <h2>Read a PSBT or a signed transaction.</h2>
+      <p class="muted psbt-intro">Inspecting a PSBT v0 or a raw Bitcoin transaction does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Optional Jade anti-exfil transcripts (host nonce \u03C1 and signer opening R) are checked without a key. Loading a matching key additionally labels which outputs belong to this wallet (change vs receive vs not yours) and checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
+      <label class="field">PSBT v0 or raw transaction (base64 or hex)
+        <textarea id="psbt-text" placeholder="cHNidP8B\u2026 or 020000000001\u2026" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
       <div class="psbt-grid">
-        <label class="field">Optional session key (BIP39 seed phrase, WIF, or 64-character hex)
+        <label class="field">Optional session key (BIP39 seed phrase, root xprv/tprv, WIF, or 64-character hex)
           <textarea id="psbt-key" placeholder="Leave blank for inspect-only mode" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
         </label>
         <div>
@@ -595,7 +597,7 @@ ec.innerHTML = `
         <span class="field-note">USB Jade only (Green host nonce + opening). QR / sign_psbt does not run anti-exfil yet. BitBox anti-klepto is a different mix \u2014 do not paste it here.</span>
       </label>
       <div class="row psbt-actions">
-        <button class="btn primary" id="psbt-go" type="button">Inspect PSBT</button>
+        <button class="btn primary" id="psbt-go" type="button">Inspect</button>
         <button class="btn secondary" id="psbt-use-calc" type="button">Use active key this session</button>
         <button class="btn secondary" id="psbt-wipe" type="button">End session / clear fields</button>
       </div>
@@ -6600,16 +6602,16 @@ function hodlB64(value) {
 }
 function hodlPsbtBytes(raw) {
   let value = raw.trim(), compact = value.replace(/\s/g, "");
-  if (!value) throw new Error("Paste a PSBT v0.");
-  if (compact.length > 7e6) throw new Error("This PSBT is too large to inspect safely.");
+  if (!value) throw new Error("Paste a PSBT v0 or a raw Bitcoin transaction.");
+  if (compact.length > 7e6) throw new Error("This file is too large to inspect safely.");
   let bytes;
   if (/^[0-9a-fA-F]+$/.test(compact) && compact.length % 2 === 0 && compact.length >= 10) bytes = M.decode(compact.toLowerCase());
   else try {
     bytes = hodlB64(compact);
   } catch {
-    throw new Error("That does not look like a PSBT in base64 or hex.");
+    throw new Error("That does not look like a PSBT or raw transaction in base64 or hex.");
   }
-  if (bytes.length > 5e6) throw new Error("This PSBT is too large to inspect safely.");
+  if (bytes.length > 5e6) throw new Error("This file is too large to inspect safely.");
   return bytes;
 }
 function hodlReadMap(bytes, offset) {
@@ -6706,7 +6708,15 @@ function hodlSats(number) {
 }
 function hodlAddr(script, network) {
   try {
-    return or(_s(network)).encode(Oe.decode(script));
+    let net = _s(network);
+    if (script instanceof Uint8Array) {
+      if (script.length === 22 && script[0] === 0 && script[1] === 20) return or(net).encode({ type: "wpkh", hash: Uint8Array.from(script.subarray(2)) });
+      if (script.length === 34 && script[0] === 0 && script[1] === 32) return or(net).encode({ type: "wsh", hash: Uint8Array.from(script.subarray(2)) });
+      if (script.length === 34 && script[0] === 0x51 && script[1] === 32) return or(net).encode({ type: "tr", pubkey: Uint8Array.from(script.subarray(2)) });
+      if (script.length === 25 && script[0] === 118 && script[1] === 169 && script[23] === 136 && script[24] === 172) return or(net).encode({ type: "pkh", hash: Uint8Array.from(script.subarray(3, 23)) });
+      if (script.length === 23 && script[0] === 169 && script[22] === 135) return or(net).encode({ type: "sh", hash: Uint8Array.from(script.subarray(2, 22)) });
+    }
+    return or(net).encode(Oe.decode(script));
   } catch {
     return "script " + M.encode(script);
   }
@@ -6916,8 +6926,18 @@ function hodlLoadPsbtKey(text, passphrase) {
     hf(hodlPsbtPriv);
     hodlPsbtNote = "Session key: 32-byte private key. Kept in page memory only.";
   } else {
+    try {
+      let parsed = uf(value);
+      if (parsed && parsed.isPrivate && parsed.node) {
+        hodlPsbtHd = parsed.node;
+        hodlPsbtNote = "Session key: " + (parsed.prefix || "xprv") + ". Kept in page memory only.";
+        hodlPsbtSource = "manual";
+        return;
+      }
+    } catch {
+    }
     let mnemonic = Mt(value);
-    if (!mnemonic.ok) throw new Error(mnemonic.error || "Enter a BIP39 seed phrase, WIF, or 64-character hex key.");
+    if (!mnemonic.ok) throw new Error(mnemonic.error || "Enter a BIP39 seed phrase, root xprv/tprv, WIF, or 64-character hex key.");
     let seed = wi(mnemonic.words.join(" "), passphrase || "");
     try {
       hodlPsbtHd = Gt.fromMasterSeed(seed);
@@ -6998,8 +7018,9 @@ function hodlRunPsbt() {
       document.getElementById("psbt-pass").value = "";
     }
     document.getElementById("psbt-session").textContent = hodlPsbtNote;
-    let psbt = hodlParsePsbt(hodlPsbtBytes(document.getElementById("psbt-text").value));
-    output.innerHTML = hodlRenderPsbt(psbt);
+    let bytes = hodlPsbtBytes(document.getElementById("psbt-text").value);
+    if (isPsbtMagic(bytes)) output.innerHTML = hodlRenderPsbt(hodlParsePsbt(bytes));
+    else output.innerHTML = hodlRenderRawTx(parseRawTx(bytes));
   } catch (exception) {
     error.textContent = exception instanceof Error ? exception.message : String(exception);
   }
@@ -7089,6 +7110,77 @@ function hodlRfc6979Compare(sighash, privateKey, r) {
   }
   return { ok: false, className: "psbt-warn", message: "Does not match plain RFC 6979 or Bitcoin Core-style low-r grind. Honest signers may add other auxiliary randomness. A mismatch alone is not evidence of compromise. Reused r on two different messages is the real alarm." };
 }
+function hodlSessionOwnership(network) {
+  if (hodlPsbtHd) return indexHdKey(hodlPsbtHd, network);
+  if (hodlPsbtPriv) return indexSingleKey(hodlPsbtPriv, network, (key, compressed) => xe.getPublicKey(key, compressed));
+  return new Map();
+}
+function hodlDeclaredOutput(entries, script, network) {
+  if (!hodlPsbtHd || !entries || !script) return null;
+  let fingerprint = Us(hodlPsbtHd.fingerprint);
+  for (let entry of hodlFind(entries, 2)) {
+    if (entry.val.length < 4 || (entry.val.length - 4) % 4) continue;
+    let fp = M.encode(entry.val.slice(0, 4));
+    let path = [];
+    for (let i = 4; i < entry.val.length; i += 4) path.push(new DataView(entry.val.buffer, entry.val.byteOffset + i, 4).getUint32(0, true));
+    let label = "m/" + pathLabel(path);
+    if (fp !== fingerprint) return { state: "other-wallet", path: label, fingerprint: fp };
+    try {
+      let node = hodlPsbtHd;
+      for (let index of path) node = node.deriveChild(index);
+      if (!node.publicKey || !hodlEq(node.publicKey, entry.keydata)) return { state: "lie", path: label };
+      let address = hodlAddr(script, network);
+      let encoded = false;
+      for (let scriptType of ["p2pkh", "p2sh-p2wpkh", "p2wpkh", "p2tr"]) {
+        try {
+          if (hodlAddressesEqual(address, pf(scriptType, node.publicKey, network))) encoded = true;
+        } catch {
+        }
+      }
+      if (!encoded) return { state: "lie", path: label };
+      let chain = path.length >= 2 ? path[path.length - 2] : null;
+      return { state: "ours", path: label, role: chain === 1 ? "change" : chain === 0 ? "receive" : "key" };
+    } catch {
+      return { state: "lie", path: label };
+    }
+  }
+  return null;
+}
+function hodlRenderOutputHtml(output, index, network, map, entries) {
+  let scan = matchOwnership(map, output.script);
+  let address = hodlAddr(output.script, network);
+  if (scan.state !== "ours") scan = matchOwnership(map, address);
+  if (scan.state === "ours" && address.startsWith("script ") && scan.address) address = scan.address;
+  let declared = null;
+  try {
+    declared = hodlDeclaredOutput(entries, output.script, network);
+  } catch {
+  }
+  let extra = "", className = "psbt-kv";
+  if (declared && declared.state === "lie") {
+    extra = "<br><strong>PSBT lies:</strong> claims " + $t(declared.path) + " but this session key does not produce this output. Do not sign.";
+    className = "psbt-bad";
+  } else if (scan.state === "ours") {
+    let label = scan.role === "change" ? "change" : scan.role === "receive" ? "receive (this wallet)" : "this session key";
+    extra = "<br>" + $t(label + " \xB7 " + scan.path);
+    className = scan.role === "change" || scan.role === "key" ? "psbt-ok" : "psbt-kv";
+  } else if (declared && declared.state === "ours") {
+    extra = "<br>" + $t((declared.role === "change" ? "change" : "this wallet") + " \xB7 " + declared.path + " (verified)");
+    className = "psbt-ok";
+  } else if (scan.state === "external") {
+    extra = "<br>not in this wallet (accounts 0\u20132, 50 receive + 50 change, four script types)";
+  } else if (scan.state === "no-session") {
+    extra = "<br><span class='muted'>Load a session key to see if this output is yours.</span>";
+  }
+  return "<p class='" + className + "'><strong>Output " + index + "</strong> \xB7 " + hodlSats(output.amount) + " BTC<br>" + $t(address) + extra + "</p>";
+}
+function hodlOwnershipWarning(outputs, network, map) {
+  if (!map || !map.size) return "";
+  let ours = outputs.some((output) => matchOwnership(map, output.script).state === "ours" || matchOwnership(map, hodlAddr(output.script, network)).state === "ours");
+  if (ours) return "<p class='muted'>Session key: outputs compared against " + map.size + " derived scripts (accounts 0\u20132, 50 receive + 50 change, four types).</p>";
+  if (outputs.length < 2) return "<p class='muted'>This output is not in the session wallet (accounts 0\u20132, 50 receive + 50 change, four script types).</p>";
+  return "<p class='psbt-bad'><strong>No output belongs to this session wallet.</strong> If you expected change, do not sign. A destination-swap can replace both the payment and the change.</p>";
+}
 function hodlRenderPsbt(psbt) {
   let network = hodlSelectedNetwork(document.getElementById("psbt-network")),
     transcript = null,
@@ -7108,9 +7200,11 @@ function hodlRenderPsbt(psbt) {
     transcriptError = exception.message || String(exception);
   }
   html.push("<p class='label'>Where this transaction sends bitcoin</p>");
+  let ownershipMap = hodlSessionOwnership(network);
   tx.outputs.forEach((output, index) => {
-    html.push("<p class='psbt-kv'><strong>Output " + index + "</strong> \xB7 " + hodlSats(output.amount) + " BTC<br>" + $t(hodlAddr(output.script, network)) + "</p>");
+    html.push(hodlRenderOutputHtml(output, index, network, ownershipMap, psbt.outputs[index]));
   });
+  html.push(hodlOwnershipWarning(tx.outputs, network, ownershipMap));
   psbt.inputs.forEach((entries, index) => {
     let witnessUtxo = hodlWitUtxo(entries);
     if (witnessUtxo) {
@@ -7235,8 +7329,54 @@ function hodlRenderPsbt(psbt) {
   if (rValues.length) html.push("<p class='psbt-kv'>r values:<br>" + rValues.map(value => $t(value.hex) + " (input " + value.input + ")").join("<br>") + "</p>");
   rows.forEach(row => html.push("<p class='" + row.className + "'><strong>Input " + row.input + "</strong> pubkey " + $t(row.pubkey.slice(0, 18)) + "\u2026 \u2014 " + $t(row.message) + "</p>"));
   if (tapSignatureCount) html.push("<p class='muted'>This PSBT also contains " + tapSignatureCount + " Taproot / Schnorr signature(s). They are counted but their BIP340 nonces are not analyzed in this version.</p>");
-  html.push("<p class='muted'>RFC 6979 comparison currently covers SegWit v0 P2WPKH and P2WSH signatures using SIGHASH_ALL, including Bitcoin Core-style low-r grinding. Jade anti-exfil is secp256k1-zkp sign-to-contract and needs the USB host nonce plus signer opening; QR / sign_psbt Jade does not run it yet. BitBox anti-klepto is a different construction. Nonce reuse detection compares r values for the same secp256k1 point, including compressed and uncompressed encodings and recoverable non-strict DER. A clean verdict is not issued when a signature cannot be inspected.</p>");
+  html.push("<p class='muted'>RFC 6979 comparison currently covers SegWit v0 P2WPKH and P2WSH signatures using SIGHASH_ALL, including Bitcoin Core-style low-r grinding. Jade anti-exfil is secp256k1-zkp sign-to-contract and needs the USB host nonce plus signer opening; QR / sign_psbt Jade does not run it yet. BitBox anti-klepto is a different construction. Nonce reuse detection compares r values for the same secp256k1 point, including compressed and uncompressed encodings and recoverable non-strict DER. A clean verdict is not issued when a signature cannot be inspected. Output ownership is derived from the session key: accounts 0\u20132, 50 receive + 50 change, all four script types. It does not talk to the chain.</p>");
   return html.join("")
+}
+function hodlRenderRawTx(tx) {
+  let network = hodlSelectedNetwork(document.getElementById("psbt-network")),
+    html = [],
+    map = hodlSessionOwnership(network),
+    signatures = extractEcdsaSignatures(tx),
+    rValues = [],
+    uninspected = 0;
+  html.push("<p class='psbt-warn'><strong>Raw Bitcoin transaction.</strong> Not a PSBT. Input amounts and fee are unknown without previous outputs. RFC 6979 cannot be checked here. This is the last look before broadcast.</p>");
+  html.push("<p class='label'>Where this transaction sends bitcoin</p>");
+  tx.outputs.forEach((output, index) => {
+    html.push(hodlRenderOutputHtml(output, index, network, map, null));
+  });
+  html.push(hodlOwnershipWarning(tx.outputs, network, map));
+  tx.inputs.forEach((input, index) => {
+    html.push("<p class='psbt-kv'><strong>Input " + index + "</strong> \xB7 " + hodlHexRev(input.txid) + " : " + input.vout + "<br>sequence " + $t("0x" + input.sequence.toString(16)) + (input.sequence < 0xfffffffe ? " \xB7 RBF-capable" : "") + "</p>");
+  });
+  inscriptionHints(tx).forEach((hint) => {
+    html.push("<p class='psbt-warn'><strong>Inscription envelope</strong> in input " + hint.input + " (" + hint.bytes + " bytes of script/witness). This transaction reveals OP_FALSE OP_IF \"ord\" data.</p>");
+  });
+  html.push("<p class='muted'>Version " + tx.version + " \xB7 locktime " + tx.locktime + (tx.segwit ? " \xB7 segwit" : "") + ". Fee unknown \u2014 previous output amounts are not in a raw transaction.</p>");
+  html.push("<p class='label'>ECDSA nonce check</p>");
+  signatures.forEach((signature) => {
+    let parts = hodlSigParts(signature.der), looseR = parts ? parts.r : hodlDerRLoose(signature.der);
+    if (!looseR || !signature.pubkey) {
+      if (signature.der) uninspected += 1;
+      return;
+    }
+    rValues.push({
+      input: signature.input,
+      r: looseR,
+      hex: M.encode(looseR),
+      pubkey: hodlPubId(signature.pubkey),
+      sighash: null,
+      valid: null
+    });
+  });
+  let { reused, possible } = hodlCompareNonces(rValues);
+  if (reused.length || possible.length) html.push("<p class='psbt-bad'><strong>Repeated nonce r for the same public key.</strong> Message digests cannot be rebuilt from a raw transaction without prevouts, so treat this as a warning and do not broadcast until the signatures are checked independently.</p>");
+  else if (uninspected) html.push("<p class='psbt-warn'><strong>Incomplete nonce coverage.</strong> Some ECDSA signatures could not be inspected.</p>");
+  else if (rValues.length >= 2) html.push("<p class='psbt-ok'>No repeated ECDSA nonce r values were found for the same public key in this transaction.</p>");
+  else if (rValues.length === 1) html.push("<p class='muted'>Only one ECDSA signature with a readable r is present. Nonce reuse cannot be judged from this file alone.</p>");
+  else html.push("<p class='muted'>No ECDSA signatures with a readable r and public key were found.</p>");
+  if (rValues.length) html.push("<p class='psbt-kv'>r values:<br>" + rValues.map((value) => $t(value.hex) + " (input " + value.input + ")").join("<br>") + "</p>");
+  html.push("<p class='muted'>Raw-transaction inspect does not reconstruct sighashes. Paste the PSBT when you still can; use this path for a fully signed hex dump from a hardware wallet or Bitcoin Core.</p>");
+  return html.join("");
 }
 var hodlAccountId = "bip84",
   hodlNextKeyId = 1,

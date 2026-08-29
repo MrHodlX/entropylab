@@ -241,13 +241,13 @@ words, pick one of the checksum words.</span></span>
     </section>
     <section class="card no-print" id="psbt-card" role="tabpanel" hidden>
       <div class="kicker">Inspect first. Sign elsewhere.</div>
-      <h2>Read a PSBT. Check its ECDSA nonces.</h2>
-      <p class="muted psbt-intro">Inspecting a PSBT v0 does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Optional Jade anti-exfil transcripts (host nonce ρ and signer opening R) are checked without a key. Every input's declared sighash policy and each signature's appended sighash byte are also decoded without a key; anything other than exact SIGHASH_ALL is a blocking warning. Loading a matching key additionally checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
-      <label class="field">PSBT v0 (base64 or hex)
-        <textarea id="psbt-text" placeholder="cHNidP8B..." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      <h2>Read a PSBT or a signed transaction.</h2>
+      <p class="muted psbt-intro">Inspecting a PSBT v0 or a raw Bitcoin transaction does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Optional Jade anti-exfil transcripts (host nonce ρ and signer opening R) are checked without a key. Every input's declared sighash policy and each signature's appended sighash byte are also decoded without a key; anything other than exact SIGHASH_ALL is a blocking warning. Loading a matching key additionally labels which outputs belong to this wallet (change vs receive vs not yours) and checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
+      <label class="field">PSBT v0 or raw transaction (base64 or hex)
+        <textarea id="psbt-text" placeholder="cHNidP8B… or 020000000001…" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
       <div class="psbt-grid">
-        <label class="field">Optional session key (BIP39 seed phrase, WIF, or 64-character hex)
+        <label class="field">Optional session key (BIP39 seed phrase, root xprv/tprv, WIF, or 64-character hex)
           <textarea id="psbt-key" placeholder="Leave blank for inspect-only mode" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
         </label>
         <div>
@@ -264,7 +264,7 @@ words, pick one of the checksum words.</span></span>
         <span class="field-note">USB Jade only (Green host nonce + opening). QR / sign_psbt does not run anti-exfil yet. BitBox anti-klepto is a different mix — do not paste it here.</span>
       </label>
       <div class="row psbt-actions">
-        <button class="btn primary" id="psbt-go" type="button">Inspect PSBT</button>
+        <button class="btn primary" id="psbt-go" type="button">Inspect</button>
         <button class="btn secondary" id="psbt-use-calc" type="button">Use active key this session</button>
         <button class="btn secondary" id="psbt-wipe" type="button">End session / clear fields</button>
       </div>
