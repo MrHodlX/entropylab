@@ -38,7 +38,8 @@ Official website: [entropylab.online](https://entropylab.online)
 - With a session seed, root xprv, WIF, or hex key, labels each output as
   change, receive, or not in this wallet (accounts 0–2, 50 receive + 50
   change, all four script types). A two-or-more-output transaction with no
-  matching change is a blocking warning.
+  matching change is a blocking warning. OP_RETURN outputs are decoded for size and a text/hex
+  preview; the tool does not create data-carrier outputs.
 - Runs a quick barrage of startup sanity checks on the host browser (secure
   context, CSPRNG, BigInt, UTF-8 encoding, and NFKD normalization). If any
   check fails, the page is replaced with a failure report listing the failed
