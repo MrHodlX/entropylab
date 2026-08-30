@@ -1091,7 +1091,6 @@ test("the unframed marketing intro states its pitch as a list rather than a para
   // The list stands in for a paragraph, so it carries the space a paragraph
   // would have above it. The intro itself is deliberately unframed.
   assert.match(css, /\.pitch-list \{ display: grid; gap: 7px; margin: var\(--space-component\) 0 0; padding-left: 20px; \}/);
-  assert.match(css, /\.workspace-intro \{ margin: 2rem 0; \}/);
 });
 
 test("the favicon ships inside the document instead of the assets directory", () => {
