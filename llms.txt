@@ -9,7 +9,7 @@ EntropyLab is a single HTML file with no runtime dependencies. It is designed to
 - Accepts dice rolls, coin flips, playing cards, hexadecimal entropy, BIP39 seed phrases (12–24 words), extended keys, WIF keys, raw private keys, and Casascius mini keys.
 - Derives BIP39 seeds, BIP32 extended keys, master fingerprints, addresses, and Bitcoin Core-compatible descriptors for legacy, nested SegWit, native SegWit, and Taproot; mainnet and testnet.
 - Builds multisignature wallets, including watch-only multisig from extended public keys alone.
-- Inspects PSBT v0 and raw signed transactions: amounts, fees (PSBT claims), repeated ECDSA nonces, optional anti-exfil transcript checks, and session-key output ownership (change vs not yours).
+- Inspects PSBT v0 and raw signed transactions: amounts, fees (PSBT claims), repeated ECDSA nonces, optional anti-exfil transcript checks, session-key output ownership (change vs not yours), and OP_RETURN data-carrier outputs (detector only — does not create them).
 - Exports a Bitcoin Core wallet.dat (watch-only by default) with all derived descriptors imported.
 - Runs startup sanity checks on the host browser and refuses to render if they fail.
 
