@@ -965,7 +965,7 @@ test("the site header is fixed, carries the logo, and holds the version, downloa
     // The wrapper opens on the beta banner; the static template follows with
     // a no-JS notice the runtime page has no need of. Both then carry the
     // conditional warnings, which start hidden.
-    assert.match(live, /<div class="wrap">\s*<aside class="beta-warning no-print" id="beta-warning" role="alert">[\s\S]*?<\/aside>\s*(?:<noscript>[\s\S]*?<\/noscript>\s*)?(?:<aside[^>]*online-warning[\s\S]*?<\/aside>\s*)*<div class="workspace-shell">[\s\S]*?<div class="workspace-content">\s*<section class="workspace-intro">/);
+    assert.match(live, /<div class="wrap">\s*<aside class="beta-warning no-print" id="beta-warning" role="alert">[\s\S]*?<\/aside>\s*(?:<noscript>[\s\S]*?<\/noscript>\s*)?(?:<aside[^>]*online-warning[\s\S]*?<\/aside>\s*)*<section class="workspace-intro">[\s\S]*?<\/section>\s*<div class="workspace-shell">/);
     assert.doesNotMatch(markup.slice(wrapper), /<header>|download-controls/);
   }
   assert.doesNotMatch(css, /^header (\{|h1)/m);
@@ -993,7 +993,8 @@ test("the site header is fixed, carries the logo, and holds the version, downloa
   // markup is the only source, and the app makes no runtime requests.
   assert.doesNotMatch(online, /fetch\s*\(|site-version|innerHTML/);
   // Content clears the fixed header on screen, and reclaims the space in print.
-  assert.match(css, /\.wrap \{ max-width: 1196px; margin: 0 auto; padding: calc\(var\(--site-header-height\) \+ 20px\) 16px 64px; \}/);
+  assert.match(css, /\.wrap \{ max-width: 1280px; margin: 0 auto; padding: calc\(var\(--site-header-height\) \+ 20px\) 16px 64px; \}/);
+  assert.match(css, /\.site-header-inner \{[^}]*max-width: 1280px;/s);
   assert.match(css, /@media print \{[\s\S]*?\.wrap \{ padding-top: 20px; \}/);
   assert.match(css, /html \{[^}]*scroll-padding-top: calc\(var\(--site-header-height\) \+ 12px\)/);
   // Every header control is one height, and the bar is sized to match it.
@@ -1017,10 +1018,10 @@ test("the header logo is inlined for both themes and never fetched from assets",
 test("the seam into the tool is wider than the page's other major seams", () => {
   assert.match(css, /--space-major: 32px;/);
   assert.match(css, /--space-lede: 48px;/);
-  // The pitch-to-tool seam is the page's widest; the closing Sources card keeps
-  // the ordinary major one. Both collapse with a neighbouring card's 16px, so
-  // the larger value wins rather than the two adding up.
-  assert.match(css, /\.workspace-tools \{ margin-top: var\(--space-lede\); \}/);
+  // The pitch-to-workspace seam is the page's widest; the closing Sources card
+  // keeps the ordinary major one.
+  assert.match(css, /\.workspace-shell \{[^}]*margin-top: var\(--space-lede\);/s);
+  assert.match(css, /\.workspace-tools \{ margin-top: 0; \}/);
   assert.match(css, /\.sources \{ margin-top: var\(--space-major\); \}/);
   for (const markup of [template, app]) {
     assert.match(markup, /<section class="card muted sources">/);
@@ -1034,11 +1035,11 @@ test("the workspace selector is a desktop sidebar and a narrow-screen drawer", (
     assert.match(markup, /<nav class="workspace-nav no-print" id="workspace-nav" aria-label="Tools">/);
     assert.match(markup, /id="workspace" role="group" aria-label="Tool"/);
     assert.match(markup, /id="workspace-backdrop" hidden/);
-    assert.match(markup, /<div class="workspace-shell">[\s\S]*?<nav class="workspace-nav no-print"[\s\S]*?<div class="workspace-content">\s*<section class="workspace-intro">[\s\S]*?<div class="workspace-tools">/);
+    assert.match(markup, /<section class="workspace-intro">[\s\S]*?<\/section>\s*<div class="workspace-shell">[\s\S]*?<nav class="workspace-nav no-print"[\s\S]*?<div class="workspace-content">\s*<div class="workspace-tools">/);
     assert.match(markup, /<div class="workspace-tools">[\s\S]*?<div id="out"><\/div>\s*<\/div>\s*<section class="card muted sources">/);
     assert.doesNotMatch(markup, /segmented-control" id="workspace"/);
   }
-  assert.match(css, /\.wrap \{ max-width: 1196px;/);
+  assert.match(css, /\.wrap \{ max-width: 1280px;/);
   assert.match(css, /\.workspace-shell \{\s*display: grid; grid-template-columns: 180px minmax\(0, 1fr\)/);
   assert.match(css, /\.workspace-nav \{[\s\S]*?position: sticky; top: calc\(var\(--site-header-height\) \+ 20px\)/);
   assert.match(css, /#workspace > \.tab:not\(\.active\) \{ background: transparent; \}/);
@@ -1088,7 +1089,8 @@ test("every workspace exposes its exact tool name above the inner content", () =
     assert.equal((markup.match(/<h2>Silent Payments<\/h2>/g) || []).length, 1);
     assert.doesNotMatch(markup, /key-manager-head|<h2>Keys<\/h2>|<h2>Multisigs<\/h2>/);
   }
-  assert.match(css, /\.workspace-tool-heading \{ margin: 14px 0 0; \}/);
+  assert.match(css, /\.workspace-tool-heading \{ margin: 0; \}/);
+  assert.match(css, /@media \(max-width: 899px\) \{[\s\S]*?\.workspace-tool-heading \{ margin: 2rem 0 0; \}/);
   assert.match(css, /\.workspace-tool-heading h2 \{ margin: 0; \}/);
   assert.match(appSource, /querySelectorAll\("\[data-workspace-heading\]"\)[\s\S]*?heading\.hidden = heading\.dataset\.workspaceHeading !== id/);
 });
@@ -1108,7 +1110,6 @@ test("the unframed marketing intro states its pitch as a list rather than a para
   // The list stands in for a paragraph, so it carries the space a paragraph
   // would have above it. The intro itself is deliberately unframed.
   assert.match(css, /\.pitch-list \{ display: grid; gap: 7px; margin: var\(--space-component\) 0 0; padding-left: 20px; \}/);
-  assert.match(css, /\.workspace-intro \{ margin: 2rem 0; \}/);
 });
 
 test("the favicon ships inside the document instead of the assets directory", () => {

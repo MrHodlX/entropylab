@@ -546,6 +546,16 @@ ec.innerHTML = `
          is online and possibly connected to the internet. Do not enter wallet
          secrets here; disconnect from all networks (Wi-Fi and Ethernet) and use
          this file on an air-gapped computer." -->
+    <section class="workspace-intro">
+      <div class="kicker">Run Offline \xB7 Bring your own entropy</div>
+      <h1>Hold or receive bitcoin without a signing device.</h1>
+      <ul class="pitch-list muted">
+        <li>Save this air-gapped bitcoin calculator to a removable drive and open it on a computer that never goes online.</li>
+        <li>Turn dice rolls or a seed you already have into receive addresses.</li>
+        <li>Export an xpub and load into Bitcoin Core or any watch-only wallet, and get paid.</li>
+        <li>Keep your private keys offline.</li>
+      </ul>
+    </section>
     <div class="workspace-shell">
       <button class="workspace-menu-toggle no-print" id="workspace-menu-toggle" type="button" aria-controls="workspace-nav" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Tools</span><span class="workspace-menu-current" id="workspace-menu-current">Key Derivation</span></button>
       <div class="workspace-backdrop no-print" id="workspace-backdrop" hidden></div>
@@ -554,16 +564,6 @@ ec.innerHTML = `
         <div id="workspace" role="group" aria-label="Tool"></div>
       </nav>
       <div class="workspace-content">
-        <section class="workspace-intro">
-          <div class="kicker">Run Offline \xB7 Bring your own entropy</div>
-          <h1>Hold or receive bitcoin without a signing device.</h1>
-          <ul class="pitch-list muted">
-            <li>Save this air-gapped bitcoin calculator to a removable drive and open it on a computer that never goes online.</li>
-            <li>Turn dice rolls or a seed you already have into receive addresses.</li>
-            <li>Export an xpub and load into Bitcoin Core or any watch-only wallet, and get paid.</li>
-            <li>Keep your private keys offline.</li>
-          </ul>
-        </section>
         <div class="workspace-tools">
     <div class="workspace-tool-heading no-print" data-workspace-heading="calc"><h2>Key Derivation</h2></div>
     <section class="key-manager no-print" id="key-manager">
