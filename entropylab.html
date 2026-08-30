@@ -96,13 +96,13 @@ button:not(:disabled):active {
   border-color: var(--selection-accent) !important;
 }
 button:not(:disabled):active * { color: inherit !important; }
-.wrap { max-width: 1196px; margin: 0 auto; padding: calc(var(--site-header-height) + 20px) 16px 64px; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: calc(var(--site-header-height) + 20px) 16px 64px; }
 .kicker { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; margin: 16px 0; }
-.workspace-intro { margin: 2rem 0; }
+.workspace-intro { margin: 1.5rem 0; padding: 0 0.5rem; }
 /* Major seam above the closing Sources card. It collapses with the previous
    card's 16px, so the larger value wins rather than the two adding up. The seam
-   below the marketing card lives on .workspace-tools and is deliberately wider. */
+   below the marketing intro lives on .workspace-shell and is deliberately wider. */
 .sources { margin-top: var(--space-major); }
 .warn { background: color-mix(in oklab, var(--danger) 12%, var(--bg)); border-color: color-mix(in oklab, var(--danger) 40%, var(--border)); }
 .muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
@@ -529,7 +529,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 .site-header-inner {
   position: relative;
   display: flex; align-items: center; gap: 6px; height: var(--site-header-height);
-  max-width: 1000px; margin: 0 auto; padding: 0 var(--site-header-pad);
+  max-width: 1280px; margin: 0 auto; padding: 0 var(--site-header-pad);
 }
 /* The build inlines both marks as SVG inside this span; the light one is
    shown only when the light theme sets data-theme on the root element. */
@@ -773,16 +773,17 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .hint:empty, .err:empty { display: none; }
 .workspace-shell {
   display: grid; grid-template-columns: 180px minmax(0, 1fr); align-items: start; gap: 1.5rem;
+  margin-top: var(--space-lede);
 }
 .workspace-content { min-width: 0; }
-.workspace-tools { margin-top: var(--space-lede); } /* the pitch ends here and the tool begins */
-.workspace-tool-heading { margin: 14px 0 0; }
+.workspace-tools { margin-top: 0; }
+.workspace-tool-heading { margin: 0; }
 .workspace-tool-heading[hidden] { display: none; }
 .workspace-tool-heading h2 { margin: 0; }
 .workspace-nav {
   position: sticky; top: calc(var(--site-header-height) + 20px); align-self: start;
   max-height: calc(100vh - var(--site-header-height) - 40px); overflow-y: auto;
-  margin-top: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 14px;
+  margin-top: 0; padding: 12px; border: 1px solid var(--border); border-radius: 14px;
   background: var(--surface);
 }
 .workspace-nav-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 2px 10px; }
@@ -796,6 +797,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 @media (max-width: 899px) {
   html.workspace-menu-open, body.workspace-menu-open { overflow: hidden; }
   .workspace-shell { display: block; }
+  .workspace-tool-heading { margin: 2rem 0 0; }
   .workspace-menu-toggle {
     position: sticky; top: calc(var(--site-header-height) + 10px); z-index: 30;
     display: flex; align-items: center; gap: 9px; width: 100%; min-height: 48px; margin-top: 16px; padding: 0 13px;
@@ -1417,6 +1419,16 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
          is online and possibly connected to the internet. Do not enter wallet
          secrets here; disconnect from all networks (Wi-Fi and Ethernet) and use
          this file on an air-gapped computer." -->
+    <section class="workspace-intro">
+      <div class="kicker">Run Offline · Bring your own entropy</div>
+      <h1>Hold or receive bitcoin without a signing device.</h1>
+      <ul class="pitch-list muted">
+        <li>Save this air-gapped bitcoin calculator to a removable drive and open it on a computer that never goes online.</li>
+        <li>Turn dice rolls or a seed you already have into receive addresses.</li>
+        <li>Export an xpub and load into Bitcoin Core or any watch-only wallet, and get paid.</li>
+        <li>Keep your private keys offline.</li>
+      </ul>
+    </section>
     <div class="workspace-shell">
       <button class="workspace-menu-toggle no-print" id="workspace-menu-toggle" type="button" aria-controls="workspace-nav" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Tools</span><span class="workspace-menu-current" id="workspace-menu-current">Key Derivation</span></button>
       <div class="workspace-backdrop no-print" id="workspace-backdrop" hidden></div>
@@ -1425,16 +1437,6 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
         <div id="workspace" role="group" aria-label="Tool"><button class="tab active" type="button" data-workspace="calc" aria-pressed="true">Key Derivation</button><button class="tab" type="button" data-workspace="bip85" aria-pressed="false">BIP-85</button><button class="tab" type="button" data-workspace="msig" aria-pressed="false">Multi Signature</button><button class="tab" type="button" data-workspace="sp" aria-pressed="false">Silent Payments</button><button class="tab" type="button" data-workspace="psbt" aria-pressed="false">PSBT / Nonce</button></div>
       </nav>
       <div class="workspace-content">
-        <section class="workspace-intro">
-          <div class="kicker">Run Offline · Bring your own entropy</div>
-          <h1>Hold or receive bitcoin without a signing device.</h1>
-          <ul class="pitch-list muted">
-            <li>Save this air-gapped bitcoin calculator to a removable drive and open it on a computer that never goes online.</li>
-            <li>Turn dice rolls or a seed you already have into receive addresses.</li>
-            <li>Export an xpub and load into Bitcoin Core or any watch-only wallet, and get paid.</li>
-            <li>Keep your private keys offline.</li>
-          </ul>
-        </section>
         <div class="workspace-tools">
     <div class="workspace-tool-heading no-print" data-workspace-heading="calc"><h2>Key Derivation</h2></div>
     <section class="key-manager no-print" id="key-manager">
@@ -4092,6 +4094,16 @@ zoo`.split(`
          is online and possibly connected to the internet. Do not enter wallet
          secrets here; disconnect from all networks (Wi-Fi and Ethernet) and use
          this file on an air-gapped computer." -->
+    <section class="workspace-intro">
+      <div class="kicker">Run Offline · Bring your own entropy</div>
+      <h1>Hold or receive bitcoin without a signing device.</h1>
+      <ul class="pitch-list muted">
+        <li>Save this air-gapped bitcoin calculator to a removable drive and open it on a computer that never goes online.</li>
+        <li>Turn dice rolls or a seed you already have into receive addresses.</li>
+        <li>Export an xpub and load into Bitcoin Core or any watch-only wallet, and get paid.</li>
+        <li>Keep your private keys offline.</li>
+      </ul>
+    </section>
     <div class="workspace-shell">
       <button class="workspace-menu-toggle no-print" id="workspace-menu-toggle" type="button" aria-controls="workspace-nav" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Tools</span><span class="workspace-menu-current" id="workspace-menu-current">Key Derivation</span></button>
       <div class="workspace-backdrop no-print" id="workspace-backdrop" hidden></div>
@@ -4100,16 +4112,6 @@ zoo`.split(`
         <div id="workspace" role="group" aria-label="Tool"></div>
       </nav>
       <div class="workspace-content">
-        <section class="workspace-intro">
-          <div class="kicker">Run Offline · Bring your own entropy</div>
-          <h1>Hold or receive bitcoin without a signing device.</h1>
-          <ul class="pitch-list muted">
-            <li>Save this air-gapped bitcoin calculator to a removable drive and open it on a computer that never goes online.</li>
-            <li>Turn dice rolls or a seed you already have into receive addresses.</li>
-            <li>Export an xpub and load into Bitcoin Core or any watch-only wallet, and get paid.</li>
-            <li>Keep your private keys offline.</li>
-          </ul>
-        </section>
         <div class="workspace-tools">
     <div class="workspace-tool-heading no-print" data-workspace-heading="calc"><h2>Key Derivation</h2></div>
     <section class="key-manager no-print" id="key-manager">
