@@ -42,7 +42,7 @@ Official website: [entropylab.online](https://entropylab.online)
   well; conventional script choices restore their standard purpose, while
   pasted co-signer origins auto-detect and must agree with the selected path
   indexes and hardening choices.
-- Inspects PSBT v0 transactions, reports PSBT-provided amounts and fees, checks
+- Inspects PSBT v0 and v2 (BIP370) transactions, reports PSBT-provided amounts and fees, checks
   for repeated ECDSA nonces from the same public key — including signatures
   carried by finalized scriptSig/witness fields, which are decoded and analyzed
   rather than skipped — verifies optional Jade

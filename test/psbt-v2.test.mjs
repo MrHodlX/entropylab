@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { hodlPsbtVersion, hodlTxFromPsbtV2 } from "../src/js/psbt-v2.js";
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const app = readFileSync(join(root, "src/js/app.js"), "utf8");
+const template = readFileSync(join(root, "src/index.html"), "utf8");
 
 const u32 = (n) => Uint8Array.of(n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 & 255);
 const r32 = (b) => new DataView(b.buffer, b.byteOffset, 4).getUint32(0, true);
@@ -30,4 +37,15 @@ test("v2 tx is built from input 0x0e/0x0f and output 0x03/0x04", () => {
   assert.equal(tx.version, 2);
   assert.equal(tx.inputs[0].vout, 1);
   assert.equal(tx.outputs[0].amount, 1000n);
+});
+
+test("inspector is wired to PSBT v2", () => {
+  assert.match(app, /from "\.\/psbt-v2\.js"/);
+  assert.match(app, /hodlTxFromPsbtV2/);
+  assert.match(app, /supports PSBT v0 and v2 only/);
+  assert.doesNotMatch(app, /supports PSBT v0 only/);
+  for (const markup of [app, template]) {
+    assert.match(markup, /Inspecting a PSBT v0 or v2/);
+    assert.match(markup, /PSBT v0 or v2 or raw transaction/);
+  }
 });

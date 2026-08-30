@@ -21,6 +21,7 @@ import {
 import { inspectPsbtInscriptions, describeEnvelope } from "./inscription.js";
 import { parseOpReturn, describeOpReturn } from "./opreturn.js";
 import { parseRawTx, extractEcdsaSignatures, inscriptionHints, isPsbtMagic } from "./tx.js";
+import { hodlPsbtVersion, hodlPsbtGlobalCount, hodlTxFromPsbtV2 } from "./psbt-v2.js";
 import { indexHdKey, indexSingleKey, matchOwnership, pathLabel } from "./ownership.js";
 import { createBase58check as fi, hex as M } from "@scure/base";
 import { HDKey as Gt } from "@scure/bip32";
@@ -909,8 +910,8 @@ ec.innerHTML = `
     <section class="card no-print" id="psbt-card" role="tabpanel" hidden>
       <div class="kicker">Inspect first. Sign elsewhere.</div>
       <h2>Read a PSBT or a signed transaction.</h2>
-      <p class="muted psbt-intro">Inspecting a PSBT v0 or a raw Bitcoin transaction does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Optional Jade anti-exfil transcripts (host nonce \u03C1 and signer opening R) are checked without a key. Finalized taproot witnesses and tap-leaf scripts are scanned for inscription envelopes (OP_FALSE OP_IF "ord"); this does not number sats or fetch content from the chain. Loading a matching key additionally labels which outputs belong to this wallet (change vs receive vs not yours) and checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
-      <label class="field">PSBT v0 or raw transaction (base64 or hex)
+      <p class="muted psbt-intro">Inspecting a PSBT v0 or v2 or a raw Bitcoin transaction does not require a private key. EntropyLab can show outputs, PSBT-provided input amounts and fees, signatures, and repeated ECDSA nonce values. Optional Jade anti-exfil transcripts (host nonce \u03C1 and signer opening R) are checked without a key. Finalized taproot witnesses and tap-leaf scripts are scanned for inscription envelopes (OP_FALSE OP_IF "ord"); this does not number sats or fetch content from the chain. Loading a matching key additionally labels which outputs belong to this wallet (change vs receive vs not yours) and checks whether supported signatures match plain RFC 6979 or Bitcoin Core-style low-r grinding; a mismatch alone is not evidence of a compromised signer.</p>
+      <label class="field">PSBT v0 or v2 or raw transaction (base64 or hex)
         <textarea id="psbt-text" placeholder="cHNidP8B\u2026 or 020000000001\u2026" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
       <div class="psbt-grid">
@@ -7518,7 +7519,7 @@ function hodlB64(value) {
 }
 function hodlPsbtBytes(raw) {
   let value = raw.trim(), compact = value.replace(/\s/g, "");
-  if (!value) throw new Error("Paste a PSBT v0 or a raw Bitcoin transaction.");
+  if (!value) throw new Error("Paste a PSBT v0 or v2 or a raw Bitcoin transaction.");
   if (compact.length > 7e6) throw new Error("This file is too large to inspect safely.");
   let bytes;
   if (/^[0-9a-fA-F]+$/.test(compact) && compact.length % 2 === 0 && compact.length >= 10) bytes = M.decode(compact.toLowerCase());
@@ -7594,9 +7595,30 @@ function hodlParsePsbt(bytes) {
   if (bytes.length < 5 || bytes[0] !== 112 || bytes[1] !== 115 || bytes[2] !== 98 || bytes[3] !== 116 || bytes[4] !== 255) throw new Error("Not a PSBT. Bitcoin PSBTs start with the bytes psbt followed by ff.");
   let offset = 5, globalMap = hodlReadMap(bytes, offset);
   offset = globalMap.next;
-  let versionEntry = globalMap.entries.find((entry) => entry.type === 251 && entry.keydata.length === 0);
-  if (versionEntry) {
-    if (versionEntry.val.length !== 4 || hodlR32(versionEntry.val, 0) !== 0) throw new Error("EntropyLab currently supports PSBT v0 only.");
+  let psbtVersion = hodlPsbtVersion(globalMap.entries, hodlR32);
+  if (psbtVersion !== 0 && psbtVersion !== 2) throw new Error("EntropyLab currently supports PSBT v0 and v2 only.");
+  if (psbtVersion === 2) {
+    if (globalMap.entries.some((entry) => entry.type === 0 && entry.keydata.length === 0)) throw new Error("A PSBT v2 must not contain a global unsigned transaction.");
+    let inputCount = hodlPsbtGlobalCount(globalMap.entries, 4, hodlVarInt);
+    let outputCount = hodlPsbtGlobalCount(globalMap.entries, 5, hodlVarInt);
+    if (inputCount === null || outputCount === null) throw new Error("A PSBT v2 is missing the input or output count.");
+    if (inputCount > 1e5 || outputCount > 1e5) throw new Error("This PSBT has too many inputs or outputs to inspect safely.");
+    let inputs = [], outputs = [];
+    for (let i = 0; i < inputCount; i++) {
+      if (offset >= bytes.length) throw new Error("PSBT is missing an input map.");
+      let map = hodlReadMap(bytes, offset);
+      offset = map.next;
+      inputs.push(map.entries);
+    }
+    for (let i = 0; i < outputCount; i++) {
+      if (offset >= bytes.length) throw new Error("PSBT is missing an output map.");
+      let map = hodlReadMap(bytes, offset);
+      offset = map.next;
+      outputs.push(map.entries);
+    }
+    if (offset !== bytes.length) throw new Error("PSBT contains trailing data or extra maps.");
+    let tx = hodlTxFromPsbtV2(globalMap.entries, inputs, outputs, { hodlFind, hodlR32, hodlR64, hodlVarInt });
+    return { tx, global: globalMap.entries, inputs, outputs, psbtVersion: 2 };
   }
   let unsignedEntries = globalMap.entries.filter((entry) => entry.type === 0 && entry.keydata.length === 0);
   if (unsignedEntries.length !== 1) throw new Error("This PSBT must contain exactly one unsigned transaction.");
@@ -7614,7 +7636,7 @@ function hodlParsePsbt(bytes) {
     outputs.push(map.entries);
   }
   if (offset !== bytes.length) throw new Error("PSBT contains trailing data or extra maps.");
-  return { tx, global: globalMap.entries, inputs, outputs };
+  return { tx, global: globalMap.entries, inputs, outputs, psbtVersion: 0 };
 }
 function hodlSats(number) {
   let value = typeof number === "bigint" ? number : BigInt(number), negative = value < 0n;
@@ -8741,6 +8763,7 @@ function hodlRenderPsbt(psbt) {
     transcriptError = exception.message || String(exception);
   }
   html.push("<p class='label'>Where this transaction sends bitcoin</p>");
+  if (psbt.psbtVersion === 2) html.push("<p class='muted'>PSBT v2 (BIP370). The unsigned transaction is assembled from the input and output maps.</p>");
   let ownershipMap = hodlSessionOwnership(network);
   tx.outputs.forEach((output, index) => {
     html.push(hodlRenderOutputHtml(output, index, network, ownershipMap, psbt.outputs[index]));
