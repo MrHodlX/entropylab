@@ -92,6 +92,13 @@ Official website: [entropylab.online](https://entropylab.online)
   root xprv, including labeled codes, BIP-392 `spscan` / `spspend` descriptors,
   sender taproot outputs from pasted vin JSON, and receiver verification of
   pasted x-only outputs. This is a calculator: it does not scan the chain.
+- Grinds vanity addresses from a user salt and a counter: `priv_i = SHA-256(salt) + i (mod n)`.
+  Regular addresses follow the selected script type (legacy, nested SegWit,
+  native SegWit, Taproot). Silent Payments keep one scan key per salt and grind
+  the spend key so the reusable scan stays put. Same salt and counter always
+  reproduce the same key — this is a calculator, not a generator. GPU (WebGPU)
+  is used when the adapter is present and a CPU self-test matches; otherwise the
+  CPU incremental `P + i·G` loop runs. Nothing auto-runs. Salts stay in page RAM.
 - Runs a quick barrage of startup sanity checks on the host browser (secure
   context, CSPRNG, BigInt, UTF-8 encoding, and NFKD normalization). If any
   check fails, the page is replaced with a failure report listing the failed

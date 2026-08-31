@@ -71,6 +71,11 @@ material. Its security posture rests on the following model:
   addresses, sender outputs, and spend tweaks from user-supplied keys and
   pasted transaction data. It does not connect to a node, Electrum server, or
   indexer, and cannot detect payments on its own.
+- The vanity grinder is a deterministic transformation of a user-supplied salt
+  and a counter. It does not call `Math.random` or `crypto.getRandomValues` for
+  key material. An empty or guessable salt is a public search space. GPU
+  acceleration is optional and is disabled unless a WebGPU self-test reproduces
+  CPU public keys. Found keys stay in page memory and are wiped on pagehide.
 - Inscription envelope detection is a parser of witness/tap-leaf scripts. It
   does not render inscription media, assign sat numbers, or contact an indexer.
 - OP_RETURN detection is a parser of output scripts. It does not create

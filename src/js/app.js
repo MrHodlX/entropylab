@@ -33,6 +33,14 @@ import { wordlist as bip39English } from "./bip39-english.js";
 import { initPsbtEditor } from "./psbt-editor.js";
 import { renderSVG as Xs } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseHardenedIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
+import {
+  vanityEstimate,
+  vanityFilterPrefix,
+  vanityGpuAvailable,
+  vanityGrind,
+  vanityNeedle,
+  vanityScriptOf,
+} from "./vanity.js";
 const Ae = Object.freeze(bip39English);
 const tr = Z;
 const Yr = (privateKey, compressed) => xe.getPublicKey(privateKey, compressed);
@@ -718,6 +726,38 @@ ec.innerHTML = `
         <button class="btn clear-current-action" id="wipe" type="button" disabled aria-disabled="true">Clear Current Key</button>
       </div>
       <p class="err" id="error"></p>
+      <details class="vanity-grind no-print" id="vanity-details">
+        <summary>Vanity address grinder</summary>
+        <p class="muted">A calculator. Counter <em>i</em> is added to SHA-256 of your salt (mod n). Same salt and counter always reproduce the same key. The tool never invents entropy. GPU is used when WebGPU is present and a CPU self-test matches; otherwise the CPU loop runs.</p>
+        <div class="wallet-result-messages" role="note">
+          <ul>
+            <li class="is-warning">An empty or guessable salt is a public search space. Anyone grinding the same salt finds the same keys.</li>
+            <li class="is-warning">This is a single-key grind, not an HD wallet and not a BIP39 passphrase.</li>
+          </ul>
+        </div>
+        <label class="field">Salt (kept in page memory)
+          <input id="vanity-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
+        </label>
+        <label class="field">Address prefix
+          <input id="vanity-prefix" autocomplete="off" spellcheck="false" placeholder="sat" aria-describedby="vanity-prefix-help">
+          <span class="field-note" id="vanity-prefix-help">Follows the selected script type.</span>
+        </label>
+        <div class="key-settings-row">
+          <label class="field">Start counter
+            <input id="vanity-start" type="number" min="0" step="1" inputmode="numeric" value="0">
+          </label>
+          <label class="field">Candidates this run
+            <input id="vanity-count" type="number" min="1" max="10000000" step="1" inputmode="numeric" value="250000">
+          </label>
+        </div>
+        <label class="choice"><input type="checkbox" id="vanity-gpu" checked /><span><strong>Use GPU if available</strong><span class="desc" id="vanity-gpu-note">Checking this device…</span></span></label>
+        <div class="row psbt-actions">
+          <button class="btn primary" id="vanity-go" type="button">Start grind</button>
+          <button class="btn secondary" id="vanity-stop" type="button" disabled>Stop</button>
+        </div>
+        <p class="muted" id="vanity-status" aria-live="polite">Idle. Press Start grind. Nothing runs by itself.</p>
+        <div id="vanity-out"></div>
+      </details>
     </section>
     <section class="card no-print" id="bip85-card" role="tabpanel" hidden>
       <div class="kicker">One seed. Many children.</div>
@@ -906,6 +946,37 @@ ec.innerHTML = `
         <div class="row psbt-actions">
           <button class="btn primary" id="sp-derive" type="button">Derive silent payment address</button>
         </div>
+        <details class="vanity-grind no-print" id="vanity-sp-details">
+          <summary>Vanity silent payment address</summary>
+          <p class="muted">Same calculator. One scan key per salt; the spend key is SHA-256(salt || 0x01) + i. The published address is <code>sp1q</code> / <code>tsp1q</code>. GPU is not used here \u2014 the spend-key loop stays on CPU so the scan key never changes.</p>
+          <div class="wallet-result-messages" role="note">
+            <ul>
+              <li class="is-warning">Guessable salts are stolen coins. Strength is the salt, not the bech32m word salad.</li>
+              <li class="is-warning">A vanity <code>sp1q\u2026</code> is not the same wallet as a vanity <code>bc1q\u2026</code> from the same salt.</li>
+            </ul>
+          </div>
+          <label class="field">Salt (kept in page memory)
+            <input id="vanity-sp-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
+          </label>
+          <label class="field">Address prefix after sp1q / tsp1q
+            <input id="vanity-sp-prefix" autocomplete="off" spellcheck="false" placeholder="sat" aria-describedby="vanity-sp-prefix-help">
+            <span class="field-note" id="vanity-sp-prefix-help">Bech32m characters only. Network follows Address network above.</span>
+          </label>
+          <div class="key-settings-row">
+            <label class="field">Start counter
+              <input id="vanity-sp-start" type="number" min="0" step="1" inputmode="numeric" value="0">
+            </label>
+            <label class="field">Candidates this run
+              <input id="vanity-sp-count" type="number" min="1" max="10000000" step="1" inputmode="numeric" value="250000">
+            </label>
+          </div>
+          <div class="row psbt-actions">
+            <button class="btn primary" id="vanity-sp-go" type="button">Start grind</button>
+            <button class="btn secondary" id="vanity-sp-stop" type="button" disabled>Stop</button>
+          </div>
+          <p class="muted" id="vanity-sp-status" aria-live="polite">Idle. Press Start grind. Nothing runs by itself.</p>
+          <div id="vanity-sp-out"></div>
+        </details>
       </div>
       <div id="sp-send" hidden>
         <label class="field">Recipients (one <code>sp1q…</code> / <code>tsp1q…</code> per line; optional count)
@@ -10000,6 +10071,7 @@ function hodlDeleteActiveMsig() {
 }
 function hodlShowWorkspace(id) {
   if (id === hodlWorkspace) return;
+  hodlVanityStop();
   let preservedTop = window.scrollY, preservedLeft = window.scrollX;
   if (hodlWorkspace === "calc") hodlCaptureKey();
   else if (hodlWorkspace === "msig") hodlCaptureMsig();
@@ -10302,11 +10374,141 @@ function hodlInitTheme() {
     if (!hodlStoredThemeMode()) hodlApplyTheme(hodlReadThemeMode());
   });
 }
+var hodlVanityAbort = null;
+function hodlVanityStop() {
+  if (hodlVanityAbort) {
+    try { hodlVanityAbort.abort(); } catch {}
+    hodlVanityAbort = null;
+  }
+  ["vanity-go", "vanity-sp-go"].forEach((id) => {
+    let button = document.getElementById(id);
+    if (button) button.disabled = false;
+  });
+  ["vanity-stop", "vanity-sp-stop"].forEach((id) => {
+    let button = document.getElementById(id);
+    if (button) button.disabled = true;
+  });
+}
+function hodlVanityNetwork() {
+  return hodlNetworkFromCoinType(hodlReadCoinType(document.getElementById("network")));
+}
+function hodlVanityKind() {
+  return vanityScriptOf(hodlSelectedScriptType());
+}
+function hodlVanitySyncPrefixHelp() {
+  let kind = hodlVanityKind(), network = hodlVanityNetwork();
+  let input = document.getElementById("vanity-prefix"), help = document.getElementById("vanity-prefix-help");
+  if (input) {
+    let filtered = vanityFilterPrefix(kind, network, input.value);
+    if (filtered !== input.value) input.value = filtered;
+  }
+  if (help) {
+    let sample = vanityNeedle(kind, network, input?.value || "sat");
+    let est = vanityEstimate(kind, vanityFilterPrefix(kind, network, input?.value || ""));
+    let alphabet = kind === "p2pkh" || kind === "p2sh-p2wpkh" ? "Base58 (no 0, O, I, l)" : "Bech32 (no 1, b, i, o)";
+    help.textContent = `Looks like ${sample}. ~${est.charset}^n tries for an n-character suffix. ${alphabet}. Script type: ${kind}.`;
+  }
+  let spInput = document.getElementById("vanity-sp-prefix"), spHelp = document.getElementById("vanity-sp-prefix-help");
+  let spNetwork = document.getElementById("sp-network")?.value === "testnet" ? "testnet" : "mainnet";
+  if (spInput) {
+    let filtered = vanityFilterPrefix("sp", spNetwork, spInput.value);
+    if (filtered !== spInput.value) spInput.value = filtered;
+  }
+  if (spHelp) {
+    let sample = vanityNeedle("sp", spNetwork, spInput?.value || "sat");
+    spHelp.textContent = `Looks like ${sample}. Bech32m only (no 1, b, i, o). Network follows Address network.`;
+  }
+}
+function hodlVanityRenderHits(target, hits, kind) {
+  if (!target) return;
+  if (!hits.length) {
+    target.innerHTML = "";
+    return;
+  }
+  target.innerHTML = hits.map((hit) => {
+    let body = kind === "sp"
+      ? `${Ee("Scan WIF", hit.scanWif)}${Ee("Spend WIF", hit.spendWif)}`
+      : `${Ee("WIF", hit.wif)}`;
+    let recipe = kind === "sp"
+      ? `Reproduce: scan = SHA-256(salt || 0x00), spend = SHA-256(salt || 0x01) + ${$t(String(hit.offset))} (mod n). Same salt, same counter, same keys.`
+      : `Reproduce: SHA-256(salt) + ${$t(String(hit.offset))} (mod n). Same salt, same counter, same key.`;
+    return `<div class="vanity-hit"><p class="label">Match at counter ${$t(String(hit.offset))}</p><p class="mono">${$t(hit.address)}</p>${body}<p class="muted">${recipe}</p></div>`;
+  }).join("");
+}
+function hodlVanityBind(prefix, kindFn, networkFn) {
+  let go = document.getElementById(`${prefix}-go`), stop = document.getElementById(`${prefix}-stop`);
+  let status = document.getElementById(`${prefix}-status`), out = document.getElementById(`${prefix}-out`);
+  let prefixField = document.getElementById(`${prefix}-prefix`);
+  if (!go || !stop) return;
+  prefixField?.addEventListener("input", hodlVanitySyncPrefixHelp);
+  go.onclick = async () => {
+    hodlVanityStop();
+    let salt = document.getElementById(`${prefix}-salt`)?.value ?? "";
+    let start = Number(document.getElementById(`${prefix}-start`)?.value || 0);
+    let count = Number(document.getElementById(`${prefix}-count`)?.value || 250000);
+    let kind = kindFn(), network = networkFn();
+    let rawPrefix = prefixField?.value || "";
+    out.innerHTML = "";
+    go.disabled = true;
+    stop.disabled = false;
+    hodlVanityAbort = new AbortController();
+    status.textContent = "Grinding…";
+    try {
+      let hits = await vanityGrind({
+        salt,
+        prefix: rawPrefix,
+        kind,
+        network,
+        start,
+        count,
+        gpu: prefix === "vanity" && document.getElementById("vanity-gpu")?.checked,
+      }, {
+        signal: hodlVanityAbort.signal,
+        onProgress: (info) => {
+          let rate = info.rate ? ` · ${Math.round(info.rate).toLocaleString()} keys/s` : "";
+          let engine = info.gpu ? "GPU" : "CPU";
+          status.textContent = `${engine}: ${info.tried.toLocaleString()} tried${rate}${info.found ? ` · ${info.found} match` : ""}`;
+        },
+      });
+      if (!hits.length) status.textContent = (status.textContent || "Done") + " · no match in this window. Raise the counter or shorten the prefix.";
+      else {
+        status.textContent = `Found ${hits.length} match${hits.length === 1 ? "" : "es"}.`;
+        hodlVanityRenderHits(out, hits, kind);
+      }
+    } catch (error) {
+      status.textContent = error.message || String(error);
+    } finally {
+      go.disabled = false;
+      stop.disabled = true;
+      hodlVanityAbort = null;
+    }
+  };
+  stop.onclick = () => {
+    hodlVanityStop();
+    if (status) status.textContent = "Stopped.";
+  };
+}
+function hodlInitVanity() {
+  hodlVanityBind("vanity", hodlVanityKind, hodlVanityNetwork);
+  hodlVanityBind("vanity-sp", () => "sp", () => document.getElementById("sp-network")?.value === "testnet" ? "testnet" : "mainnet");
+  document.getElementById("script-type")?.addEventListener("change", hodlVanitySyncPrefixHelp);
+  document.getElementById("network")?.addEventListener("input", hodlVanitySyncPrefixHelp);
+  document.getElementById("sp-network")?.addEventListener("change", hodlVanitySyncPrefixHelp);
+  let gpuNote = document.getElementById("vanity-gpu-note"), gpuBox = document.getElementById("vanity-gpu");
+  if (vanityGpuAvailable()) {
+    if (gpuNote) gpuNote.textContent = "WebGPU detected. A CPU self-test runs before the first grind; a mismatch falls back to CPU.";
+  } else {
+    if (gpuNote) gpuNote.textContent = "No WebGPU on this device. The CPU loop still runs.";
+    if (gpuBox) gpuBox.checked = false;
+  }
+  hodlVanitySyncPrefixHelp();
+}
 function hodlInitSecretFieldAutoClear() {
   let clearSecretFields = () => {
     hodlPsbtWipeMem();
     hodlBip85WipeMem();
     hodlSpWipeMem();
+    hodlVanityStop();
     hodlKeys = hodlKeys.map((state) => {
       let fields = state.fields || {}, privateKeys = fields.privateKeys;
       if (privateKeys) Object.keys(privateKeys).forEach((kind) => {
@@ -10327,7 +10529,7 @@ function hodlInitSecretFieldAutoClear() {
     Ge = false;
     ft = "";
     hodlDiceCoinPositions = [];
-    for (let id of ["dice", "hex", "bin", "base4", "base8", "base32", "base64", "seed", "seed-numbers", "key", "pass", "cards", "direct-cards"]) {
+    for (let id of ["dice", "hex", "bin", "base4", "base8", "base32", "base64", "seed", "seed-numbers", "key", "pass", "cards", "direct-cards", "vanity-salt", "vanity-sp-salt"]) {
       let field = document.getElementById(id);
       if (field) field.value = "";
     }
@@ -10356,6 +10558,9 @@ function hodlInitSecretFieldAutoClear() {
     if (spVerifyVins) spVerifyVins.value = "";
     if (spVerifyOutputs) spVerifyOutputs.value = "";
     if (spLabel) spLabel.value = "";
+    let vanityOut = document.getElementById("vanity-out"), vanitySpOut = document.getElementById("vanity-sp-out");
+    if (vanityOut) vanityOut.innerHTML = "";
+    if (vanitySpOut) vanitySpOut.innerHTML = "";
     // The <pre> mirrors behind each input hold a second live copy of whatever
     // was typed (dice rolls, seed words, passphrase, private key).
     document.querySelectorAll(".dice-input-highlight").forEach((highlight) => {
@@ -10391,6 +10596,7 @@ function hodlBoot() {
   hodlInitDerivationControls();
   hodlInitAddressBenchmark();
   hodlInitSegmentedControls();
+  hodlInitVanity();
 }
 // Curve operations need the WebAssembly module instantiated first (async in
 // browsers; already resolved synchronously under Node for the test suite).

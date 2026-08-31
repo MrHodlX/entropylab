@@ -351,6 +351,19 @@ details.lab-entropy > summary {
 }
 details.lab-entropy .wallet-result-messages { margin-top: var(--space-control); }
 #brain-lab { font-family: var(--mono); letter-spacing: 0; }
+details.vanity-grind { margin-top: var(--space-section); }
+details.vanity-grind > summary {
+  cursor: pointer; font-weight: 600; color: var(--fg);
+}
+details.vanity-grind .wallet-result-messages { margin-top: var(--space-control); }
+.vanity-hit {
+  margin-top: var(--space-component);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.vanity-hit .mono { word-break: break-all; }
 @media (min-width: 720px) {
   .choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .choice-grid.three-up { grid-template-columns: repeat(3, minmax(0, 1fr)); }
