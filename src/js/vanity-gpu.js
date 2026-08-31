@@ -1,10 +1,12 @@
 // Optional WebGPU path for the vanity grinder.
 //
-// The kernel is a prefix-swap of the CPU contract: same salt, same counter,
-// same priv = (SHA-256(salt) + i) mod n. Before any grind, the adapter must
-// reproduce four CPU public keys. If navigator.gpu is missing, the request
-// fails, or the self-test mismatches, grind returns null and the CPU loop
-// runs. No randomness is invented here.
+// Same start scalar and counter as the CPU loop:
+//   priv = (start + i) mod n
+// Calculator mode hashes the salt to get start. Vanitygen — lab passes a
+// CSPRNG startPriv. Before any grind, the adapter must reproduce four CPU
+// public keys. If navigator.gpu is missing, the request fails, or the
+// self-test mismatches, grind returns null and the CPU loop runs. No
+// randomness is invented here.
 
 import { sha256 } from "./hashes.js";
 import { secp256k1 } from "./secp256k1.js";
@@ -507,15 +509,25 @@ async function gpuWritePubs(state, startPriv, startOffset, count) {
 export async function vanityGpuGrind(options, hooks = {}) {
   const state = await getGpu();
   if (!state) return null;
-  const { salt, kind, network, start, count, needle } = options;
+  const { kind, network, start, count, needle } = options;
   const signal = hooks.signal;
   const onProgress = hooks.onProgress || (() => {});
   if (kind === "sp" || kind === "p2tr") return null;
-  const startHash = sha256(textEncoder.encode(String(salt ?? "")));
-  let n = bytesToBig(startHash) % ORDER;
-  if (n === 0n) return null;
-  const startPriv = bigToBytes32(n);
-  startHash.fill(0);
+  let startPriv;
+  if (options.startPriv instanceof Uint8Array && options.startPriv.length === 32) {
+    startPriv = options.startPriv.slice();
+  } else {
+    const startHash = sha256(textEncoder.encode(String(options.salt ?? "")));
+    let scalar = bytesToBig(startHash) % ORDER;
+    startHash.fill(0);
+    if (scalar === 0n) return null;
+    startPriv = bigToBytes32(scalar);
+  }
+  const n = bytesToBig(startPriv);
+  if (n === 0n) {
+    startPriv.fill(0);
+    return null;
+  }
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const found = [];
   const chunk = 4096;

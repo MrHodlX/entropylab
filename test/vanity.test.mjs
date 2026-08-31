@@ -23,6 +23,8 @@ const {
   vanityCandidate,
   vanityGrind,
   vanityGpuAvailable,
+  vanityRandomStart,
+  vanityAddressFromPriv,
   vanityScriptOf,
   VANITY_BECH32,
   VANITY_BASE58,
@@ -112,10 +114,88 @@ test("empty prefix is rejected and GPU is reported unavailable under Node", asyn
   assert.match(gpuSrc, /self-test/);
   assert.match(gpuSrc, /write_pubs/);
   assert.doesNotMatch(vanitySrc, /Math\.random\s*\(/);
-  assert.doesNotMatch(vanitySrc, /getRandomValues\s*\(/);
   assert.doesNotMatch(gpuSrc, /Math\.random\s*\(/);
   assert.doesNotMatch(gpuSrc, /getRandomValues\s*\(/);
-  assert.match(vanitySrc, /Calculator, not a generator/);
+  assert.match(vanitySrc, /export function vanityRandomStart/);
+  const withoutLab = vanitySrc.replace(/export function vanityRandomStart[\s\S]*?(?=\nexport function vanityPrivAt)/, "");
+  assert.doesNotMatch(withoutLab, /getRandomValues\s*\(/);
+});
+
+test("vanitygen lab draws a CSPRNG start and still never auto-runs", async () => {
+  const a = vanityRandomStart();
+  const b = vanityRandomStart();
+  assert.equal(a.length, 32);
+  assert.equal(b.length, 32);
+  assert.notEqual(Buffer.from(a).toString("hex"), Buffer.from(b).toString("hex"));
+  const addr0 = vanityAddressFromPriv(a, "p2wpkh", "mainnet");
+  const prefix = addr0.slice(4, 5);
+  const hits = await vanityGrind({
+    startPriv: a,
+    vanitygen: true,
+    prefix,
+    kind: "p2wpkh",
+    network: "mainnet",
+    start: 0,
+    count: 1,
+    gpu: false,
+  });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].vanitygen, true);
+  assert.equal(hits[0].offset, 0);
+  assert.equal(hits[0].address, addr0);
+});
+
+test("calculator grind never calls getRandomValues", async () => {
+  let calls = 0;
+  const orig = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+  globalThis.crypto.getRandomValues = (bytes) => {
+    calls += 1;
+    return orig(bytes);
+  };
+  try {
+    await vanityGrind({ salt: "unit-test-salt", prefix: "q", kind: "p2wpkh", network: "mainnet", start: 0, count: 8, gpu: false });
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.crypto.getRandomValues = orig;
+  }
+});
+
+test("vanitygen grind without an injected startPriv draws from the CSPRNG", async () => {
+  let calls = 0;
+  const orig = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+  globalThis.crypto.getRandomValues = (bytes) => {
+    calls += 1;
+    return orig(bytes);
+  };
+  try {
+    await vanityGrind({ vanitygen: true, prefix: "q", kind: "p2wpkh", network: "mainnet", start: 0, count: 4, gpu: false });
+    assert.ok(calls >= 1);
+    calls = 0;
+    await vanityGrind({ vanitygen: true, prefix: "q", kind: "sp", network: "mainnet", start: 0, count: 1, gpu: false });
+    assert.ok(calls >= 2, "silent payment lab draws scan and spend starts");
+  } finally {
+    globalThis.crypto.getRandomValues = orig;
+  }
+});
+
+test("vanitygen silent payment grind keeps an injected scan key and changes spend", async () => {
+  const scan = vanityRandomStart();
+  const spend0 = vanityRandomStart();
+  const hits = await vanityGrind({
+    vanitygen: true,
+    scanPriv: scan,
+    spend0,
+    prefix: "q",
+    kind: "sp",
+    network: "mainnet",
+    start: 0,
+    count: 256,
+    gpu: false,
+  });
+  assert.ok(hits.length >= 1, "expected at least one sp1q q-prefix in 256 tries");
+  assert.equal(hits[0].vanitygen, true);
+  assert.equal(Buffer.from(hits[0].scanPriv).toString("hex"), Buffer.from(scan).toString("hex"));
+  assert.match(hits[0].address, /^sp1q/);
 });
 
 test("both page templates ship collapsed grinders that do not auto-run", () => {
@@ -125,8 +205,10 @@ test("both page templates ship collapsed grinders that do not auto-run", () => {
     assert.match(markup, /<details class="vanity-grind no-print" id="vanity-sp-details">/);
     assert.match(markup, /<summary>Vanity silent payment address<\/summary>/);
     assert.match(markup, /Idle\. Press Start grind\. Nothing runs by itself\./);
-    assert.match(markup, /id="vanity-go"/);
-    assert.match(markup, /id="vanity-sp-go"/);
+    assert.match(markup, /id="vanity-mode-lab"/);
+    assert.match(markup, /id="vanity-sp-mode-lab"/);
+    assert.match(markup, /id="vanity-mode-calc"[^>]*checked/);
+    assert.match(markup, /Vanitygen — lab/);
   }
   assert.match(app, /function hodlInitVanity\(/);
   assert.match(app, /hodlVanityStop\(\)/);
