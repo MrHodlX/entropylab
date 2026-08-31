@@ -1,17 +1,20 @@
-// Deterministic vanity address grinder.
+// Vanity address grinder.
 //
-// Calculator, not a generator. Counter i maps to
+// Calculator mode: counter i maps to
 //   priv_i = (SHA-256(utf8(salt)) + i) mod n
-// Same salt and counter always reproduce the same key. Key material is never
-// drawn from a PRNG or a CSPRNG.
+// Same salt and counter always reproduce the same key.
+//
+// Vanitygen — lab: one CSPRNG draw for the starting scalar, then the same
+// incremental P + i·G loop. That draw invents key material. It is not
+// reproducible. Math.random is never used.
 //
 // Regular addresses follow the Key Derivation script type. Silent Payments
-// keep one scan key per salt (SHA-256(salt || 0x00)) and grind the spend
-// key (SHA-256(salt || 0x01) + i), so the reusable scan key stays put.
+// keep one scan key and grind the spend key so the reusable scan stays put.
 //
 // GPU is optional: WebGPU runs the same offsets after a CPU self-test. If
 // the adapter is missing or the self-test fails, the CPU incremental
-// P + i·G loop is used. Nothing here is stored; salts live in page RAM.
+// P + i·G loop is used. Nothing here is stored; salts and lab keys live in
+// page RAM.
 
 import { sha256, hash160 } from "./hashes.js";
 import { secp256k1 } from "./secp256k1.js";
@@ -123,6 +126,24 @@ export function vanityTaggedPriv(salt, tag) {
   return bigToBytes32(value);
 }
 
+// Vanitygen — lab only. Rejection-samples a scalar in 1..n-1 from the
+// host CSPRNG. Calculator mode never calls this.
+export function vanityRandomStart() {
+  const rng = globalThis.crypto;
+  if (!rng || typeof rng.getRandomValues !== "function") {
+    throw new Error("Vanitygen — lab needs crypto.getRandomValues on this device.");
+  }
+  const bytes = new Uint8Array(32);
+  for (;;) {
+    rng.getRandomValues(bytes);
+    const value = bytesToBig(bytes);
+    if (value > 0n && value < VANITY_ORDER) {
+      bytes.fill(0);
+      return bigToBytes32(value);
+    }
+  }
+}
+
 export function vanityPrivAt(startPriv, offset) {
   if (!(startPriv instanceof Uint8Array) || startPriv.length !== 32) throw new Error("Start private key must be 32 bytes.");
   if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Vanity counter must be a non-negative integer.");
@@ -187,6 +208,12 @@ function matchAddress(address, needle, kind) {
   return address.toLowerCase().startsWith(needle);
 }
 
+function resolveStartPriv(options) {
+  if (options.startPriv instanceof Uint8Array && options.startPriv.length === 32) return options.startPriv.slice();
+  if (options.vanitygen) return vanityRandomStart();
+  return vanityStartPriv(options.salt);
+}
+
 export async function vanityGrind(options, hooks = {}) {
   const salt = String(options.salt ?? "");
   const kind = options.kind || "p2wpkh";
@@ -198,28 +225,18 @@ export async function vanityGrind(options, hooks = {}) {
   if (start < 0) throw new Error("Start counter must be zero or greater.");
   const onProgress = hooks.onProgress || (() => {});
   const signal = hooks.signal;
-  const wantGpu = Boolean(options.gpu) && kind !== "p2tr";
+  const wantGpu = Boolean(options.gpu) && kind !== "p2tr" && kind !== "sp";
+  const vanitygen = Boolean(options.vanitygen);
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-
-  if (wantGpu) {
-    try {
-      const gpuHits = await vanityGpuGrind({ salt, kind, network, start, count, needle }, { signal, onProgress });
-      if (gpuHits) return gpuHits;
-    } catch {
-      // CPU fallback is the contract: a GPU miss must not invent keys.
-    }
-  }
 
   const found = [];
   if (kind === "sp") {
-    const scanPriv = vanityTaggedPriv(salt, 0);
-    const spend0 = vanityTaggedPriv(salt, 1);
+    const scanPriv = options.scanPriv instanceof Uint8Array ? options.scanPriv.slice() : vanitygen ? vanityRandomStart() : vanityTaggedPriv(salt, 0);
+    const spend0 = options.spend0 instanceof Uint8Array ? options.spend0.slice() : vanitygen ? vanityRandomStart() : vanityTaggedPriv(salt, 1);
     const scanPoint = secp256k1.Point.fromBytes(secp256k1.getPublicKey(scanPriv, true));
     const hrp = network === "testnet" ? "tsp" : "sp";
-    let spendPriv = vanityPrivAt(spend0, start);
-    let spendPoint = secp256k1.Point.fromBytes(secp256k1.getPublicKey(spendPriv, true));
+    let spendPoint = secp256k1.Point.fromBytes(secp256k1.getPublicKey(vanityPrivAt(spend0, start), true));
     const G = secp256k1.Point.BASE;
-    spend0.fill(0);
     let i = start;
     const end = start + count;
     while (i < end) {
@@ -228,7 +245,7 @@ export async function vanityGrind(options, hooks = {}) {
       for (; i < limit; i++) {
         const address = encodeSilentPaymentAddress(scanPoint, spendPoint, hrp);
         if (matchAddress(address, needle, kind)) {
-          const priv = vanityPrivAt(vanityTaggedPriv(salt, 1), i);
+          const priv = vanityPrivAt(spend0, i);
           found.push({
             offset: i,
             address,
@@ -236,8 +253,10 @@ export async function vanityGrind(options, hooks = {}) {
             spendPriv: priv,
             scanWif: encodeWifCompressed(scanPriv, network === "testnet"),
             spendWif: encodeWifCompressed(priv, network === "testnet"),
+            vanitygen,
           });
           if (!options.findAll) {
+            spend0.fill(0);
             onProgress({ tried: i - start + 1, found: found.length, gpu: false, done: true });
             return found;
           }
@@ -248,11 +267,25 @@ export async function vanityGrind(options, hooks = {}) {
       onProgress({ tried: i - start, found: found.length, gpu: false, rate: (i - start) / (elapsed / 1000) });
       await yieldSlice();
     }
+    spend0.fill(0);
     onProgress({ tried: i - start, found: found.length, gpu: false, done: true });
     return found;
   }
 
-  const startPriv = vanityStartPriv(salt);
+  const startPriv = resolveStartPriv(options);
+  if (wantGpu) {
+    try {
+      const gpuHits = await vanityGpuGrind({ startPriv, kind, network, start, count, needle, findAll: options.findAll }, { signal, onProgress });
+      if (gpuHits) {
+        if (vanitygen) for (const hit of gpuHits) hit.vanitygen = true;
+        startPriv.fill(0);
+        return gpuHits;
+      }
+    } catch {
+      // CPU fallback is the contract: a GPU miss must not invent keys.
+    }
+  }
+
   let point = secp256k1.Point.fromBytes(secp256k1.getPublicKey(startPriv, true));
   if (start) point = point.add(secp256k1.Point.BASE.multiply(BigInt(start)));
   const G = secp256k1.Point.BASE;
@@ -272,6 +305,7 @@ export async function vanityGrind(options, hooks = {}) {
           address,
           priv,
           wif: encodeWifCompressed(priv, network === "testnet"),
+          vanitygen,
         });
         if (!options.findAll) {
           startPriv.fill(0);

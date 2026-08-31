@@ -727,16 +727,34 @@ ec.innerHTML = `
       <p class="err" id="error"></p>
       <details class="vanity-grind no-print" id="vanity-details">
         <summary>Vanity address grinder</summary>
-        <p class="muted">A calculator. Counter <em>i</em> is added to SHA-256 of your salt (mod n). Same salt and counter always reproduce the same key. The tool never invents entropy. GPU is used when WebGPU is present and a CPU self-test matches; otherwise the CPU loop runs.</p>
-        <div class="wallet-result-messages" role="note">
-          <ul>
-            <li class="is-warning">An empty or guessable salt is a public search space. Anyone grinding the same salt finds the same keys.</li>
-            <li class="is-warning">This is a single-key grind, not an HD wallet and not a BIP39 passphrase.</li>
-          </ul>
+        <p class="muted">Calculator hashes your salt. Vanitygen — lab asks the browser CSPRNG for a starting key, then the same <em>P + i·G</em> loop. GPU is used when WebGPU is present and a CPU self-test matches; otherwise the CPU loop runs. Nothing auto-runs.</p>
+        <div class="choice-grid">
+          <label class="choice"><input type="radio" name="vanity-mode" id="vanity-mode-calc" value="calc" checked /><span><strong>Calculator</strong><span class="desc">You supply a salt. Same salt and counter always replay the key.</span></span></label>
+          <label class="choice"><input type="radio" name="vanity-mode" id="vanity-mode-lab" value="lab" /><span><strong>Vanitygen — lab</strong><span class="desc">Browser CSPRNG invents the starting key. Save the WIF. Not reproducible.</span></span></label>
         </div>
-        <label class="field">Salt (kept in page memory)
-          <input id="vanity-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
-        </label>
+        <div id="vanity-calc-fields">
+          <div class="wallet-result-messages" role="note">
+            <ul>
+              <li class="is-warning">An empty or guessable salt is a public search space. Anyone grinding the same salt finds the same keys.</li>
+              <li class="is-warning">This is a single-key grind, not an HD wallet and not a BIP39 passphrase.</li>
+            </ul>
+          </div>
+          <label class="field">Salt (kept in page memory)
+            <input id="vanity-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
+          </label>
+        </div>
+        <div id="vanity-lab-fields" hidden>
+          <div class="wallet-result-messages" role="alert">
+            <h3>Lab warning — read before first use</h3>
+            <ul>
+              <li class="is-warning">This mode invents key material with the browser CSPRNG. It is not a calculator.</li>
+              <li class="is-warning">Trust is this browser and this machine. You cannot replay the key from a salt.</li>
+              <li class="is-warning">Save the WIF if the prefix matches. Closing the tab wipes it.</li>
+              <li class="is-warning">Upstream EntropyLab will not merge CSPRNG keys. Lab only.</li>
+            </ul>
+          </div>
+          <label class="choice"><input type="checkbox" id="vanity-lab-ack" /><span><strong>I understand</strong><span class="desc">Required once this session, in page memory only. Start grind is still required.</span></span></label>
+        </div>
         <label class="field">Address prefix
           <input id="vanity-prefix" autocomplete="off" spellcheck="false" placeholder="sat" aria-describedby="vanity-prefix-help">
           <span class="field-note" id="vanity-prefix-help">Follows the selected script type.</span>
@@ -947,16 +965,33 @@ ec.innerHTML = `
         </div>
         <details class="vanity-grind no-print" id="vanity-sp-details">
           <summary>Vanity silent payment address</summary>
-          <p class="muted">Same calculator. One scan key per salt; the spend key is SHA-256(salt || 0x01) + i. The published address is <code>sp1q</code> / <code>tsp1q</code>. GPU is not used here \u2014 the spend-key loop stays on CPU so the scan key never changes.</p>
-          <div class="wallet-result-messages" role="note">
-            <ul>
-              <li class="is-warning">Guessable salts are stolen coins. Strength is the salt, not the bech32m word salad.</li>
-              <li class="is-warning">A vanity <code>sp1q\u2026</code> is not the same wallet as a vanity <code>bc1q\u2026</code> from the same salt.</li>
-            </ul>
+          <p class="muted">Calculator keeps one scan key per salt and grinds spend. Vanitygen — lab draws scan and spend starts from the CSPRNG, then grinds spend. GPU is not used here. Nothing auto-runs.</p>
+          <div class="choice-grid">
+            <label class="choice"><input type="radio" name="vanity-sp-mode" id="vanity-sp-mode-calc" value="calc" checked /><span><strong>Calculator</strong><span class="desc">You supply a salt. Scan stays put.</span></span></label>
+            <label class="choice"><input type="radio" name="vanity-sp-mode" id="vanity-sp-mode-lab" value="lab" /><span><strong>Vanitygen — lab</strong><span class="desc">CSPRNG invents scan and spend. Save both WIFs.</span></span></label>
           </div>
-          <label class="field">Salt (kept in page memory)
-            <input id="vanity-sp-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
-          </label>
+          <div id="vanity-sp-calc-fields">
+            <div class="wallet-result-messages" role="note">
+              <ul>
+                <li class="is-warning">Guessable salts are stolen coins. Strength is the salt, not the bech32m word salad.</li>
+                <li class="is-warning">A vanity <code>sp1q\u2026</code> is not the same wallet as a vanity <code>bc1q\u2026</code> from the same salt.</li>
+              </ul>
+            </div>
+            <label class="field">Salt (kept in page memory)
+              <input id="vanity-sp-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
+            </label>
+          </div>
+          <div id="vanity-sp-lab-fields" hidden>
+            <div class="wallet-result-messages" role="alert">
+              <h3>Lab warning — read before first use</h3>
+              <ul>
+                <li class="is-warning">This mode invents scan and spend keys with the browser CSPRNG.</li>
+                <li class="is-warning">A vanity <code>sp1q\u2026</code> is not the same wallet as a vanity <code>bc1q\u2026</code>.</li>
+                <li class="is-warning">Save both WIFs. Closing the tab wipes them.</li>
+              </ul>
+            </div>
+            <label class="choice"><input type="checkbox" id="vanity-sp-lab-ack" /><span><strong>I understand</strong><span class="desc">Required once this session. Start grind is still required.</span></span></label>
+          </div>
           <label class="field">Address prefix after sp1q / tsp1q
             <input id="vanity-sp-prefix" autocomplete="off" spellcheck="false" placeholder="sat" aria-describedby="vanity-sp-prefix-help">
             <span class="field-note" id="vanity-sp-prefix-help">Bech32m characters only. Network follows Address network above.</span>
@@ -10285,6 +10320,7 @@ function hodlInitTheme() {
   });
 }
 var hodlVanityAbort = null;
+var hodlVanityLabAck = false;
 function hodlVanityStop() {
   if (hodlVanityAbort) {
     try { hodlVanityAbort.abort(); } catch {}
@@ -10339,11 +10375,22 @@ function hodlVanityRenderHits(target, hits, kind) {
     let body = kind === "sp"
       ? `${Ee("Scan WIF", hit.scanWif)}${Ee("Spend WIF", hit.spendWif)}`
       : `${Ee("WIF", hit.wif)}`;
-    let recipe = kind === "sp"
+    let recipe = hit.vanitygen
+      ? `Vanitygen — lab: CSPRNG start + ${$t(String(hit.offset))}. Save the WIF. This cannot be replayed from a salt.`
+      : kind === "sp"
       ? `Reproduce: scan = SHA-256(salt || 0x00), spend = SHA-256(salt || 0x01) + ${$t(String(hit.offset))} (mod n). Same salt, same counter, same keys.`
       : `Reproduce: SHA-256(salt) + ${$t(String(hit.offset))} (mod n). Same salt, same counter, same key.`;
     return `<div class="vanity-hit"><p class="label">Match at counter ${$t(String(hit.offset))}</p><p class="mono">${$t(hit.address)}</p>${body}<p class="muted">${recipe}</p></div>`;
   }).join("");
+}
+function hodlVanitySyncMode(prefix) {
+  let lab = document.getElementById(`${prefix}-mode-lab`)?.checked;
+  let calcFields = document.getElementById(`${prefix}-calc-fields`);
+  let labFields = document.getElementById(`${prefix}-lab-fields`);
+  if (calcFields) calcFields.hidden = Boolean(lab);
+  if (labFields) labFields.hidden = !lab;
+  let ack = document.getElementById(`${prefix}-lab-ack`);
+  if (ack && hodlVanityLabAck) ack.checked = true;
 }
 function hodlVanityBind(prefix, kindFn, networkFn) {
   let go = document.getElementById(`${prefix}-go`), stop = document.getElementById(`${prefix}-stop`);
@@ -10351,8 +10398,23 @@ function hodlVanityBind(prefix, kindFn, networkFn) {
   let prefixField = document.getElementById(`${prefix}-prefix`);
   if (!go || !stop) return;
   prefixField?.addEventListener("input", hodlVanitySyncPrefixHelp);
+  document.getElementById(`${prefix}-mode-calc`)?.addEventListener("change", () => hodlVanitySyncMode(prefix));
+  document.getElementById(`${prefix}-mode-lab`)?.addEventListener("change", () => hodlVanitySyncMode(prefix));
+  document.getElementById(`${prefix}-lab-ack`)?.addEventListener("change", (event) => {
+    if (event.currentTarget.checked) {
+      hodlVanityLabAck = true;
+      let other = prefix === "vanity" ? "vanity-sp-lab-ack" : "vanity-lab-ack";
+      let box = document.getElementById(other);
+      if (box) box.checked = true;
+    }
+  });
   go.onclick = async () => {
     hodlVanityStop();
+    let lab = Boolean(document.getElementById(`${prefix}-mode-lab`)?.checked);
+    if (lab && !hodlVanityLabAck) {
+      status.textContent = "Acknowledge the lab warning first.";
+      return;
+    }
     let salt = document.getElementById(`${prefix}-salt`)?.value ?? "";
     let start = Number(document.getElementById(`${prefix}-start`)?.value || 0);
     let count = Number(document.getElementById(`${prefix}-count`)?.value || 250000);
@@ -10362,7 +10424,7 @@ function hodlVanityBind(prefix, kindFn, networkFn) {
     go.disabled = true;
     stop.disabled = false;
     hodlVanityAbort = new AbortController();
-    status.textContent = "Grinding…";
+    status.textContent = lab ? "Vanitygen — lab grinding…" : "Grinding…";
     try {
       let hits = await vanityGrind({
         salt,
@@ -10371,6 +10433,7 @@ function hodlVanityBind(prefix, kindFn, networkFn) {
         network,
         start,
         count,
+        vanitygen: lab,
         gpu: prefix === "vanity" && document.getElementById("vanity-gpu")?.checked,
       }, {
         signal: hodlVanityAbort.signal,
@@ -10401,6 +10464,8 @@ function hodlVanityBind(prefix, kindFn, networkFn) {
 function hodlInitVanity() {
   hodlVanityBind("vanity", hodlVanityKind, hodlVanityNetwork);
   hodlVanityBind("vanity-sp", () => "sp", () => document.getElementById("sp-network")?.value === "testnet" ? "testnet" : "mainnet");
+  hodlVanitySyncMode("vanity");
+  hodlVanitySyncMode("vanity-sp");
   document.getElementById("script-type")?.addEventListener("change", hodlVanitySyncPrefixHelp);
   document.getElementById("network")?.addEventListener("input", hodlVanitySyncPrefixHelp);
   document.getElementById("sp-network")?.addEventListener("change", hodlVanitySyncPrefixHelp);
