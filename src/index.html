@@ -178,6 +178,38 @@ words, pick one of the checksum words.</span></span>
         <button class="btn clear-current-action" id="wipe" type="button" disabled aria-disabled="true">Clear Current Key</button>
       </div>
       <p class="err" id="error"></p>
+      <details class="vanity-grind no-print" id="vanity-details">
+        <summary>Vanity address grinder</summary>
+        <p class="muted">A calculator. Counter <em>i</em> is added to SHA-256 of your salt (mod n). Same salt and counter always reproduce the same key. The tool never invents entropy. GPU is used when WebGPU is present and a CPU self-test matches; otherwise the CPU loop runs.</p>
+        <div class="wallet-result-messages" role="note">
+          <ul>
+            <li class="is-warning">An empty or guessable salt is a public search space. Anyone grinding the same salt finds the same keys.</li>
+            <li class="is-warning">This is a single-key grind, not an HD wallet and not a BIP39 passphrase.</li>
+          </ul>
+        </div>
+        <label class="field">Salt (kept in page memory)
+          <input id="vanity-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
+        </label>
+        <label class="field">Address prefix
+          <input id="vanity-prefix" autocomplete="off" spellcheck="false" placeholder="sat" aria-describedby="vanity-prefix-help">
+          <span class="field-note" id="vanity-prefix-help">Follows the selected script type.</span>
+        </label>
+        <div class="key-settings-row">
+          <label class="field">Start counter
+            <input id="vanity-start" type="number" min="0" step="1" inputmode="numeric" value="0">
+          </label>
+          <label class="field">Candidates this run
+            <input id="vanity-count" type="number" min="1" max="10000000" step="1" inputmode="numeric" value="250000">
+          </label>
+        </div>
+        <label class="choice"><input type="checkbox" id="vanity-gpu" checked /><span><strong>Use GPU if available</strong><span class="desc" id="vanity-gpu-note">Checking this device…</span></span></label>
+        <div class="row psbt-actions">
+          <button class="btn primary" id="vanity-go" type="button">Start grind</button>
+          <button class="btn secondary" id="vanity-stop" type="button" disabled>Stop</button>
+        </div>
+        <p class="muted" id="vanity-status" aria-live="polite">Idle. Press Start grind. Nothing runs by itself.</p>
+        <div id="vanity-out"></div>
+      </details>
     </section>
     <section class="card no-print" id="bip85-card" role="tabpanel" hidden>
       <div class="kicker">One seed. Many children.</div>
@@ -366,6 +398,37 @@ words, pick one of the checksum words.</span></span>
         <div class="row psbt-actions">
           <button class="btn primary" id="sp-derive" type="button">Derive silent payment address</button>
         </div>
+        <details class="vanity-grind no-print" id="vanity-sp-details">
+          <summary>Vanity silent payment address</summary>
+          <p class="muted">Same calculator. One scan key per salt; the spend key is SHA-256(salt || 0x01) + i. The published address is <code>sp1q</code> / <code>tsp1q</code>. GPU is not used here — the spend-key loop stays on CPU so the scan key never changes.</p>
+          <div class="wallet-result-messages" role="note">
+            <ul>
+              <li class="is-warning">Guessable salts are stolen coins. Strength is the salt, not the bech32m word salad.</li>
+              <li class="is-warning">A vanity <code>sp1q…</code> is not the same wallet as a vanity <code>bc1q…</code> from the same salt.</li>
+            </ul>
+          </div>
+          <label class="field">Salt (kept in page memory)
+            <input id="vanity-sp-salt" autocomplete="off" spellcheck="false" placeholder="Required for a private search space">
+          </label>
+          <label class="field">Address prefix after sp1q / tsp1q
+            <input id="vanity-sp-prefix" autocomplete="off" spellcheck="false" placeholder="sat" aria-describedby="vanity-sp-prefix-help">
+            <span class="field-note" id="vanity-sp-prefix-help">Bech32m characters only. Network follows Address network above.</span>
+          </label>
+          <div class="key-settings-row">
+            <label class="field">Start counter
+              <input id="vanity-sp-start" type="number" min="0" step="1" inputmode="numeric" value="0">
+            </label>
+            <label class="field">Candidates this run
+              <input id="vanity-sp-count" type="number" min="1" max="10000000" step="1" inputmode="numeric" value="250000">
+            </label>
+          </div>
+          <div class="row psbt-actions">
+            <button class="btn primary" id="vanity-sp-go" type="button">Start grind</button>
+            <button class="btn secondary" id="vanity-sp-stop" type="button" disabled>Stop</button>
+          </div>
+          <p class="muted" id="vanity-sp-status" aria-live="polite">Idle. Press Start grind. Nothing runs by itself.</p>
+          <div id="vanity-sp-out"></div>
+        </details>
       </div>
       <div id="sp-send" hidden>
         <label class="field">Recipients (one <code>sp1q…</code> / <code>tsp1q…</code> per line; optional count)

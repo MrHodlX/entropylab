@@ -1320,3 +1320,19 @@ test("the workspace switcher is a hamburger dropdown menu at every width", () =>
   assert.match(appSource, /!event\.target\.closest\("#workspace"\)\) hodlSetWorkspaceMenuOpen\(false\);/);
   assert.match(appSource, /event\.key === "Escape" && box\.classList\.contains\("is-open"\)/);
 });
+
+test("vanity grinders are collapsed, follow script type, and never auto-run", () => {
+  for (const markup of [template, appSource]) {
+    assert.match(markup, /<details class="vanity-grind no-print" id="vanity-details">/);
+    assert.match(markup, /<summary>Vanity address grinder<\/summary>/);
+    assert.match(markup, /<details class="vanity-grind no-print" id="vanity-sp-details">/);
+    assert.match(markup, /<summary>Vanity silent payment address<\/summary>/);
+    assert.match(markup, /Idle\. Press Start grind\. Nothing runs by itself\./);
+  }
+  assert.match(appSource, /function hodlInitVanity\(/);
+  assert.match(appSource, /hodlVanityBind\("vanity", hodlVanityKind, hodlVanityNetwork\)/);
+  assert.match(appSource, /hodlVanityBind\("vanity-sp"/);
+  assert.match(appSource, /hodlShowWorkspace\(id\) \{\s*if \(id === hodlWorkspace\) return;\s*hodlVanityStop\(\);/);
+  assert.match(css, /details\.vanity-grind \{ margin-top: var\(--space-section\); \}/);
+});
+

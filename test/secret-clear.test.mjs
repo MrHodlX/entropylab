@@ -15,6 +15,7 @@ test("page lifecycle clearing replaces every cached key and clears PSBT private 
   assert.match(lifecycle, /hodlPsbtWipeMem\(\)/);
   assert.match(lifecycle, /hodlBip85WipeMem\(\)/);
   assert.match(lifecycle, /hodlSpWipeMem\(\)/);
+  assert.match(lifecycle, /hodlVanityStop\(\)/);
   assert.match(lifecycle, /hodlWorkspaceSyncMsig = \[\]/);
   assert.match(lifecycle, /hodlWorkspaceSyncResult = null/);
   assert.match(lifecycle, /hodlKeys\s*=\s*hodlKeys\.map\(\(state\)\s*=>\s*\{/);
@@ -91,3 +92,13 @@ test("highlight mirrors, copy-button phrases, the last-word cache, and the PSBT 
   assert.match(lifecycle, /getElementById\("psbted-wipe"\)/);
   assert.match(lifecycle, /psbtEditorWipe\.click\(\)/);
 });
+
+test("vanity salts and grind results are cleared with the rest of page memory", () => {
+  assert.match(lifecycle, /vanity-salt/);
+  assert.match(lifecycle, /vanity-sp-salt/);
+  assert.match(lifecycle, /getElementById\("vanity-out"\)/);
+  assert.match(lifecycle, /getElementById\("vanity-sp-out"\)/);
+  assert.match(app, /function hodlVanityStop\(/);
+  assert.match(app, /hodlVanityAbort\.abort\(\)/);
+});
+
