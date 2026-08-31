@@ -269,6 +269,23 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 .choice:has(input:disabled) { cursor: not-allowed; opacity: 0.52; }
 .choice-grid { display: grid; gap: var(--space-control); margin-top: var(--space-control); }
 .choice-grid .choice { margin-top: 0; }
+details.lab-entropy { margin-top: var(--space-section); }
+details.lab-entropy > summary {
+  cursor: pointer; font-weight: 600; color: var(--fg);
+}
+details.lab-entropy .wallet-result-messages { margin-top: var(--space-control); }
+#brain-lab { font-family: var(--mono); letter-spacing: 0; }
+.workspace-sync { margin-top: var(--space-section); }
+.workspace-sync-targets {
+  list-style: none; margin: var(--space-control) 0 0; padding: 0;
+  display: grid; gap: 8px;
+}
+.workspace-sync-target {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px;
+}
+.workspace-sync-name { font-weight: 600; }
+.workspace-sync-target.is-unavailable { opacity: 0.52; }
 @media (min-width: 720px) {
   .choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .choice-grid.three-up { grid-template-columns: repeat(3, minmax(0, 1fr)); }

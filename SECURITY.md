@@ -83,6 +83,12 @@ material. Its security posture rests on the following model:
   supplied entropy and says to use it only for testing. Users who intend to
   secure funds must meet the displayed roll/card recommendation and verify
   their procedure independently.
+- Brain wallet — lab hashes the exact UTF-8 text with unsalted SHA-256 and
+  treats the digest as BIP39 entropy. Guessable text is stolen coins. A valid
+  24-word mnemonic from that hash is not the same wallet as hashing the text
+  as a Bitcoin Core private key, and it is not a backup of a Core hdseed or
+  address key. The private-key brain-wallet mode remains a separate scalar
+  path.
 - BIP-85 children are a deterministic transformation of the parent BIP32 root,
   not newly generated entropy. A BIP-39 passphrase, when present, is part of
   that root (the same rule COLDCARD uses). Anyone who has the parent seed,

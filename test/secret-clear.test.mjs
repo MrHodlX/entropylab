@@ -15,6 +15,7 @@ test("page lifecycle clearing replaces every cached key and clears PSBT private 
   assert.match(lifecycle, /hodlPsbtWipeMem\(\)/);
   assert.match(lifecycle, /hodlBip85WipeMem\(\)/);
   assert.match(lifecycle, /hodlSpWipeMem\(\)/);
+  assert.match(lifecycle, /hodlWorkspaceSyncMsig = null/);
   assert.match(lifecycle, /hodlKeys\s*=\s*hodlKeys\.map\(\(state\)\s*=>\s*\{/);
   assert.match(lifecycle, /privateKeys\[kind\]\s*=\s*""/);
   assert.match(lifecycle, /if \(id !== "privateKeys"\) fields\[id\] = ""/);

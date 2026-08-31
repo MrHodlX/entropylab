@@ -54,3 +54,38 @@ test("exact mode accepts whitespace while trim mode rejects an empty result", ()
   assert.throws(() => helpers.hodlBrainWalletPassphrase(" \t\n", true), /leaves an empty brain-wallet recovery passphrase/);
   assert.throws(() => helpers.hodlBrainWalletPassphrase(""), /Enter the brain-wallet recovery passphrase/);
 });
+
+const lab = new Function(
+  "Z",
+  "M",
+  `${loadSlice("hodlBrainLabEntropy")};return { hodlBrainLabEntropy };`,
+)(Z, { encode: (bytes) => Buffer.from(bytes).toString("hex") });
+
+test("brain-wallet lab hashes exact UTF-8 text as 256-bit BIP39 entropy", () => {
+  const text = " recovery phrase \t\n";
+  const expected = createHash("sha256").update(text, "utf8").digest("hex");
+  const result = lab.hodlBrainLabEntropy(text);
+  assert.equal(result.ok, true);
+  assert.equal(result.hex, expected);
+  assert.equal(result.bits, 256);
+  assert.equal(result.sourceBits, 256);
+  assert.equal(result.method, "brain-lab");
+  assert.equal(result.bytes.length, 32);
+  assert.match(result.notes.join(" "), /24 words/);
+  assert.match(result.warnings.join(" "), /entropy of this text, not the 24-word count/);
+  assert.match(result.warnings.join(" "), /unsalted and fast/);
+  assert.match(result.warnings.join(" "), /not a BIP39 passphrase/);
+  assert.match(result.warnings.join(" "), /not a Bitcoin Core hdseed/);
+  assert.match(result.warnings.join(" "), /not mean it is the same wallet/);
+});
+
+test("brain-wallet lab rejects empty text and keeps private-key hashing separate", () => {
+  assert.equal(lab.hodlBrainLabEntropy("").ok, false);
+  const text = "correct horse battery staple";
+  const labHex = lab.hodlBrainLabEntropy(text).hex;
+  const scalarHex = Buffer.from(helpers.hodlBrainWalletPrivateKey(text)).toString("hex");
+  assert.equal(labHex, scalarHex);
+  assert.equal(app.includes('Ne === "brain-lab"'), true);
+  assert.match(app, /function hodlBrainWalletPrivateKey\(/);
+  assert.match(app, /function hodlBrainLabEntropy\(/);
+});

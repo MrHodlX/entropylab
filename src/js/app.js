@@ -511,6 +511,17 @@ function hodlBrainWalletPassphrase(value, trimBoundaryWhitespace = false) {
 function hodlBrainWalletPrivateKey(value, trimBoundaryWhitespace = false) {
   return Z(new TextEncoder().encode(hodlBrainWalletPassphrase(value, trimBoundaryWhitespace)));
 }
+function hodlBrainLabEntropy(value) {
+  let text = String(value ?? ""), notes = [], warnings = [];
+  if (!text.length) return { ok: false, error: "Enter the brain-wallet lab text.", notes, warnings };
+  let bytes = Z(new TextEncoder().encode(text)), hex = M.encode(bytes);
+  notes.push("SHA-256 of the exact UTF-8 text is 32 bytes of BIP39 entropy (256 bits → 24 words).");
+  warnings.push("Lab only. Strength is the entropy of this text, not the 24-word count.");
+  warnings.push("SHA-256(text) is unsalted and fast. Anyone who can guess the text recovers the wallet.");
+  warnings.push("This is not a BIP39 passphrase, and it is not a Bitcoin Core hdseed or address-key backup.");
+  warnings.push("A valid mnemonic does not mean it is the same wallet as hashing the text as a Core private key.");
+  return { ok: true, bytes, hex, bits: 256, sourceBits: 256, method: "brain-lab", notes, warnings };
+}
 function Io(e, t, r, trimBrainWallet = false) {
   let n = [], o = [], i, s = null, c = t, a = r === "brain" ? hodlBrainWalletPassphrase(e, trimBrainWallet) : e.trim();
   if (r === "brain") {
@@ -993,13 +1004,13 @@ ec.innerHTML = `
   </div>
 `;
 if (/^(www\.)?entropylab\.online$/i.test(location.hostname)) document.getElementById("online-warning")?.removeAttribute("hidden");
-var hodlKeyModes = ["dice", "cards", "hex", "seed", "key"], hodlCardRanks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"], hodlDirectCardRanks = ["A", "2", "3", "4", "5", "6", "7", "8"], hodlCardSuits = [{ code: "S", symbol: "\u2660", label: "Spades", red: false }, { code: "H", symbol: "\u2665", label: "Hearts", red: true }, { code: "C", symbol: "\u2663", label: "Clubs", red: false }, { code: "D", symbol: "\u2666", label: "Diamonds", red: true }], hodlCardSuit = "", hodlCardRank = "", hodlCardMethod = "hashed", hodlSeedMethod = "words", hodlSeedZeroIndexed = false, hodlCardColemanSymbols = false, Ne = "dice", ge = "coldcard", Pt = 24, hodlEntropyFormat = "hex", hodlDiceCoinPositions = [], ft = "", re = null, Ge = false, hodlWalletDatBirthday = "genesis", Zs = W("#modes"), at = W("#form"), dr = W("#out");
+var hodlKeyModes = ["dice", "cards", "hex", "seed", "key", "brain-lab"], hodlBrainLabAck = false, hodlWorkspaceSyncMsig = null, hodlCardRanks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"], hodlDirectCardRanks = ["A", "2", "3", "4", "5", "6", "7", "8"], hodlCardSuits = [{ code: "S", symbol: "\u2660", label: "Spades", red: false }, { code: "H", symbol: "\u2665", label: "Hearts", red: true }, { code: "C", symbol: "\u2663", label: "Clubs", red: false }, { code: "D", symbol: "\u2666", label: "Diamonds", red: true }], hodlCardSuit = "", hodlCardRank = "", hodlCardMethod = "hashed", hodlSeedMethod = "words", hodlSeedZeroIndexed = false, hodlCardColemanSymbols = false, Ne = "dice", ge = "coldcard", Pt = 24, hodlEntropyFormat = "hex", hodlDiceCoinPositions = [], ft = "", re = null, Ge = false, hodlWalletDatBirthday = "genesis", Zs = W("#modes"), at = W("#form"), dr = W("#out");
 hodlKeyModes.forEach((e) => {
   let t = document.createElement("button"), active = e === Ne;
   t.type = "button";
   t.className = "tab" + (active ? " active" : "");
   t.setAttribute("aria-pressed", String(active));
-  t.textContent = e === "dice" ? "Dice rolls" : e === "cards" ? "Cards" : e === "hex" ? "Number bases" : e === "seed" ? "Seed phrase" : "Private key";
+  t.textContent = e === "dice" ? "Dice rolls" : e === "cards" ? "Cards" : e === "hex" ? "Number bases" : e === "seed" ? "Seed phrase" : e === "brain-lab" ? "Brain wallet — lab" : "Private key";
   t.onclick = () => hodlSetMode(e);
   Zs.appendChild(t);
 });
@@ -1191,6 +1202,7 @@ function tc() {
     let t = new Blob([hodlFormatRecoverySheet(Oo(re, Ge))], { type: "text/plain" }), r = document.createElement("a");
     r.href = URL.createObjectURL(t), r.download = "bitcoin-recovery-sheet.txt", r.click();
   });
+  hodlRenderWorkspaceSync();
 }
 To = To.map((definition) => definition.id === "bip86" ? { ...definition, slip: "x" } : definition);
 cr = {
@@ -1231,8 +1243,16 @@ uf = function(value) {
   if (node.depth !== depth) throw new Error("The extended-key depth does not match its serialized payload.");
   return { xkey: normalized, isPrivate: entry.private, network: entry.network, family: entry.family, scope: entry.scope, prefix: entry.name, version: entry.ver, node, depth, childNumber };
 };
-function hodlAccountExportFamily(definition) {
-  return definition.id === "bip49" ? "y" : definition.id === "bip84" ? "z" : "x";
+function hodlAccountExportFamily(definition, options = {}) {
+  if (definition.id === "bip86") return "x";
+  if (options.imported) {
+    if (options.importedFamily === "y" && definition.id === "bip49") return "y";
+    if (options.importedFamily === "z" && definition.id === "bip84") return "z";
+    return "x";
+  }
+  if (definition.id === "bip49" && definition.purpose === 49) return "y";
+  if (definition.id === "bip84" && definition.purpose === 84) return "z";
+  return "x";
 }
 function hodlSerializeExtendedKey(value, network, family, isPrivate) {
   return value ? le(value, cr[network][family][isPrivate ? "prv" : "pub"]) : null;
@@ -1337,7 +1357,7 @@ function hodlWatchOnlyDescriptorExport(receiveDescriptor, changeDescriptor, addr
   return `${ye("Watch-only wallet descriptor", multipath || "\u2014")}${qr}<details class="wallet-advanced"><summary>Address branch descriptors</summary>${details}</details>`;
 }
 function hodlAccountResult(node, definition, network, count, options = {}) {
-  let rawPublic = node.publicExtendedKey, rawPrivate = node.privateKey ? node.privateExtendedKey : null, family = hodlAccountExportFamily(definition), primaryConfig = cr[network][family], genericConfig = cr[network].x;
+  let rawPublic = node.publicExtendedKey, rawPrivate = node.privateKey ? node.privateExtendedKey : null, family = hodlAccountExportFamily(definition, options), primaryConfig = cr[network][family] || cr[network].x, genericConfig = cr[network].x;
   let genericPublic = hodlSerializeExtendedKey(rawPublic, network, "x", false), genericPrivate = hodlSerializeExtendedKey(rawPrivate, network, "x", true);
   let primaryPublic = hodlSerializeExtendedKey(rawPublic, network, family, false), primaryPrivate = hodlSerializeExtendedKey(rawPrivate, network, family, true);
   let origin = options.originFingerprint && options.originPath ? `[${options.originFingerprint}/${options.originPath}]` : "", branchHardened = Boolean(options.branchHardened), addressHardened = Boolean(options.addressHardened), wildcard = addressHardened ? "*'" : "*", branchStart = options.branchStart ?? 0, branchRange = options.branchRange ?? 2;
@@ -1364,7 +1384,11 @@ function hodlAccountResult(node, definition, network, count, options = {}) {
     accountPath,
     accountIndex: options.accountIndex ?? null,
     originKnown: Boolean(origin),
+    originFingerprint: options.originFingerprint || null,
+    originPath: options.originPath || null,
     imported: Boolean(options.imported),
+    importedFamily: options.importedFamily || null,
+    importedValue: options.importedValue || null,
     masterFingerprint: options.masterFingerprint ?? null,
     parentFingerprint: options.parentFingerprint ?? null,
     nodeFingerprint: options.nodeFingerprint ?? null,
@@ -1544,7 +1568,7 @@ async function hodlImportedWalletWithProgress(value, network, count, accountInde
   if ((hardening.branch || hardening.address) && !parsed.isPrivate) throw new Error(`Hardened ${hardening.branch ? "address branches" : "address indexes"} cannot be derived from an account extended public key. Turn off Harden or import the matching extended private key offline.`);
   let definition = hodlImportedScriptDefinition(parsed), addressCount = Math.min(Math.max(count, 1), hodlMaxAddressRange), parentFingerprint = Us(node.parentFingerprint), nodeFingerprint = Us(node.fingerprint);
   tracker.setTotal(addressCount * branchRange);
-  let account = await hodlAccountResultWithProgress(node, definition, network, addressCount, { accountPath: "Imported account key", accountIndex: null, imported: true, parentFingerprint, nodeFingerprint, addressStart, branchHardened: hardening.branch, addressHardened: hardening.address, branchStart, branchRange }, tracker);
+  let account = await hodlAccountResultWithProgress(node, definition, network, addressCount, { accountPath: "Imported account key", accountIndex: null, imported: true, importedFamily: parsed.family, importedValue, parentFingerprint, nodeFingerprint, addressStart, branchHardened: hardening.branch, addressHardened: hardening.address, branchStart, branchRange }, tracker);
   node.wipePrivateData(); // the account result keeps its strings, not the imported node
   return {
     kind: "hd",
@@ -1805,6 +1829,23 @@ function hodlBindAddressVirtualization(configs = []) {
     render();
   });
 }
+function hodlSlip132Fields(account, wallet, isPrivate = false) {
+  let pasted = isPrivate ? (wallet?.importedPrivateKey || "") : (wallet?.importedPublicKey || "");
+  let core = (isPrivate ? account.genericPrivate : account.genericPublic) || "";
+  let coreLabel = isPrivate ? account.genericPrivateLabel : account.genericPublicLabel;
+  let slip = account.hasAlternateExport ? (isPrivate ? account.primaryPrivate : account.primaryPublic) : "";
+  let slipLabel = isPrivate ? account.primaryPrivateLabel : account.primaryPublicLabel;
+  let field = isPrivate ? Ee : ye, parts = [];
+  if (pasted) parts.push(field("As pasted", pasted));
+  if (core && core !== pasted) parts.push(field(`Bitcoin Core ${coreLabel}`, core));
+  if (slip && slip !== pasted && slip !== core) parts.push(field(`SLIP-132 ${slipLabel}`, slip));
+  if (!parts.length && core) parts.push(field(`Account ${coreLabel}`, core));
+  if (!isPrivate) parts.push(`<p class="muted slip132-note">Prefix swap only (same payload, new version bytes and checksum). Script lives in the descriptor, not the prefix. x = legacy, y = nested BIP49, z = native BIP84, Y = nested BIP48 nested-msig, Z = native BIP48 native-msig. Testnet: t / u / v / U / V. No Taproot SLIP prefix.</p>`);
+  return parts.join("");
+}
+function hodlSlip132WatchFields(account, wallet) {
+  return hodlSlip132Fields(account, wallet, false);
+}
 function Qs(id) {
   if (!re || re.kind !== "hd") return;
   let account = re.accounts.find((candidate) => candidate.def.id === id);
@@ -1818,7 +1859,7 @@ function Qs(id) {
         <h3 id="account-private-heading">Private account material</h3>
         <p class="muted">These exports can spend from this account. They are shown only for a seed or extended private-key source.</p>
       </div>
-      ${Ee(`Account ${account.primaryPrivateLabel}`, account.primaryPrivate)}
+      ${hodlSlip132Fields(account, re, true)}
       ${hodlAddressBranchDescriptorFields(branches, true)}
       ${hodlAccountAdvancedExports(account, true)}
       <p class="account-private-warning"><strong>Keep these exports together only in secure offline backups.</strong> An account extended public key combined with any non-hardened descendant private key, including a WIF shown in the address tables below, can reconstruct that account's extended private key.</p>
@@ -1834,7 +1875,7 @@ function Qs(id) {
           <h3 id="account-watch-heading">Watch-only wallet data</h3>
           <p class="watch-only-note"><strong>Cannot spend:</strong> these exports can monitor every address and reveal this account's transaction history and balance. Treat them as privacy-sensitive.</p>
         </div>
-        ${ye(`Account ${account.primaryPublicLabel}`, account.primaryPublic)}
+        ${hodlSlip132WatchFields(account, re)}
         ${hodlRenderMultisigCosignerExport(re.multisigCosignerExports, account.def.id)}
         ${hodlWatchOnlyDescriptorExport(account.receiveDescriptor, account.changeDescriptor, branches)}
         ${hodlAccountAdvancedExports(account, false)}
@@ -2555,7 +2596,7 @@ function hodlUpdateKeyModeControls() {
   let singleKey = Ne === "key", settings = document.getElementById("key-settings");
   ["passphrase-field", "master-fingerprint-preview", "script-type-field", "derivation-path-field", "derivation-advanced"].forEach((id) => {
     let element = document.getElementById(id);
-    if (element) element.hidden = singleKey;
+    if (element) element.hidden = singleKey || (id === "master-fingerprint-preview" && Ne === "brain-lab");
   });
   settings?.classList.toggle("single-key-mode", singleKey);
 }
@@ -5015,7 +5056,7 @@ function hodlUpdateSeedLengthControl() {
   let section = document.getElementById("seed-length");
   if (!section) return;
   let config = hodlSeedConfig();
-  section.hidden = Ne === "key";
+  section.hidden = Ne === "key" || Ne === "brain-lab";
   section.querySelectorAll("[data-seed-words]").forEach((button) => {
     let active = Number(button.dataset.seedWords) === config.words;
     button.classList.toggle("active", active);
@@ -5475,6 +5516,64 @@ function hodlRenderKeyForm() {
     update();
     return;
   }
+  if (Ne === "brain-lab") {
+    let state = hodlKeys[hodlActiveKey], acked = Boolean(hodlBrainLabAck);
+    at.innerHTML = `
+      <details class="lab-entropy" id="brain-lab-details" ${acked ? "" : "open"}>
+        <summary>Brain wallet — lab</summary>
+        <div class="wallet-result-messages" role="alert">
+          <h3>Lab warning — read before first use</h3>
+          <ul>
+            <li class="is-warning">Strength is the entropy of this text, not the 24-word count.</li>
+            <li class="is-warning">SHA-256(text) is unsalted and fast. Guessable phrases are stolen coins.</li>
+            <li class="is-warning">This is not a BIP39 passphrase.</li>
+            <li class="is-warning">This is not a Bitcoin Core hdseed or address-key backup of the same wallet.</li>
+            <li class="is-warning">A valid mnemonic does not mean it is the same Core wallet as hashing the text as a private-key scalar.</li>
+          </ul>
+        </div>
+        <label class="choice"><input type="checkbox" id="brain-lab-ack" ${acked ? "checked" : ""} /><span><strong>I understand</strong><span class="desc">Required once this session, in page memory only. Derive is still required.</span></span></label>
+      </details>
+      <p class="label" id="brain-lab-label">Lab text</p>
+      <p class="muted" id="brain-lab-help">UTF-8 text is hashed with SHA-256. The 32-byte digest is BIP39 entropy for a 24-word seed. Nothing is derived until you press Derive Wallet.</p>
+      <textarea id="brain-lab" placeholder="Exact text. Whitespace is significant." ${acked ? "" : "disabled"} aria-labelledby="brain-lab-label" aria-describedby="brain-lab-help brain-lab-hex"></textarea>
+      <p class="muted" id="brain-lab-hex" aria-live="polite">SHA-256 hex appears here. 24 words appear only after Derive Wallet.</p>`;
+    let ack = document.getElementById("brain-lab-ack"), input = document.getElementById("brain-lab"), hex = document.getElementById("brain-lab-hex");
+    let renderHex = () => {
+      if (!hodlBrainLabAck) {
+        hex.textContent = "Acknowledge the lab warning, then enter text. Derive Wallet is still required.";
+        hex.className = "muted";
+        return;
+      }
+      let value = input.value;
+      if (!value.length) {
+        hex.textContent = "SHA-256 hex appears here. 24 words appear only after Derive Wallet.";
+        hex.className = "muted";
+        return;
+      }
+      let entropy = hodlBrainLabEntropy(value);
+      hex.textContent = entropy.ok ? `SHA-256 (256-bit BIP39 entropy): ${entropy.hex}` : entropy.error;
+      hex.className = "muted " + (entropy.ok ? "ok" : "err");
+    };
+    ack.onchange = () => {
+      hodlBrainLabAck = ack.checked;
+      input.disabled = !hodlBrainLabAck;
+      renderHex();
+      hodlSyncKeyClearButton();
+      hodlSyncDeriveButton();
+    };
+    input.oninput = () => {
+      if (state) state.fields.brainLab = input.value;
+      renderHex();
+      hodlSyncKeyClearButton();
+      hodlSyncDeriveButton();
+    };
+    if (state?.fields.brainLab) input.value = state.fields.brainLab;
+    hodlBindKeyFields();
+    hodlRenderPassphraseKeyboard();
+    renderHex();
+    hodlSyncDeriveButton();
+    return;
+  }
   at.innerHTML = `
     <p class="label">Private key format</p>
     <div class="choice-grid">
@@ -5832,6 +5931,10 @@ function hodlCanDeriveCurrentKey() {
       }
       return hodlValidateTargetMnemonic(value, Pt).ok;
     }
+    if (Ne === "brain-lab") {
+      if (!hodlBrainLabAck) return false;
+      return hodlBrainLabEntropy(document.getElementById("brain-lab")?.value).ok;
+    }
     return hodlPrivateKeyInputIsValid();
   } catch {
     return false;
@@ -5896,6 +5999,7 @@ function hodlFingerprintMnemonic() {
       let validation = hodlValidateTargetMnemonic(value, Pt);
       return validation.ok ? validation.words.join(" ") : null;
     }
+    if (Ne === "brain-lab") return null;
   } catch {
   }
   return null;
@@ -5933,7 +6037,7 @@ function hodlRenderMasterFingerprintPreview(revision = hodlMasterFingerprintRevi
   if (revision !== hodlMasterFingerprintRevision) return;
   let preview = document.getElementById("master-fingerprint-preview"), baseCard = document.getElementById("base-master-fingerprint-card"), base = document.getElementById("base-master-fingerprint"), baseImage = document.getElementById("base-master-fingerprint-lifehash"), arrow = document.getElementById("master-fingerprint-arrow"), derivedCard = document.getElementById("passphrase-master-fingerprint-card"), derived = document.getElementById("passphrase-master-fingerprint"), derivedImage = document.getElementById("passphrase-master-fingerprint-lifehash"), pass = document.getElementById("pass");
   if (!preview || !baseCard || !base || !arrow || !derivedCard || !derived || !pass) return;
-  if (Ne === "key") {
+  if (Ne === "key" || Ne === "brain-lab") {
     preview.hidden = true;
     return;
   }
@@ -6089,6 +6193,11 @@ async function hodlCalculateKey(progress) {
         if (!validation.ok) throw new Error(validation.error);
         re = await hodlMnemonicWalletWithProgress(validation.words.join(" "), passphrase, network, count, void 0, account, addressStart, progress, purpose, coinType, hardening, branchStart, branchRange, derivationPlan);
       }
+    } else if (Ne === "brain-lab") {
+      if (!hodlBrainLabAck) throw new Error("Acknowledge the lab warning before deriving.");
+      let entropy = hodlBrainLabEntropy(document.getElementById("brain-lab")?.value);
+      if (!entropy.ok) throw new Error(entropy.error);
+      re = await hodlEntropyWalletWithProgress(entropy, passphrase, network, count, account, addressStart, progress, purpose, coinType, hardening, branchStart, branchRange, derivationPlan);
     } else {
       let value = document.getElementById("key").value, kind = hodlNormalizePrivateKeyKind(document.querySelector("input[name=kk]:checked")?.value, value);
       let trimBrainWallet = hodlBrainWalletTrimEnabled();
@@ -6100,9 +6209,9 @@ async function hodlCalculateKey(progress) {
     if (re?.network !== network) throw new Error(`The supplied key is for ${re.network}, but Network is set to ${network}.`);
     Ge = false;
     hodlSetSelectedScriptType(scriptType);
+    hodlCaptureKey();
     tc();
     hodlFocusWalletResult();
-    hodlCaptureKey();
     return true;
   } catch (error) {
     if (error instanceof HodlDerivationCancelledError) throw error;
@@ -8782,7 +8891,7 @@ function hodlPrivateKeyValues(fields) {
 }
 function hodlNewKeyState(name, keyId, keyNumber) {
   let id = keyId ?? hodlNextKeyId++, number = keyNumber ?? hodlNextKeyNumber++;
-  return { id, number, color: hodlKeyColor(id), name: name || hodlDefaultKeyName(number), mode: "dice", diceMethod: "coldcard", cardMethod: "hashed", seedMethod: "words", seedZeroIndexed: false, cardColemanSymbols: false, entropyFormat: "bin", syncNumberBases: false, numberBaseSyncSource: "", numberBasesSynced: false, seedAutocomplete: true, passphraseBip39Words: false, passphraseAutocomplete: true, brainWalletTrim: false, showCards: false, showDiceFairness: false, targetWords: 24, diceCoinPositions: [], lastWord: "", dplusLastWord: "", result: null, reveal: false, accountId: "bip84", error: "", fields: { pass: "", script: "bip84", derivationPath: "m/84'/0'/0'/0/0", derivationAccountPath: "m/84'/0'/0'", purpose: "84'", purposeHarden: true, coinType: "0'", coinTypeHarden: true, network: "mainnet", account: "0'", accountHarden: true, branchStart: "0", branchHarden: false, branchRange: "1", addressStart: "0", addressHarden: false, addressRange: "1", dice: "", dplusDice: "", hex: "", bin: "", base4: "", base8: "", base32: "", base64: "", cards: "", directCards: "", seed: "", seedNumbers: "", key: "", keyKind: "wif", privateKeys: { wif: "", "hex-key": "", minikey: "", brain: "" } } };
+  return { id, number, color: hodlKeyColor(id), name: name || hodlDefaultKeyName(number), mode: "dice", diceMethod: "coldcard", cardMethod: "hashed", seedMethod: "words", seedZeroIndexed: false, cardColemanSymbols: false, entropyFormat: "bin", syncNumberBases: false, numberBaseSyncSource: "", numberBasesSynced: false, seedAutocomplete: true, passphraseBip39Words: false, passphraseAutocomplete: true, brainWalletTrim: false, showCards: false, showDiceFairness: false, targetWords: 24, diceCoinPositions: [], lastWord: "", dplusLastWord: "", result: null, reveal: false, accountId: "bip84", error: "", fields: { pass: "", script: "bip84", derivationPath: "m/84'/0'/0'/0/0", derivationAccountPath: "m/84'/0'/0'", purpose: "84'", purposeHarden: true, coinType: "0'", coinTypeHarden: true, network: "mainnet", account: "0'", accountHarden: true, branchStart: "0", branchHarden: false, branchRange: "1", addressStart: "0", addressHarden: false, addressRange: "1", dice: "", dplusDice: "", hex: "", bin: "", base4: "", base8: "", base32: "", base64: "", cards: "", directCards: "", seed: "", seedNumbers: "", brainLab: "", key: "", keyKind: "wif", privateKeys: { wif: "", "hex-key": "", minikey: "", brain: "" } } };
 }
 function hodlRestoreFormFields(state) {
   if (!state) return;
@@ -8795,6 +8904,11 @@ function hodlRestoreFormFields(state) {
   if (syncNumberBases) syncNumberBases.checked = Boolean(state.syncNumberBases);
   let seedAutocomplete = document.getElementById("seed-autocomplete");
   if (seedAutocomplete) seedAutocomplete.checked = Boolean(state.seedAutocomplete);
+  let brainLab = document.getElementById("brain-lab");
+  if (brainLab) {
+    brainLab.value = state.fields.brainLab || "";
+    brainLab.dispatchEvent(new Event("input"));
+  }
   ["dice", "hex", "bin", "base4", "base8", "base32", "base64", "seed", "seed-numbers", "key", "cards", "direct-cards"].forEach(id => {
     let el = document.getElementById(id);
     if (el) {
@@ -8832,7 +8946,7 @@ function hodlSetMode(mode) {
 function hodlKeyStateNeedsClear(state) {
   if (!state) return false;
   let fields = state.fields || {}, privateKeys = hodlPrivateKeyValues(fields), hasText = (id) => String(fields[id] ?? "").length > 0;
-  return String(state.mode ?? "dice") !== "dice" || String(state.diceMethod ?? "coldcard") !== "coldcard" || String(state.cardMethod ?? "hashed") !== "hashed" || String(state.seedMethod ?? "words") !== "words" || Boolean(state.seedZeroIndexed) || Boolean(state.cardColemanSymbols) || String(state.entropyFormat ?? "bin") !== "bin" || Boolean(state.syncNumberBases) || state.seedAutocomplete === false || Boolean(state.passphraseBip39Words) || state.passphraseAutocomplete === false || Boolean(state.brainWalletTrim) || Boolean(state.showCards) || Boolean(state.showDiceFairness) || Number(state.targetWords ?? 24) !== 24 || Array.isArray(state.diceCoinPositions) && state.diceCoinPositions.length > 0 || String(state.lastWord ?? "").length > 0 || String(state.dplusLastWord ?? "").length > 0 || Boolean(state.result) || Boolean(state.reveal) || String(state.error ?? "").length > 0 || String(state.accountId ?? "bip84") !== "bip84" || String(fields.script ?? "bip84") !== "bip84" || String(fields.derivationPath ?? "m/84'/0'/0'/0/0") !== "m/84'/0'/0'/0/0" || String(fields.purpose ?? "84'") !== "84'" || fields.purposeHarden === false || String(fields.coinType ?? (fields.network === "testnet" ? "1'" : "0'")) !== "0'" || fields.coinTypeHarden === false || String(fields.account ?? "0'") !== "0'" || fields.accountHarden === false || String(fields.branchStart ?? "0") !== "0" || Boolean(fields.branchHarden) || String(fields.branchRange ?? "1") !== "1" || String(fields.addressStart ?? "0") !== "0" || Boolean(fields.addressHarden) || String(fields.addressRange ?? fields.count ?? "1") !== "1" || hodlNormalizePrivateKeyKind(fields.keyKind, privateKeys[fields.keyKind] || "") !== "wif" || ["pass", "dice", "dplusDice", "hex", "bin", "base4", "base8", "base32", "base64", "cards", "directCards", "seed", "seedNumbers", "key"].some(hasText) || hodlPrivateKeyKinds.some((kind) => privateKeys[kind].length > 0);
+  return String(state.mode ?? "dice") !== "dice" || String(state.diceMethod ?? "coldcard") !== "coldcard" || String(state.cardMethod ?? "hashed") !== "hashed" || String(state.seedMethod ?? "words") !== "words" || Boolean(state.seedZeroIndexed) || Boolean(state.cardColemanSymbols) || String(state.entropyFormat ?? "bin") !== "bin" || Boolean(state.syncNumberBases) || state.seedAutocomplete === false || Boolean(state.passphraseBip39Words) || state.passphraseAutocomplete === false || Boolean(state.brainWalletTrim) || Boolean(state.showCards) || Boolean(state.showDiceFairness) || Number(state.targetWords ?? 24) !== 24 || Array.isArray(state.diceCoinPositions) && state.diceCoinPositions.length > 0 || String(state.lastWord ?? "").length > 0 || String(state.dplusLastWord ?? "").length > 0 || Boolean(state.result) || Boolean(state.reveal) || String(state.error ?? "").length > 0 || String(state.accountId ?? "bip84") !== "bip84" || String(fields.script ?? "bip84") !== "bip84" || String(fields.derivationPath ?? "m/84'/0'/0'/0/0") !== "m/84'/0'/0'/0/0" || String(fields.purpose ?? "84'") !== "84'" || fields.purposeHarden === false || String(fields.coinType ?? (fields.network === "testnet" ? "1'" : "0'")) !== "0'" || fields.coinTypeHarden === false || String(fields.account ?? "0'") !== "0'" || fields.accountHarden === false || String(fields.branchStart ?? "0") !== "0" || Boolean(fields.branchHarden) || String(fields.branchRange ?? "1") !== "1" || String(fields.addressStart ?? "0") !== "0" || Boolean(fields.addressHarden) || String(fields.addressRange ?? fields.count ?? "1") !== "1" || hodlNormalizePrivateKeyKind(fields.keyKind, privateKeys[fields.keyKind] || "") !== "wif" || ["pass", "dice", "dplusDice", "hex", "bin", "base4", "base8", "base32", "base64", "cards", "directCards", "seed", "seedNumbers", "brainLab", "key"].some(hasText) || hodlPrivateKeyKinds.some((kind) => privateKeys[kind].length > 0);
 }
 function hodlSyncKeyClearButton(capture = false) {
   if (capture) hodlCaptureKey();
@@ -8841,8 +8955,151 @@ function hodlSyncKeyClearButton(capture = false) {
   button.disabled = !hodlKeyStateNeedsClear(hodlKeys[hodlActiveKey]);
   button.setAttribute("aria-disabled", String(button.disabled));
 }
+function hodlWorkspaceHasHdRoot(result) {
+  return Boolean(result && result.kind === "hd" && (result.mnemonic || result.rootXprv));
+}
+function hodlWorkspaceHasPsbtKey(result) {
+  if (!result) return false;
+  if (result.kind === "single" && result.privHex) return true;
+  return hodlWorkspaceHasHdRoot(result);
+}
+function hodlWorkspaceMsigToken(result, accountId) {
+  if (!result || result.kind !== "hd") return "";
+  let account = (result.accounts || []).find((entry) => entry.def?.id === accountId) || result.accounts?.[0];
+  if (!account?.genericPublic || !account.originFingerprint || !account.originPath) return "";
+  return `[${account.originFingerprint}/${account.originPath}]${account.genericPublic}`;
+}
+function hodlFirstEmptyMsigSlot() {
+  return hodlReadMsigXpubs().findIndex((value) => !String(value).trim());
+}
+function hodlWorkspaceSyncTargets(result, options = {}) {
+  let hd = hodlWorkspaceHasHdRoot(result), psbt = hodlWorkspaceHasPsbtKey(result), token = hodlWorkspaceMsigToken(result, options.accountId), msigEmpty = options.msigEmpty !== false;
+  return [
+    { id: "bip85", label: "BIP-85", ok: hd, skip: hd ? "" : "no HD root" },
+    { id: "sp", label: "Silent Payments", ok: hd, skip: hd ? "" : "no HD root" },
+    { id: "psbt", label: "PSBT / Nonce", ok: psbt, skip: psbt ? "" : "no session key" },
+    { id: "msig", label: "Multisig", ok: Boolean(token) && msigEmpty, skip: token ? (msigEmpty ? "" : "slot filled") : "no account xpub+origin" },
+    { id: "psbted", label: "PSBT editor", ok: false, skip: "never" }
+  ];
+}
+function hodlWorkspaceSyncSetNetwork(result) {
+  let network = result?.network === "testnet" ? "testnet" : "mainnet";
+  let sp = document.getElementById("sp-network");
+  if (sp) sp.value = network;
+  let psbt = document.getElementById("psbt-network");
+  if (psbt) psbt.value = network;
+}
+function hodlApplyWorkspaceSync() {
+  if (!re) return;
+  hodlCaptureKey();
+  let state = hodlKeys[hodlActiveKey];
+  if (state) state.result = re;
+  hodlWorkspaceSyncSetNetwork(re);
+  let slot = hodlFirstEmptyMsigSlot();
+  let targets = hodlWorkspaceSyncTargets(re, { accountId: hodlSelectedScriptType(), msigEmpty: slot >= 0 });
+  let enabled = new Set(targets.filter((target) => target.ok).map((target) => target.id));
+  if (enabled.has("bip85")) {
+    try {
+      hodlUseActiveKeyForBip85();
+      let session = document.getElementById("bip85-session");
+      if (session) session.textContent = hodlBip85Note;
+      let error = document.getElementById("bip85-error");
+      if (error) error.textContent = "";
+    } catch (exception) {
+      let error = document.getElementById("bip85-error");
+      if (error) error.textContent = exception.message || String(exception);
+    }
+  }
+  if (enabled.has("sp")) {
+    try {
+      hodlSpUseActiveKey();
+      let key = document.getElementById("sp-key"), pass = document.getElementById("sp-pass"), session = document.getElementById("sp-session"), error = document.getElementById("sp-error");
+      if (key) key.value = "";
+      if (pass) pass.value = "";
+      if (session) session.textContent = hodlSpNote;
+      if (error) error.textContent = "";
+    } catch (exception) {
+      let error = document.getElementById("sp-error");
+      if (error) error.textContent = exception.message || String(exception);
+    }
+  }
+  if (enabled.has("psbt")) {
+    try {
+      hodlUseActiveKeyForPsbt();
+      let key = document.getElementById("psbt-key"), pass = document.getElementById("psbt-pass"), session = document.getElementById("psbt-session"), error = document.getElementById("psbt-error");
+      if (key) key.value = "";
+      if (pass) pass.value = "";
+      if (session) session.textContent = hodlPsbtNote;
+      if (error) error.textContent = "";
+    } catch (exception) {
+      let error = document.getElementById("psbt-error");
+      if (error) error.textContent = exception.message || String(exception);
+    }
+  }
+  if (enabled.has("msig")) {
+    let token = hodlWorkspaceMsigToken(re, hodlSelectedScriptType());
+    if (slot >= 0 && token) {
+      let values = hodlReadMsigXpubs();
+      values[slot] = token;
+      hodlFillKeys(values);
+      hodlWorkspaceSyncMsig = { slot, token };
+    }
+  }
+}
+function hodlRenderWorkspaceSync() {
+  let existing = document.getElementById("workspace-sync");
+  if (existing) existing.remove();
+  if (!re || !dr) return;
+  let slot = hodlFirstEmptyMsigSlot();
+  let targets = hodlWorkspaceSyncTargets(re, { accountId: hodlSelectedScriptType(), msigEmpty: slot >= 0 });
+  let list = targets.map((target) => {
+    let gray = !target.ok, reason = target.skip === "never" ? "never" : target.skip ? `skipped · ${target.skip}` : "session copy ready";
+    return `<li class="workspace-sync-target${gray ? " is-unavailable" : ""}" data-target="${target.id}" ${gray ? 'aria-disabled="true"' : ""}><span class="workspace-sync-name">${$t(target.label)}</span><span class="muted">${$t(reason)}</span></li>`;
+  }).join("");
+  let panel = document.createElement("section");
+  panel.id = "workspace-sync";
+  panel.className = "card workspace-sync no-print";
+  panel.innerHTML = `<label class="choice"><input type="checkbox" id="workspace-sync-toggle" /><span><strong>Sync this key to other workspaces</strong><span class="desc">Off by default. Copies the active session into BIP-85, Silent Payments, PSBT / Nonce, and the first empty multisig co-signer slot. Does not run Derive or Inspect. Never writes the PSBT editor. Page memory only.</span></span></label><ul class="workspace-sync-targets">${list}</ul>`;
+  dr.appendChild(panel);
+  document.getElementById("workspace-sync-toggle").onchange = (event) => {
+    if (event.currentTarget.checked) hodlApplyWorkspaceSync();
+  };
+}
+function hodlWipeWorkspaceConsumers() {
+  hodlBip85WipeMem();
+  hodlSpWipeMem();
+  hodlPsbtWipeMem();
+  let bip85Key = document.getElementById("bip85-key"), bip85Out = document.getElementById("bip85-out"), bip85Error = document.getElementById("bip85-error"), bip85Session = document.getElementById("bip85-session");
+  if (bip85Key) bip85Key.value = "";
+  if (bip85Out) bip85Out.innerHTML = "";
+  if (bip85Error) bip85Error.textContent = "";
+  if (bip85Session) bip85Session.textContent = hodlBip85Note;
+  ["sp-key", "sp-pass"].forEach((id) => {
+    let field = document.getElementById(id);
+    if (field) field.value = "";
+  });
+  let spOut = document.getElementById("sp-out"), spError = document.getElementById("sp-error"), spSession = document.getElementById("sp-session");
+  if (spOut) spOut.innerHTML = "";
+  if (spError) spError.textContent = "";
+  if (spSession) spSession.textContent = hodlSpNote;
+  let psbtKey = document.getElementById("psbt-key"), psbtPass = document.getElementById("psbt-pass"), psbtSession = document.getElementById("psbt-session"), psbtError = document.getElementById("psbt-error"), psbtOut = document.getElementById("psbt-out");
+  if (psbtKey) psbtKey.value = "";
+  if (psbtPass) psbtPass.value = "";
+  if (psbtSession) psbtSession.textContent = hodlPsbtNote;
+  if (psbtError) psbtError.textContent = "";
+  if (psbtOut) psbtOut.innerHTML = "";
+  if (hodlWorkspaceSyncMsig) {
+    let values = hodlReadMsigXpubs(), slot = hodlWorkspaceSyncMsig.slot;
+    if (values[slot] === hodlWorkspaceSyncMsig.token) {
+      values[slot] = "";
+      hodlFillKeys(values);
+    }
+    hodlWorkspaceSyncMsig = null;
+  }
+}
 function hodlWipeActiveKey() {
   if (hodlActiveKey < 0 || !hodlKeys[hodlActiveKey]) return;
+  hodlWipeWorkspaceConsumers();
   let state = hodlKeys[hodlActiveKey];
   hodlKeys[hodlActiveKey] = hodlNewKeyState(state.name, state.id, state.number);
   hodlRestoreKey();
@@ -8888,6 +9145,8 @@ function hodlCaptureKey() {
   if (directCards) state.fields.directCards = directCards.value;
   let seedNumbers = document.getElementById("seed-numbers");
   if (seedNumbers) state.fields.seedNumbers = seedNumbers.value;
+  let brainLabField = document.getElementById("brain-lab");
+  if (brainLabField) state.fields.brainLab = brainLabField.value;
   state.fields.coinType = document.getElementById("network")?.value || "0";
   state.fields.derivationAccountPath = document.getElementById("derivation-path")?.dataset.accountPath || state.fields.derivationAccountPath || "m/84'/0'/0'";
   let hardening = hodlReadHardening();
@@ -9813,6 +10072,7 @@ function hodlInitSecretFieldAutoClear() {
     hodlPsbtWipeMem();
     hodlBip85WipeMem();
     hodlSpWipeMem();
+    hodlWorkspaceSyncMsig = null;
     hodlKeys = hodlKeys.map((state) => {
       let fields = state.fields || {}, privateKeys = fields.privateKeys;
       if (privateKeys) Object.keys(privateKeys).forEach((kind) => {
