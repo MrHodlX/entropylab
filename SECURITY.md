@@ -71,11 +71,14 @@ material. Its security posture rests on the following model:
   addresses, sender outputs, and spend tweaks from user-supplied keys and
   pasted transaction data. It does not connect to a node, Electrum server, or
   indexer, and cannot detect payments on its own.
-- The vanity grinder is a deterministic transformation of a user-supplied salt
-  and a counter. It does not call `Math.random` or `crypto.getRandomValues` for
-  key material. An empty or guessable salt is a public search space. GPU
-  acceleration is optional and is disabled unless a WebGPU self-test reproduces
-  CPU public keys. Found keys stay in page memory and are wiped on pagehide.
+- The vanity grinder has two modes. Calculator hashes a user-supplied salt
+  plus a counter and does not call `Math.random` or `crypto.getRandomValues`
+  for key material. Vanitygen — lab draws one starting scalar from the
+  browser CSPRNG (rejection-sampled into 1..n-1) and then uses the same
+  incremental loop; that draw invents key material, is not reproducible,
+  and requires an on-screen acknowledgement. GPU acceleration is optional
+  and is disabled unless a WebGPU self-test reproduces CPU public keys.
+  Found keys stay in page memory and are wiped on pagehide.
 - Inscription envelope detection is a parser of witness/tap-leaf scripts. It
   does not render inscription media, assign sat numbers, or contact an indexer.
 - OP_RETURN detection is a parser of output scripts. It does not create

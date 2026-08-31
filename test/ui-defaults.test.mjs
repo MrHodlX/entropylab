@@ -1329,10 +1329,17 @@ test("vanity grinders are collapsed, follow script type, and never auto-run", ()
     assert.match(markup, /<details class="vanity-grind no-print" id="vanity-sp-details">/);
     assert.match(markup, /<summary>Vanity silent payment address<\/summary>/);
     assert.match(markup, /Idle\. Press Start grind\. Nothing runs by itself\./);
+    assert.match(markup, /id="vanity-mode-lab"/);
+    assert.match(markup, /id="vanity-mode-calc"[^>]*checked/);
+    assert.match(markup, /Vanitygen — lab/);
+    assert.match(markup, /id="vanity-lab-ack"/);
+    assert.match(markup, /id="vanity-sp-lab-ack"/);
   }
   assert.match(appSource, /function hodlInitVanity\(/);
   assert.match(appSource, /hodlVanityBind\("vanity", hodlVanityKind, hodlVanityNetwork\)/);
   assert.match(appSource, /hodlVanityBind\("vanity-sp"/);
+  assert.match(appSource, /Acknowledge the lab warning first/);
+  assert.match(appSource, /vanitygen: lab/);
   assert.match(appSource, /hodlShowWorkspace\(id\) \{\s*if \(id === hodlWorkspace\) return;\s*hodlVanityStop\(\);/);
   assert.match(css, /details\.vanity-grind \{ margin-top: var\(--space-section\); \}/);
 });

@@ -96,7 +96,9 @@ Official website: [entropylab.online](https://entropylab.online)
   Regular addresses follow the selected script type (legacy, nested SegWit,
   native SegWit, Taproot). Silent Payments keep one scan key per salt and grind
   the spend key so the reusable scan stays put. Same salt and counter always
-  reproduce the same key — this is a calculator, not a generator. GPU (WebGPU)
+  reproduce the same key — this is a calculator, not a generator. An opt-in
+  Vanitygen — lab mode draws one starting scalar from the browser CSPRNG
+  (acknowledgement required; not reproducible). GPU (WebGPU)
   is used when the adapter is present and a CPU self-test matches; otherwise the
   CPU incremental `P + i·G` loop runs. Nothing auto-runs. Salts stay in page RAM.
 - Runs a quick barrage of startup sanity checks on the host browser (secure
