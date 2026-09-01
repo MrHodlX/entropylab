@@ -14,6 +14,7 @@ const lifecycle = app.slice(start, end);
 test("page lifecycle clearing replaces every cached key and clears PSBT private state", () => {
   assert.match(lifecycle, /hodlPsbtWipeMem\(\)/);
   assert.match(lifecycle, /hodlBip85WipeMem\(\)/);
+  assert.match(lifecycle, /hodlNostrWipeMem\(\)/);
   assert.match(lifecycle, /hodlSpWipeMem\(\)/);
   assert.match(lifecycle, /hodlKeys\s*=\s*hodlKeys\.map\(\(state\)\s*=>\s*\{/);
   assert.match(lifecycle, /privateKeys\[kind\]\s*=\s*""/);
@@ -45,6 +46,15 @@ test("BIP-85 parent and derived-child fields are explicitly cleared", () => {
   assert.match(lifecycle, /getElementById\("bip85-key"\)/);
   assert.match(lifecycle, /bip85Key\.value\s*=\s*""/);
   assert.match(lifecycle, /bip85Out\.innerHTML\s*=\s*""/);
+});
+
+test("Nostr nsec input and derived output are explicitly cleared", () => {
+  assert.match(lifecycle, /getElementById\("nostr-input"\)/);
+  assert.match(lifecycle, /nostrInput\.value\s*=\s*""/);
+  assert.match(lifecycle, /getElementById\("nostr-out"\)/);
+  assert.match(lifecycle, /nostrOut\.innerHTML\s*=\s*""/);
+  assert.match(lifecycle, /nostrError\.textContent\s*=\s*""/);
+  assert.match(lifecycle, /nostrSession\.textContent\s*=\s*hodlNostrNote/);
 });
 
 test("Silent Payments session key and passphrase fields are explicitly cleared", () => {

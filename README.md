@@ -89,6 +89,11 @@ Official website: [entropylab.online](https://entropylab.online)
   reproduce the same child — this is a calculator, not a generator. Children
   follow the published BIP-85 vectors and match COLDCARD, including derivation
   from a passphrase-extended root when a BIP-39 passphrase is in effect.
+- Inspects Nostr nsec / npub / note identifiers (NIP-19 bech32, not bech32m)
+  and derives NIP-06 keys from the active BIP39 seed at
+  `m/44'/1237'/account'/0/0`. This is a calculator: it does not talk to
+  relays or sign events. NIP-06 is unrecommended for new identities — prefer
+  a dedicated nsec, and never type a Bitcoin seed into a Nostr client.
 - Derives BIP-352 Silent Payment addresses (`sp1q…` / `tsp1q…`) from a seed or
   root xprv, including labeled codes, BIP-392 `spscan` / `spspend` descriptors,
   sender taproot outputs from pasted vin JSON, and receiver verification of

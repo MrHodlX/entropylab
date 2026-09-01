@@ -43,7 +43,7 @@
         <li>Keep your private keys offline.</li>
       </ul>
     </section>
-    <nav class="workspace no-print" id="workspace"><button type="button" class="workspace-more" id="workspace-more" aria-controls="workspace-tabs" aria-label="Scroll the tool list to see more tools" hidden>More tools<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button><div class="workspace-tabs" id="workspace-tabs" role="tablist" aria-label="Tool"><button type="button" class="workspace-tab active" role="tab" aria-selected="true" aria-label="Keys"><span class="workspace-tab-full">Keys</span><span class="workspace-tab-short">Keys</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="BIP-85"><span class="workspace-tab-full">BIP-85</span><span class="workspace-tab-short">BIP85</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Multi Signature"><span class="workspace-tab-full">Multi Signature</span><span class="workspace-tab-short">MultiSig</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Silent Payments"><span class="workspace-tab-full">Silent Payments</span><span class="workspace-tab-short">SP</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="PSBT / Nonce"><span class="workspace-tab-full">PSBT / Nonce</span><span class="workspace-tab-short">PSBT</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="PSBT Editor"><span class="workspace-tab-full">PSBT Editor</span><span class="workspace-tab-short">Editor</span></button></div></nav>
+    <nav class="workspace no-print" id="workspace"><button type="button" class="workspace-more" id="workspace-more" aria-controls="workspace-tabs" aria-label="Scroll the tool list to see more tools" hidden>More tools<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button><div class="workspace-tabs" id="workspace-tabs" role="tablist" aria-label="Tool"><button type="button" class="workspace-tab active" role="tab" aria-selected="true" aria-label="Keys"><span class="workspace-tab-full">Keys</span><span class="workspace-tab-short">Keys</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="BIP-85"><span class="workspace-tab-full">BIP-85</span><span class="workspace-tab-short">BIP85</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Nostr"><span class="workspace-tab-full">Nostr</span><span class="workspace-tab-short">Nostr</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Multi Signature"><span class="workspace-tab-full">Multi Signature</span><span class="workspace-tab-short">MultiSig</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Silent Payments"><span class="workspace-tab-full">Silent Payments</span><span class="workspace-tab-short">SP</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="PSBT / Nonce"><span class="workspace-tab-full">PSBT / Nonce</span><span class="workspace-tab-short">PSBT</span></button><button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="PSBT Editor"><span class="workspace-tab-full">PSBT Editor</span><span class="workspace-tab-short">Editor</span></button></div></nav>
     <div class="workspace-panel" id="workspace-panel">
       <div class="tool-intro" id="calc-tool-intro">
         <div class="kicker">Your entropy enters the lab</div>
@@ -249,6 +249,42 @@ words, pick one of the checksum words.</span></span>
       <p class="err" id="bip85-error" role="alert"></p>
       <div id="bip85-out" aria-live="polite"></div>
       <p class="muted">Derived children remain in this page only. Anyone with the parent seed, passphrase, application, and index can reproduce them. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
+    </section>
+    <div class="tool-intro" id="nostr-tool-intro" hidden>
+        <div class="kicker">Same curve. Offline identity.</div>
+        <h2>Nostr nsec and npub</h2>
+        <p class="muted nostr-intro">Inspect an nsec, npub, or note, or derive NIP-06 keys from the active BIP39 seed at <code>m/44'/1237'/account'/0/0</code>. This calculator does not talk to relays. NIP-06 is unrecommended for new identities: prefer a dedicated nsec, and never type a Bitcoin seed into a Nostr client.</p>
+      </div>
+      <section class="card no-print" id="nostr-card" role="tabpanel" hidden>
+      <div class="row segmented-control" id="nostr-modes" role="group" aria-label="Nostr mode">
+        <button type="button" class="tab active" data-nostr-mode="inspect" aria-pressed="true">Inspect</button>
+        <button type="button" class="tab" data-nostr-mode="nip06" aria-pressed="false">NIP-06</button>
+      </div>
+      <div id="nostr-inspect-panel">
+        <label class="field">nsec, npub, note, or 64-character hex
+          <textarea id="nostr-input" placeholder="nsec1… / npub1… / 64-hex" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        </label>
+        <div class="row bip85-actions">
+          <button class="btn primary" id="nostr-inspect" type="button">Decode</button>
+          <button class="btn secondary" id="nostr-wipe" type="button">Clear</button>
+        </div>
+      </div>
+      <div id="nostr-nip06-panel" hidden>
+        <label class="field">Account
+          <input id="nostr-account" type="number" min="0" max="2147483647" step="1" inputmode="numeric" value="0" aria-describedby="nostr-account-help">
+          <span class="field-note" id="nostr-account-help">Hardened account index · path m/44'/1237'/<account>'/0/0 · default 0</span>
+        </label>
+        <p class="muted bip85-path-row">Path <code id="nostr-path">m/44'/1237'/0'/0/0</code></p>
+        <div class="row bip85-actions">
+          <button class="btn primary" id="nostr-derive" type="button">Derive Nostr key</button>
+          <button class="btn secondary" id="nostr-use-calc" type="button">Use active key</button>
+          <button class="btn secondary" id="nostr-nip06-wipe" type="button">Clear</button>
+        </div>
+        <p class="muted" id="nostr-session" aria-live="polite">No parent loaded. Derive a key first.</p>
+      </div>
+      <p class="err" id="nostr-error" role="alert"></p>
+      <div id="nostr-out" aria-live="polite"></div>
+      <p class="muted">nsec stays in this page only. Do not import a Bitcoin mnemonic into a Nostr client. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
     </section>
       <div class="tool-intro" id="msig-tool-intro" hidden>
         <div class="kicker">Multiple keys, one wallet</div>
@@ -493,6 +529,7 @@ words, pick one of the checksum words.</span></span>
       <p>Die Distribution / Fairness Analysis (Pearson’s χ²): <a href="https://rpg.stackexchange.com/questions/70802/how-can-i-test-whether-a-die-is-fair" target="_blank" rel="noopener noreferrer">How can I test whether a die is fair?</a> — live check while entering rolls, following the <a href="https://dicefairness.johnellmore.com/" target="_blank" rel="noopener noreferrer">Dice Fairness Tester</a> thresholds.</p>
       <p>Jade anti-exfil (sign-to-contract): <a href="https://blog.blockstream.com/anti-exfil-stopping-key-exfiltration/" target="_blank" rel="noopener noreferrer">Anti-Exfil: Stopping Key Exfiltration</a> — secp256k1-zkp <code>ecdsa_s2c</code> / <code>anti_exfil_host_verify</code>.</p>
       <p>BIP-85 deterministic entropy: <a href="https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki" target="_blank" rel="noopener noreferrer">bip-0085.mediawiki</a> — HMAC-SHA512 of a fully hardened child; English BIP-39 / WIF / XPRV / HEX / password applications match COLDCARD.</p>
+      <p>Nostr NIP-06 / NIP-19: <a href="https://nips.nostr.com/6" target="_blank" rel="noopener noreferrer">nips.nostr.com/6</a> — path <code>m/44'/1237'/account'/0/0</code>; nsec/npub/note are bech32 (not bech32m). This calculator does not talk to relays.</p>
       <p>BIP-352 Silent Payments: <a href="https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki" target="_blank" rel="noopener noreferrer">bips/bip-0352</a> — reusable <code>sp1q…</code> addresses and unique taproot outputs. Descriptors: <a href="https://github.com/bitcoin/bips/blob/master/bip-0392.mediawiki" target="_blank" rel="noopener noreferrer">BIP-392</a>.</p>
       <p>Inscription envelopes: <a href="https://docs.ordinals.com/inscriptions.html" target="_blank" rel="noopener noreferrer">docs.ordinals.com/inscriptions</a> — <code>OP_FALSE OP_IF "ord"</code> parser only. This tool does not create inscriptions or number sats.</p>
     </section>

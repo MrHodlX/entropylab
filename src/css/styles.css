@@ -998,7 +998,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .segmented-control.is-stacked > .tab:first-child { border-radius: 8px 8px 0 0; }
 .segmented-control.is-stacked > .tab:last-child { border-radius: 0 0 8px 8px; }
 .segmented-control.is-stacked > .tab:only-child { border-radius: 8px; }
-#msig-card[hidden], #calc-card[hidden], #psbt-card[hidden], #psbted-card[hidden], #bip85-card[hidden], #sp-card[hidden] { display: none !important; }
+#msig-card[hidden], #calc-card[hidden], #psbt-card[hidden], #psbted-card[hidden], #bip85-card[hidden], #nostr-card[hidden], #sp-card[hidden] { display: none !important; }
 #calc-card:not([hidden]), #msig-card:not([hidden]) { margin-top: 0; border-radius: 20px; position: relative; z-index: 1; }
 .psbt-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 14px; }
 @media (min-width: 720px) {
@@ -1429,6 +1429,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .bip85-path-row { margin: var(--space-component) 0 0; }
 .bip85-path-row code { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
 .bip85-actions { margin-top: var(--space-component); }
+#nostr-inspect-panel[hidden], #nostr-nip06-panel[hidden] { display: none; }
 .bip85-notes { margin: var(--space-component) 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 #bip85-out { margin-top: var(--space-component); }
 #bip85-out .wallet-private-section { margin-top: 0; }

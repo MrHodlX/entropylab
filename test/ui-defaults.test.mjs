@@ -1293,8 +1293,8 @@ test("virtual keypads never focus the field on touch so the mobile keyboard stay
   }
 });
 
-test("workspace tabs place BIP-85 between Keys and Multi Signature", () => {
-  assert.match(appSource, /\["calc", "Keys", "Keys"\], \["bip85", "BIP-85", "BIP85"\], \["msig", "Multi Signature", "MultiSig"\], \["sp", "Silent Payments", "SP"\], \["psbt", "PSBT \/ Nonce", "PSBT"\], \["psbted", "PSBT Editor", "Editor"\]/);
+test("workspace tabs place BIP-85 after Keys and Nostr after BIP-85", () => {
+  assert.match(appSource, /\["calc", "Keys", "Keys"\], \["bip85", "BIP-85", "BIP85"\], \["nostr", "Nostr", "Nostr"\], \["msig", "Multi Signature", "MultiSig"\], \["sp", "Silent Payments", "SP"\], \["psbt", "PSBT \/ Nonce", "PSBT"\], \["psbted", "PSBT Editor", "Editor"\]/);
   for (const markup of [template, appSource]) {
     assert.match(markup, /id="bip85-card"/);
     assert.match(markup, /id="bip85-go"/);
@@ -1339,7 +1339,7 @@ test("BIP-85 entry point sits beside Derive Wallet and opens the BIP-85 tab", ()
 test("Silent Payments sits between Multi Signature and PSBT / Nonce", () => {
   const order = /Keys[\s\S]*Multi Signature[\s\S]*Silent Payments[\s\S]*PSBT \/ Nonce/;
   assert.match(template, order);
-  assert.match(appSource, /\["calc", "Keys", "Keys"\], \["bip85", "BIP-85", "BIP85"\], \["msig", "Multi Signature", "MultiSig"\], \["sp", "Silent Payments", "SP"\], \["psbt", "PSBT \/ Nonce", "PSBT"\], \["psbted", "PSBT Editor", "Editor"\]/);
+  assert.match(appSource, /\["calc", "Keys", "Keys"\], \["bip85", "BIP-85", "BIP85"\], \["nostr", "Nostr", "Nostr"\], \["msig", "Multi Signature", "MultiSig"\], \["sp", "Silent Payments", "SP"\], \["psbt", "PSBT \/ Nonce", "PSBT"\], \["psbted", "PSBT Editor", "Editor"\]/);
   for (const markup of [template, appSource]) {
     assert.match(markup, /id="sp-card"/);
     assert.match(markup, /id="sp-key"/);
@@ -1352,6 +1352,32 @@ test("Silent Payments sits between Multi Signature and PSBT / Nonce", () => {
   assert.match(css, /#sp-card\[hidden\]/);
 });
 
+test("Nostr sits between BIP-85 and Multi Signature", () => {
+  const order = /Keys[\s\S]*BIP-85[\s\S]*Nostr[\s\S]*Multi Signature/;
+  assert.match(template, order);
+  assert.match(appSource, /\["bip85", "BIP-85", "BIP85"\], \["nostr", "Nostr", "Nostr"\], \["msig", "Multi Signature", "MultiSig"\]/);
+  for (const markup of [template, appSource]) {
+    assert.match(markup, /id="nostr-card"/);
+    assert.match(markup, /id="nostr-input"/);
+    assert.match(markup, /id="nostr-inspect"/);
+    assert.match(markup, /id="nostr-derive"/);
+    assert.match(markup, /id="nostr-account"/);
+    assert.match(markup, /data-nostr-mode="inspect"/);
+    assert.match(markup, /data-nostr-mode="nip06"/);
+    assert.match(markup, /nsec stays in this page only/);
+    assert.match(markup, /never type a Bitcoin seed into a Nostr client/);
+    assert.match(markup, /This calculator does not talk to relays/);
+    assert.match(markup, /m\/44'\/1237'/);
+  }
+  assert.match(css, /#nostr-card\[hidden\]/);
+  assert.match(css, /#nostr-inspect-panel\[hidden\]/);
+  assert.match(appSource, /import \{ deriveNip06FromRoot, inspectNostrInput/);
+  assert.match(appSource, /hodlInitNostr\(\)/);
+  const init = appSource.slice(appSource.indexOf("function hodlInitNostr()"), appSource.indexOf("function hodlRunPsbt()"));
+  assert.doesNotMatch(init, /hodlRunNostrInspect\(\)/);
+  assert.doesNotMatch(init, /hodlRunNostrNip06\(\)/);
+});
+
 test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // The switcher is a nav holding one scrollable strip of tabs; it is neither
   // a segmented control nor a dropdown. Every tool is visible without asking.
@@ -1359,9 +1385,9 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   assert.match(appSource, /<nav class="workspace no-print" id="workspace"><\/nav>/);
   assert.doesNotMatch(template, /segmented-control" id="workspace"/);
   assert.match(template, /<div class="workspace-tabs" id="workspace-tabs" role="tablist" aria-label="Tool">/);
-  // All five tools ship in the static markup, each with a full name and the
+  // All seven tools ship in the static markup, each with a full name and the
   // short form narrow screens show instead.
-  for (const [full, short] of [["Keys", "Keys"], ["BIP-85", "BIP85"], ["Multi Signature", "MultiSig"], ["Silent Payments", "SP"], ["PSBT / Nonce", "PSBT"], ["PSBT Editor", "Editor"]]) {
+  for (const [full, short] of [["Keys", "Keys"], ["BIP-85", "BIP85"], ["Nostr", "Nostr"], ["Multi Signature", "MultiSig"], ["Silent Payments", "SP"], ["PSBT / Nonce", "PSBT"], ["PSBT Editor", "Editor"]]) {
     assert.ok(
       template.includes(`<span class="workspace-tab-full">${full}</span><span class="workspace-tab-short">${short}</span>`),
       `${full} is missing from the workspace strip`,
@@ -1375,7 +1401,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // Hidden text leaves the accessibility tree, so the full name is stated on
   // the tab itself and assistive tech hears it at every width.
   assert.match(appSource, /button\.setAttribute\("aria-label", label\);/);
-  for (const full of ["Keys", "BIP-85", "Multi Signature", "Silent Payments", "PSBT / Nonce"]) {
+  for (const full of ["Keys", "BIP-85", "Nostr", "Multi Signature", "Silent Payments", "PSBT / Nonce"]) {
     assert.ok(template.includes(`aria-label="${full}"><span class="workspace-tab-full">${full}</span>`), `${full} tab needs its accessible name`);
   }
   // A tablist owes arrow keys; the key and multisig strips already answer them.

@@ -54,7 +54,7 @@ material. Its security posture rests on the following model:
   signing nonces, and HMAC/PBKDF2 blocks. The JavaScript layer zeroes the
   `Uint8Array`s it is done with (`.fill(0)`, `HDKey.wipePrivateData()`),
   including intermediate BIP32 path nodes, per-address child keys, and the
-  PSBT/BIP-85/Silent-Payments session roots when a session ends or the page
+  PSBT/BIP-85/Nostr/Silent-Payments session roots when a session ends or the page
   unloads. The limits are structural: JavaScript strings and DOM values
   (displayed seed phrases, WIF keys, typed input) cannot be overwritten, only
   dereferenced — the "(best effort)" the UI already states — and copies made
@@ -94,6 +94,12 @@ material. Its security posture rests on the following model:
   that root (the same rule COLDCARD uses). Anyone who has the parent seed,
   the exact passphrase, the application, and the index can reproduce every
   child; protect the parent for the combined value of all derived wallets.
+- Nostr support is a calculator: it inspects nsec/npub/note (NIP-19 bech32)
+  and derives NIP-06 keys from a user-supplied BIP32 root. It does not connect
+  to relays, does not sign events, and does not invent entropy. NIP-06 reuses
+  the Bitcoin seed at `m/44'/1237'/account'/0/0`; anyone with that seed can
+  post as the derived identity. Prefer a dedicated nsec for new identities,
+  and never type a Bitcoin mnemonic into a Nostr client.
 - The single-file design inlines all scripts (`script-src 'unsafe-inline'`),
   and the secp256k1 WebAssembly module adds `wasm-unsafe-eval` to the
   content security policy: Chromium and WebKit engines refuse to compile a

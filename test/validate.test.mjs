@@ -49,6 +49,7 @@ const requiredFiles = [
   "src/js/psbt-wasm.js",
   "src/js/psbt-wasm-b64.js",
   "src/js/bip85.js",
+  "src/js/nostr.js",
   "src/js/online.js",
   "src/js/network-check.js",
   "src/js/browser-check.js",

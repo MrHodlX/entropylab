@@ -33,6 +33,7 @@ import { wordlist as bip39English } from "./bip39-english.js";
 import { initPsbtEditor } from "./psbt-editor.js";
 import { renderSVG as Xs } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseHardenedIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
+import { deriveNip06FromRoot, inspectNostrInput, nip06Path, parseAccount as parseNostrAccount, wipeNostrResult } from "./nostr.js";
 const Ae = Object.freeze(bip39English);
 const tr = Z;
 const Yr = (privateKey, compressed) => xe.getPublicKey(privateKey, compressed);
@@ -790,6 +791,42 @@ ec.innerHTML = `
       <div id="bip85-out" aria-live="polite"></div>
       <p class="muted">Derived children remain in this page only. Anyone with the parent seed, passphrase, application, and index can reproduce them. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
     </section>
+    <div class="tool-intro" id="nostr-tool-intro" hidden>
+        <div class="kicker">Same curve. Offline identity.</div>
+        <h2>Nostr nsec and npub</h2>
+        <p class="muted nostr-intro">Inspect an nsec, npub, or note, or derive NIP-06 keys from the active BIP39 seed at <code>m/44'/1237'/account'/0/0</code>. This calculator does not talk to relays. NIP-06 is unrecommended for new identities: prefer a dedicated nsec, and never type a Bitcoin seed into a Nostr client.</p>
+      </div>
+      <section class="card no-print" id="nostr-card" role="tabpanel" hidden>
+      <div class="row segmented-control" id="nostr-modes" role="group" aria-label="Nostr mode">
+        <button type="button" class="tab active" data-nostr-mode="inspect" aria-pressed="true">Inspect</button>
+        <button type="button" class="tab" data-nostr-mode="nip06" aria-pressed="false">NIP-06</button>
+      </div>
+      <div id="nostr-inspect-panel">
+        <label class="field">nsec, npub, note, or 64-character hex
+          <textarea id="nostr-input" placeholder="nsec1\u2026 / npub1\u2026 / 64-hex" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        </label>
+        <div class="row bip85-actions">
+          <button class="btn primary" id="nostr-inspect" type="button">Decode</button>
+          <button class="btn secondary" id="nostr-wipe" type="button">Clear</button>
+        </div>
+      </div>
+      <div id="nostr-nip06-panel" hidden>
+        <label class="field">Account
+          <input id="nostr-account" type="number" min="0" max="2147483647" step="1" inputmode="numeric" value="0" aria-describedby="nostr-account-help">
+          <span class="field-note" id="nostr-account-help">Hardened account index \xB7 path m/44'/1237'/<account>'/0/0 \xB7 default 0</span>
+        </label>
+        <p class="muted bip85-path-row">Path <code id="nostr-path">m/44'/1237'/0'/0/0</code></p>
+        <div class="row bip85-actions">
+          <button class="btn primary" id="nostr-derive" type="button">Derive Nostr key</button>
+          <button class="btn secondary" id="nostr-use-calc" type="button">Use active key</button>
+          <button class="btn secondary" id="nostr-nip06-wipe" type="button">Clear</button>
+        </div>
+        <p class="muted" id="nostr-session" aria-live="polite">No parent loaded. Derive a key first.</p>
+      </div>
+      <p class="err" id="nostr-error" role="alert"></p>
+      <div id="nostr-out" aria-live="polite"></div>
+      <p class="muted">nsec stays in this page only. Do not import a Bitcoin mnemonic into a Nostr client. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
+    </section>
       <div class="tool-intro" id="msig-tool-intro" hidden>
         <div class="kicker">Multiple keys, one wallet</div>
         <h2>Derive a multisig wallet</h2>
@@ -1032,6 +1069,7 @@ ec.innerHTML = `
       <p>D++ D8 &amp; D16 method: <a href="https://thesimplestbitcoinbook.net/wp-content/uploads/2023/09/Roll-Your-Own-Seed-Phrase-PDF.pdf" target="_blank" rel="noopener noreferrer">Roll Your Own Bitcoin Seed Phrase</a> \u2014 the published 24-word workflow uses one D8 labeled 1\u20138 and two hexadecimal D16 dice labeled 0\u2013F per word, then a final D8.</p>
       <p>Jade anti-exfil (sign-to-contract): <a href="https://blog.blockstream.com/anti-exfil-stopping-key-exfiltration/" target="_blank" rel="noopener noreferrer">Anti-Exfil: Stopping Key Exfiltration</a> \u2014 secp256k1-zkp <code>ecdsa_s2c</code> / <code>anti_exfil_host_verify</code>.</p>
       <p>BIP-85 deterministic entropy: <a href="https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki" target="_blank" rel="noopener noreferrer">bip-0085.mediawiki</a> — HMAC-SHA512 of a fully hardened child; English BIP-39 / WIF / XPRV / HEX / password applications match COLDCARD.</p>
+      <p>Nostr NIP-06 / NIP-19: <a href="https://nips.nostr.com/6" target="_blank" rel="noopener noreferrer">nips.nostr.com/6</a> — path <code>m/44'/1237'/account'/0/0</code>; nsec/npub/note are bech32 (not bech32m). This calculator does not talk to relays.</p>
       <p>BIP-352 Silent Payments: <a href="https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki" target="_blank" rel="noopener noreferrer">bips/bip-0352</a> — reusable <code>sp1q…</code> addresses and unique taproot outputs. Descriptors: <a href="https://github.com/bitcoin/bips/blob/master/bip-0392.mediawiki" target="_blank" rel="noopener noreferrer">BIP-392</a>.</p>
       <p>Inscription envelopes: <a href="https://docs.ordinals.com/inscriptions.html" target="_blank" rel="noopener noreferrer">docs.ordinals.com/inscriptions</a> — <code>OP_FALSE OP_IF "ord"</code> parser only. This tool does not create inscriptions or number sats.</p>
     </section>
@@ -8753,6 +8791,162 @@ function hodlInitBip85() {
   }
   hodlBip85SyncOptions();
 }
+var hodlNostrRoot = null, hodlNostrNote = "No parent loaded. Derive a key first.", hodlNostrResult = null, hodlNostrReveal = false, hodlNostrMode = "inspect";
+function hodlNostrWipeMem() {
+  wipeNostrResult(hodlNostrResult);
+  hodlNostrResult = null;
+  hodlNostrReveal = false;
+  if (hodlNostrRoot) try {
+    hodlNostrRoot.wipePrivateData();
+  } catch {
+  }
+  hodlNostrRoot = null;
+  hodlNostrNote = "No parent loaded. Derive a key first.";
+}
+function hodlNostrPrivateValue(value) {
+  let mask = "************", text = String(value ?? "\u2014");
+  if (hodlNostrReveal) return `<span class="secret private-field-value">${$t(text)}</span>`;
+  let bullets = "\u2022".repeat(Math.max(Array.from(text).length, mask.length));
+  return `<span class="secret private-field-value secret-placeholder"><span class="secret-placeholder-mask" aria-hidden="true">${bullets}</span><span class="secret-placeholder-message" aria-hidden="true">${mask}</span><span class="secret-placeholder-label">Private value hidden</span></span>`;
+}
+function hodlNostrSecretField(label, value) {
+  return `<p class="private-field"><span class="muted">${$t(label)}</span>${hodlNostrPrivateValue(value)}</p>`;
+}
+function hodlNostrSyncPath() {
+  let path = document.getElementById("nostr-path");
+  if (!path) return;
+  try {
+    path.textContent = nip06Path(document.getElementById("nostr-account")?.value || "0");
+  } catch {
+    path.textContent = "\u2014";
+  }
+}
+function hodlNostrSetMode(mode) {
+  hodlNostrMode = mode === "nip06" ? "nip06" : "inspect";
+  document.querySelectorAll("#nostr-modes [data-nostr-mode]").forEach((button) => {
+    let active = button.dataset.nostrMode === hodlNostrMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  let inspect = document.getElementById("nostr-inspect-panel"), nip06 = document.getElementById("nostr-nip06-panel");
+  if (inspect) inspect.hidden = hodlNostrMode !== "inspect";
+  if (nip06) nip06.hidden = hodlNostrMode !== "nip06";
+  if (hodlNostrMode === "nip06") hodlNostrSyncPath();
+}
+function hodlUseActiveKeyForNostr() {
+  let state = hodlKeys[hodlActiveKey];
+  if (!state || !state.result) throw new Error("Derive an active key first, then return to Nostr.");
+  let result = state.result;
+  hodlNostrWipeMem();
+  if (result.kind === "hd" && result.mnemonic) {
+    let seed = wi(result.mnemonic, state.fields.pass || "");
+    try {
+      hodlNostrRoot = Gt.fromMasterSeed(seed);
+    } finally {
+      hodlWipeBytes(seed);
+    }
+    hodlNostrNote = "Parent: " + (state.name || "the active key") + (result.passphraseUsed || (state.fields.pass || "").length ? " with BIP-39 passphrase." : ".") + " Kept in page memory only.";
+  } else if (result.kind === "hd" && result.rootXprv) {
+    hodlNostrRoot = Gt.fromExtendedKey(uf(result.rootXprv).xkey);
+    hodlNostrNote = "Parent: root xprv from " + (state.name || "the active key") + ". Kept in page memory only.";
+  } else if (result.kind === "hd") throw new Error("The active key is not a BIP32 root. Import the original seed or root xprv.");
+  else throw new Error("NIP-06 needs an HD root. Inspect a single nsec instead.");
+}
+function hodlRenderNostrOut() {
+  let box = document.getElementById("nostr-out");
+  if (!box) return;
+  if (!hodlNostrResult) {
+    box.innerHTML = "";
+    return;
+  }
+  let derived = hodlNostrResult;
+  let privateFields = derived.nsec ? `${hodlNostrSecretField("nsec", derived.nsec)}${hodlNostrSecretField("Private key (hex)", derived.privHex)}` : "";
+  let publicFields = derived.npub ? `${ye("npub", derived.npub)}${ye("Public key (hex)", derived.pubHex)}` : "";
+  let noteFields = derived.note ? `${ye("note", derived.note)}${ye("Event id (hex)", derived.eventHex)}` : "";
+  let reveal = derived.nsec ? `<div class="wallet-data-actions no-print">
+        <label class="reveal-private-toggle">
+          <input type="checkbox" id="nostr-reveal" ${hodlNostrReveal ? "checked" : ""} aria-describedby="nostr-private-description">
+          <span>Show nsec <span class="reveal-private-toggle-note">(air-gap only)</span></span>
+        </label>
+      </div>` : "";
+  box.innerHTML = `<section class="wallet-data-section${derived.nsec ? " wallet-private-section" : ""}" aria-labelledby="nostr-result-heading">
+      <div class="wallet-data-section-head">
+        <h3 id="nostr-result-heading">${derived.kind === "nip06" ? "NIP-06 key" : derived.kind === "note" ? "Note id" : "Nostr key"}</h3>
+        <p class="muted" id="nostr-private-description">${derived.kind === "nip06" ? "Same parent seed, account, and passphrase always reproduce this nsec." : derived.nsec ? "The nsec is the private key. Anyone with it can post as this identity." : "Public identifier only."}</p>
+      </div>
+      ${reveal}
+      <div class="wallet-data-fields">
+        ${derived.path ? ye("Path", derived.path) : ""}
+        ${publicFields}
+        ${noteFields}
+        ${privateFields}
+      </div>
+    </section>`;
+  document.getElementById("nostr-reveal")?.addEventListener("change", (event) => {
+    hodlNostrReveal = event.target.checked;
+    hodlRenderNostrOut();
+    requestAnimationFrame(() => document.getElementById("nostr-reveal")?.focus({ preventScroll: true }));
+  });
+}
+function hodlRunNostrInspect() {
+  let error = document.getElementById("nostr-error");
+  if (error) error.textContent = "";
+  try {
+    wipeNostrResult(hodlNostrResult);
+    hodlNostrResult = inspectNostrInput(document.getElementById("nostr-input")?.value || "");
+    hodlNostrReveal = false;
+    hodlRenderNostrOut();
+  } catch (exception) {
+    if (error) error.textContent = exception.message || String(exception);
+  }
+}
+function hodlRunNostrNip06() {
+  let error = document.getElementById("nostr-error"), session = document.getElementById("nostr-session");
+  if (error) error.textContent = "";
+  try {
+    if (!hodlNostrRoot) hodlUseActiveKeyForNostr();
+    let account = parseNostrAccount(document.getElementById("nostr-account")?.value || "0");
+    wipeNostrResult(hodlNostrResult);
+    hodlNostrResult = deriveNip06FromRoot(hodlNostrRoot, account);
+    hodlNostrReveal = false;
+    if (session) session.textContent = hodlNostrNote;
+    hodlNostrSyncPath();
+    hodlRenderNostrOut();
+  } catch (exception) {
+    if (error) error.textContent = exception.message || String(exception);
+  }
+}
+function hodlClearNostr() {
+  hodlNostrWipeMem();
+  let input = document.getElementById("nostr-input");
+  if (input) input.value = "";
+  let out = document.getElementById("nostr-out"), error = document.getElementById("nostr-error"), session = document.getElementById("nostr-session");
+  if (out) out.innerHTML = "";
+  if (error) error.textContent = "";
+  if (session) session.textContent = hodlNostrNote;
+}
+function hodlInitNostr() {
+  document.querySelectorAll("#nostr-modes [data-nostr-mode]").forEach((button) => {
+    button.onclick = () => hodlNostrSetMode(button.dataset.nostrMode);
+  });
+  document.getElementById("nostr-inspect")?.addEventListener("click", hodlRunNostrInspect);
+  document.getElementById("nostr-derive")?.addEventListener("click", hodlRunNostrNip06);
+  document.getElementById("nostr-wipe")?.addEventListener("click", hodlClearNostr);
+  document.getElementById("nostr-nip06-wipe")?.addEventListener("click", hodlClearNostr);
+  document.getElementById("nostr-use-calc")?.addEventListener("click", () => {
+    let error = document.getElementById("nostr-error");
+    if (error) error.textContent = "";
+    try {
+      hodlUseActiveKeyForNostr();
+      let session = document.getElementById("nostr-session");
+      if (session) session.textContent = hodlNostrNote;
+    } catch (exception) {
+      if (error) error.textContent = exception.message || String(exception);
+    }
+  });
+  document.getElementById("nostr-account")?.addEventListener("input", hodlNostrSyncPath);
+  hodlNostrSetMode("inspect");
+}
 function hodlRunPsbt() {
   let error = document.getElementById("psbt-error"), output = document.getElementById("psbt-out"), manual = document.getElementById("psbt-key").value;
   error.textContent = "";
@@ -10511,10 +10705,11 @@ function hodlShowWorkspace(id) {
   document.getElementById("psbt-card").hidden = id !== "psbt";
   document.getElementById("psbted-card").hidden = id !== "psbted";
   document.getElementById("bip85-card").hidden = id !== "bip85";
+  document.getElementById("nostr-card").hidden = id !== "nostr";
   document.getElementById("sp-card").hidden = id !== "sp";
   // The context block sits outside its tool's card, so it is shown and hidden
   // with the card rather than by it.
-  ["psbt", "psbted", "bip85", "sp", "msig", "calc"].forEach((tool) => {
+  ["psbt", "psbted", "bip85", "nostr", "sp", "msig", "calc"].forEach((tool) => {
     document.getElementById(`${tool}-tool-intro`).hidden = id !== tool;
   });
   re = null;
@@ -10527,6 +10722,7 @@ function hodlShowWorkspace(id) {
     hodlRenderMsigTabs();
     hodlRestoreMsig();
   } else if (id === "bip85") hodlBip85SyncOptions();
+  else if (id === "nostr") hodlNostrSyncPath();
   if (hodlWorkspaceScrollFrame) cancelAnimationFrame(hodlWorkspaceScrollFrame);
   window.scrollTo(preservedLeft, preservedTop);
   hodlWorkspaceScrollFrame = requestAnimationFrame(() => {
@@ -10610,7 +10806,7 @@ function hodlSeedInitialManagers() {
 }
 // Each tool carries a full name and a short one. Narrow screens show the
 // short form so more tools stay on screen instead of off the right edge.
-var hodlWorkspaceTabs = [["calc", "Keys", "Keys"], ["bip85", "BIP-85", "BIP85"], ["msig", "Multi Signature", "MultiSig"], ["sp", "Silent Payments", "SP"], ["psbt", "PSBT / Nonce", "PSBT"], ["psbted", "PSBT Editor", "Editor"]];
+var hodlWorkspaceTabs = [["calc", "Keys", "Keys"], ["bip85", "BIP-85", "BIP85"], ["nostr", "Nostr", "Nostr"], ["msig", "Multi Signature", "MultiSig"], ["sp", "Silent Payments", "SP"], ["psbt", "PSBT / Nonce", "PSBT"], ["psbted", "PSBT Editor", "Editor"]];
 // The switcher keeps every tool on screen as a folder-tab strip that scrolls
 // when it must, in the shape the Keys section uses for its own tabs.
 function hodlWorkspaceTabKeydown(event, index) {
@@ -10683,6 +10879,7 @@ function hodlInitWorkspace() {
   hodlInitPsbt();
   initPsbtEditor();
   hodlInitBip85();
+  hodlInitNostr();
   hodlInitSp();
 }
 var hodlKeyClearSyncQueued = false, hodlMsigClearSyncQueued = false, hodlDeriveSyncQueued = false;
@@ -10828,6 +11025,7 @@ function hodlInitSecretFieldAutoClear() {
   let clearSecretFields = () => {
     hodlPsbtWipeMem();
     hodlBip85WipeMem();
+    hodlNostrWipeMem();
     hodlSpWipeMem();
     hodlKeys = hodlKeys.map((state) => {
       let fields = state.fields || {}, privateKeys = fields.privateKeys;
@@ -10864,6 +11062,12 @@ function hodlInitSecretFieldAutoClear() {
     if (bip85Out) bip85Out.innerHTML = "";
     if (bip85Error) bip85Error.textContent = "";
     if (bip85Session) bip85Session.textContent = hodlBip85Note;
+    let nostrInput = document.getElementById("nostr-input");
+    if (nostrInput) nostrInput.value = "";
+    let nostrOut = document.getElementById("nostr-out"), nostrError = document.getElementById("nostr-error"), nostrSession = document.getElementById("nostr-session");
+    if (nostrOut) nostrOut.innerHTML = "";
+    if (nostrError) nostrError.textContent = "";
+    if (nostrSession) nostrSession.textContent = hodlNostrNote;
     let spKey = document.getElementById("sp-key"), spPass = document.getElementById("sp-pass");
     if (spKey) spKey.value = "";
     if (spPass) spPass.value = "";

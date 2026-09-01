@@ -151,6 +151,8 @@ test("app derivation paths wipe seeds, roots, and per-address keys (source guard
   assert.match(psbtWipe, /hodlPsbtHd\.wipePrivateData\(\)/, "the PSBT session root must be wiped, not a getter copy");
   const bip85Wipe = app.slice(app.indexOf("function hodlBip85WipeMem()"), app.indexOf("function hodlBip85PrivateValue"));
   assert.match(bip85Wipe, /hodlBip85Root\.wipePrivateData\(\)/, "the BIP-85 root must be wiped, not a getter copy");
+  const nostrWipe = app.slice(app.indexOf("function hodlNostrWipeMem()"), app.indexOf("function hodlNostrPrivateValue"));
+  assert.match(nostrWipe, /hodlNostrRoot\.wipePrivateData\(\)/, "the Nostr root must be wiped, not a getter copy");
   const spWipe = app.slice(app.indexOf("function hodlSpWipeKeys()"), app.indexOf("function hodlSpWipeMem"));
   assert.match(spWipe, /hodlSpHd\.wipePrivateData\(\)/, "the Silent Payments root must be wiped, not a getter copy");
   const ar = app.slice(app.indexOf("function ar("), app.indexOf("function Po("));
