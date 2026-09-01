@@ -138,7 +138,8 @@ To build the HTML file yourself, see [Building from source](#building-from-sourc
 
 On iPhone, open [entropylab.online](https://entropylab.online) in Safari, then
 choose **Share → Add to Home Screen → Open as Web App → Add**. Keep the page
-open until its first load completes. The hosted app stores the self-contained
+open until its first load completes. The Home Screen tile is the EntropyLab
+beaker icon. The hosted app stores the self-contained
 calculator in a versioned browser cache so the Home Screen app can reopen when
 the phone has no network connection.
 

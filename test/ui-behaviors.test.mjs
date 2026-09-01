@@ -85,6 +85,53 @@ test("the hosted banner step tolerates a missing banner element", () => {
   assert.doesNotThrow(() => new Function("location", "document", "localStorage", source)(location, { getElementById: () => null }, {}));
 });
 
+test("the hosted banner paints the Home Screen icon from same-origin assets", () => {
+  const source = onlineSource.split("{{VERSION}}").join(VERSION);
+  const placeholder = { className: "home-screen-icon", tagName: "SPAN" };
+  const row = {
+    querySelector: (sel) => sel === ".home-screen-icon" ? placeholder : null,
+  };
+  let replaced;
+  placeholder.replaceWith = (node) => { replaced = node; };
+  const created = [];
+  const document = {
+    getElementById: (id) => id === "online-warning" ? { removeAttribute() {} } : id === "home-screen-install" ? row : null,
+    createElement: (tag) => {
+      const el = { tagName: tag.toUpperCase(), className: "", src: "", width: 0, height: 0, alt: "" };
+      created.push(el);
+      return el;
+    },
+  };
+  new Function("location", "document", "localStorage", "matchMedia", source)(
+    { hostname: "entropylab.online", protocol: "https:", search: "" },
+    document,
+    {},
+    () => ({ matches: false }),
+  );
+  assert.equal(created.length, 1);
+  assert.equal(created[0].tagName, "IMG");
+  assert.equal(created[0].src, "assets/pwa-icon-180.png");
+  assert.equal(created[0].alt, "EntropyLab");
+  assert.equal(replaced, created[0]);
+});
+
+test("the Home Screen icon row hides when the page is already a standalone app", () => {
+  const source = onlineSource.split("{{VERSION}}").join(VERSION);
+  const attrs = [];
+  const row = { setAttribute: (name, value) => attrs.push([name, value]), querySelector: () => { throw new Error("standalone must not touch the icon"); } };
+  const document = {
+    getElementById: (id) => id === "online-warning" ? { removeAttribute() {} } : id === "home-screen-install" ? row : null,
+    createElement: () => { throw new Error("standalone must not create an image"); },
+  };
+  new Function("location", "document", "localStorage", "matchMedia", source)(
+    { hostname: "entropylab.online", protocol: "https:", search: "" },
+    document,
+    {},
+    (query) => ({ matches: query === "(display-mode: standalone)" }),
+  );
+  assert.deepEqual(attrs, [["hidden", ""]]);
+});
+
 test("the recovery sheet is stamped with the build version exactly once", () => {
   const { formatRecoverySheet } = onlineHarness({ hostname: "example.com" });
   const sheet = formatRecoverySheet("ENTROPYLAB — RECOVERY SHEET\nComputed locally.");

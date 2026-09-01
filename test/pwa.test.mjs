@@ -9,6 +9,9 @@ import { runInNewContext } from "node:vm";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (path) => readFileSync(join(root, path), "utf8");
 const template = read("src/index.html");
+const app = read("src/js/app.js");
+const online = read("src/js/online.js");
+const css = read("src/css/styles.css");
 const worker = read("src/service-worker.js");
 const manifest = JSON.parse(read("manifest.webmanifest"));
 const workflow = read(".github/workflows/ci-cd.yml");
@@ -27,6 +30,20 @@ test("the hosted app publishes complete install metadata", () => {
   assert.match(template, /viewport-fit=cover/);
   assert.match(template, /Share → Add to Home Screen → Open as Web App/);
   assert.match(template, /Cached availability is not proof of an air gap/);
+  assert.match(template, /id="home-screen-install"/);
+  assert.match(app, /id="home-screen-install"/);
+  assert.match(template, /class="home-screen-icon"/);
+  assert.doesNotMatch(template, /<img[^>]+pwa-icon/);
+  assert.doesNotMatch(app, /<img[^>]+pwa-icon/);
+});
+
+test("the hosted banner paints the Home Screen beaker without shipping an assets fetch in the HTML", () => {
+  assert.match(online, /assets\/pwa-icon-180\.png/);
+  assert.match(online, /display-mode: standalone/);
+  assert.match(online, /navigator\.standalone/);
+  assert.match(css, /\.home-screen-install \{/);
+  assert.match(css, /\.home-screen-install\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.home-screen-icon \{/);
 });
 
 test("PWA icons have the declared square dimensions and alpha channel", () => {

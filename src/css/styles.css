@@ -761,6 +761,17 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
    first frame instead of flashing until the application boots. */
 :root[data-beta-banner-dismissed] #beta-warning { display: none; }
 .beta-warning-text, .online-warning-text { flex: 1; }
+.home-screen-install {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid color-mix(in oklab, var(--danger) 35%, var(--border));
+}
+.home-screen-install[hidden] { display: none; }
+.home-screen-icon {
+  flex: 0 0 auto; width: 60px; height: 60px; border-radius: 13px;
+  background: #111111; object-fit: cover;
+}
+.home-screen-install-copy { margin: 0; min-width: 0; }
 /* line-height 1 so the label sits where the padding puts it: the banner's 1.5
    would add half its leading above the caps as invisible space. The gap down
    to the sentence is then an explicit margin. */
