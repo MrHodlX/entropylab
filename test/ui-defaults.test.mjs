@@ -1547,8 +1547,8 @@ test("virtual keypads never focus the field on touch so the mobile keyboard stay
   }
 });
 
-test("workspace tabs place BIP-85 between Keys and Multi Signature", () => {
-  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\]/);
+test("workspace tabs place BIP-85 after Journal and Journal after Keys", () => {
+  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["journal", "workspace\.journal", "workspace\.journalShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\]/);
   for (const markup of [template, appSource]) {
     assert.match(markup, /id="bip85-card"/);
     assert.match(markup, /id="bip85-go"/);
@@ -1593,7 +1593,7 @@ test("BIP-85 entry point sits beside Derive Key and opens the BIP-85 tab", () =>
 test("Silent Payments sits between Multi Signature and PSBT / Nonce", () => {
   const order = /Keys[\s\S]*Multi Signature[\s\S]*Silent Payments[\s\S]*PSBT \/ Nonce/;
   assert.match(template, order);
-  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\]/);
+  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["journal", "workspace\.journal", "workspace\.journalShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\]/);
   for (const markup of [template, appSource]) {
     assert.match(markup, /id="sp-card"/);
     assert.match(markup, /id="sp-key"/);
@@ -1604,6 +1604,29 @@ test("Silent Payments sits between Multi Signature and PSBT / Nonce", () => {
     assert.match(markup, /BIP-352/);
   }
   assert.match(css, /#sp-card\[hidden\]/);
+});
+
+test("Journal sits between Keys and BIP-85", () => {
+  const order = /Keys[\s\S]*Journal[\s\S]*BIP-85[\s\S]*Multi Signature/;
+  assert.match(template, order);
+  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["journal", "workspace\.journal", "workspace\.journalShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\]/);
+  for (const markup of [template, appSource]) {
+    assert.match(markup, /id="journal-card"/);
+    assert.match(markup, /id="journal-create"/);
+    assert.match(markup, /id="journal-unlock"/);
+    assert.match(markup, /id="journal-save"/);
+    assert.match(markup, /id="journal-input"/);
+    assert.match(markup, /never a typed password/);
+    assert.match(markup, /does not invent entropy/);
+    assert.match(markup, /The journal lives in this page until you save the encrypted file/);
+  }
+  assert.match(css, /#journal-card\[hidden\]/);
+  assert.match(css, /#journal-locked-panel\[hidden\]/);
+  assert.match(appSource, /import \{ METHOD_LABELS as hodlJournalMethodLabels/);
+  assert.match(appSource, /hodlInitJournal\(\)/);
+  const init = appSource.slice(appSource.indexOf("function hodlInitJournal()"), appSource.indexOf("function hodlRunPsbt()"));
+  assert.doesNotMatch(init, /hodlJournalCreate\(\);/);
+  assert.doesNotMatch(init, /hodlJournalUnlock\(\);/);
 });
 
 test("Silent Payments has a connected SP Station with a monochrome coin-and-signal icon", () => {
@@ -1630,9 +1653,9 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   assert.match(appSource, /<nav class="workspace no-print" id="workspace"><\/nav>/);
   assert.doesNotMatch(template, /segmented-control" id="workspace"/);
   assert.match(template, /<div class="workspace-tabs" id="workspace-tabs" role="tablist" aria-label="Tool">/);
-  // All five tools ship in the static markup, each with a full name and the
+  // All seven tools ship in the static markup, each with a full name and the
   // short form narrow screens show instead.
-  for (const [full, short, key, shortKey] of [["Keys", "Keys", "workspace.key", "workspace.keyShort"], ["BIP-85", "BIP85", "workspace.bip85", "workspace.bip85Short"], ["Multi Signature", "MultiSig", "workspace.msig", "workspace.msigShort"], ["Silent Payments", "SP", "workspace.sp", "workspace.spShort"], ["PSBT / Nonce", "PSBT", "workspace.psbt", "workspace.psbtShort"], ["PSBT Editor", "Editor", "workspace.psbted", "workspace.psbtedShort"]]) {
+  for (const [full, short, key, shortKey] of [["Keys", "Keys", "workspace.key", "workspace.keyShort"], ["Journal", "Journal", "workspace.journal", "workspace.journalShort"], ["BIP-85", "BIP85", "workspace.bip85", "workspace.bip85Short"], ["Multi Signature", "MultiSig", "workspace.msig", "workspace.msigShort"], ["Silent Payments", "SP", "workspace.sp", "workspace.spShort"], ["PSBT / Nonce", "PSBT", "workspace.psbt", "workspace.psbtShort"], ["PSBT Editor", "Editor", "workspace.psbted", "workspace.psbtedShort"]]) {
     assert.ok(
       template.includes(`<span class="workspace-tab-full">${full}</span><span class="workspace-tab-short">${short}</span>`),
       `${full} is missing from the workspace strip`,
@@ -1646,7 +1669,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // Hidden text leaves the accessibility tree, so the full name is stated on
   // the tab itself and assistive tech hears it at every width.
   assert.match(appSource, /button\.setAttribute\("aria-label", hodlT\(label\)\);/);
-  for (const full of ["Keys", "BIP-85", "Multi Signature", "Silent Payments", "PSBT / Nonce"]) {
+  for (const full of ["Keys", "Journal", "BIP-85", "Multi Signature", "Silent Payments", "PSBT / Nonce"]) {
     assert.match(template, new RegExp(`aria-label="${full.replace("/", "\\/")}">[\\s\\S]*?<span class="workspace-tab-full">${full.replace("/", "\\/")}</span>`), `${full} tab needs its accessible name`);
   }
   // A tablist owes arrow keys; the key and multisig strips already answer them.
@@ -1684,7 +1707,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // Every tool panel lives inside it, and the closing Sources card does not.
   for (const markup of [template, appSource]) {
     const panel = markup.slice(markup.indexOf('<div class="workspace-panel"'), markup.indexOf('class="card muted sources"'));
-    for (const id of ["calc-card", "bip85-card", "msig-card", "sp-card", "psbt-card"]) {
+    for (const id of ["calc-card", "journal-card", "bip85-card", "msig-card", "sp-card", "psbt-card"]) {
       assert.ok(panel.includes(`id="${id}"`), `${id} must sit inside the workspace panel`);
     }
     assert.ok(panel.includes('<div id="out">'), "the results region must sit inside the workspace panel");

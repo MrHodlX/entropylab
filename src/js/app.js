@@ -34,6 +34,7 @@ import { initPsbtEditor } from "./psbt-editor.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
 import { t as hodlT, hodlInitLocale, hodlFillLocaleSelect, hodlGetLocale } from "./i18n.js";
+import { METHOD_LABELS as hodlJournalMethodLabels, addEntry as hodlJournalAddEntry, createDocument as hodlJournalCreateDocument, openDocument as hodlJournalOpenDocument, parseDiceTranscript, removeEntry as hodlJournalRemoveEntry, replaceEntry as hodlJournalReplaceEntry, searchEntries as hodlJournalSearch, sealDocument as hodlJournalSealDocument, snapshotFromKeyState as hodlJournalSnapshot, wipeBytes as hodlJournalWipeBytes, wipeDocument as hodlJournalWipeDocument } from "./journal.js";
 const hodlBip39Wordlist = Object.freeze(bip39English);
 function hodlNote(key, vars) {
   return vars == null ? { key } : { key, vars };
@@ -607,6 +608,7 @@ hodlRootEl.innerHTML = `
         <button class="btn primary" id="go" disabled aria-disabled="true">Derive Key</button>
         <div class="derive-progress" id="derive-progress" role="progressbar" aria-label="Key derivation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete" hidden><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
         <button class="btn secondary" id="bip85-open" type="button">Derive BIP-85 child</button>
+        <button class="btn secondary" id="journal-open" type="button">Save to Journal</button>
         <button class="btn clear-current-action" id="wipe" type="button" disabled aria-disabled="true">Clear Current Key</button>
       </div>
       <p class="err" id="error"></p>
@@ -677,6 +679,96 @@ hodlRootEl.innerHTML = `
       </div>
       <div id="bip85-out" aria-live="polite"></div>
       <p class="muted">Derived children remain in this page only. Anyone with the parent seed, passphrase, application, and index can reproduce them. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
+    </section>
+    <div class="tool-intro" id="journal-tool-intro" hidden>
+        <div class="kicker">Your rolls, on paper you control.</div>
+        <h2>Entropy Journal</h2>
+        <p class="muted journal-intro">An encrypted notebook of entropy you already produced \u2014 dice, coins, hex, brain-wallet text, or a seed. The file stays on your machine. The encryption key is dice you roll at setup, never a typed password. This is not a password manager and does not invent entropy.</p>
+      </div>
+      <section class="card no-print" id="journal-card" role="tabpanel" hidden>
+      <div id="journal-locked-panel">
+        <div class="row segmented-control" id="journal-gate-modes" role="group" aria-label="Journal start">
+          <button type="button" class="tab active" data-journal-gate="create" aria-pressed="true">Create</button>
+          <button type="button" class="tab" data-journal-gate="open" aria-pressed="false">Open file</button>
+        </div>
+        <div id="journal-create-panel">
+          <label class="field">Dice for the journal key
+            <textarea id="journal-create-dice" placeholder="Roll at least 50 six-sided dice. Spaces are fine." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+            <span class="field-note" id="journal-create-dice-help">50 rolls \u2248 129 bits \xB7 99 rolls \u2248 256 bits. This is the key, not a wallet seed.</span>
+          </label>
+          <label class="field">Confirm the same rolls
+            <textarea id="journal-create-dice-confirm" placeholder="Enter the same rolls again" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          </label>
+          <div class="row bip85-actions">
+            <button class="btn primary" id="journal-create" type="button">Create journal</button>
+          </div>
+        </div>
+        <div id="journal-open-panel" hidden>
+          <label class="field">Encrypted journal file
+            <input id="journal-file" type="file" accept=".json,application/json">
+          </label>
+          <label class="field">Dice for the journal key
+            <textarea id="journal-open-dice" placeholder="The rolls used when this file was created" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          </label>
+          <div class="row bip85-actions">
+            <button class="btn primary" id="journal-unlock" type="button">Open journal</button>
+          </div>
+        </div>
+      </div>
+      <div id="journal-work-panel" hidden>
+        <div class="journal-status" id="journal-status">
+          <img class="journal-status-lifehash" id="journal-lifehash" width="48" height="48" alt="" hidden>
+          <div>
+            <p class="journal-status-title" id="journal-status-title">Journal unlocked</p>
+            <p class="muted" id="journal-status-note">No entries yet. Save the encrypted file after you add one.</p>
+          </div>
+        </div>
+        <div class="row bip85-actions journal-toolbar">
+          <label class="field journal-search-field">Search labels
+            <input id="journal-search" type="search" placeholder="Filter by label" autocomplete="off">
+          </label>
+          <button class="btn primary" id="journal-add" type="button">Add entry</button>
+          <button class="btn secondary" id="journal-save" type="button">Save file</button>
+          <button class="btn secondary" id="journal-lock" type="button">Lock</button>
+        </div>
+        <div id="journal-list" class="journal-list" aria-live="polite"></div>
+        <div id="journal-editor" class="journal-editor" hidden>
+          <label class="field">Method
+            <select id="journal-method">
+              <option value="dice" selected>Dice rolls</option>
+              <option value="coin">Coin flips</option>
+              <option value="hex">Hex</option>
+              <option value="brain">Brain-wallet text</option>
+              <option value="seed">Manual seed</option>
+              <option value="cards">Playing cards</option>
+            </select>
+          </label>
+          <label class="field">Raw rolls or input
+            <textarea id="journal-input" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+            <span class="field-note">Stored exactly as entered.</span>
+          </label>
+          <label class="field">BIP39 seed or passphrase
+            <textarea id="journal-phrase" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          </label>
+          <label class="field">Label
+            <input id="journal-label" type="text" maxlength="120" autocomplete="off">
+          </label>
+          <label class="field">Notes (optional)
+            <textarea id="journal-notes" spellcheck="true"></textarea>
+          </label>
+          <label class="field">Session wallet (optional)
+            <select id="journal-wallet"><option value="">None</option></select>
+          </label>
+          <div class="row bip85-actions">
+            <button class="btn primary" id="journal-commit" type="button">Save entry</button>
+            <button class="btn secondary" id="journal-use-calc" type="button">Use active key</button>
+            <button class="btn secondary" id="journal-cancel" type="button">Cancel</button>
+          </div>
+        </div>
+        <div id="journal-view" hidden></div>
+      </div>
+      <p class="err" id="journal-error" role="alert"></p>
+      <p class="muted">The journal lives in this page until you save the encrypted file. Anyone with that file and the journal dice can read every entry. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
     </section>
       <div class="tool-intro" id="msig-tool-intro" hidden>
         <div class="kicker">Multiple keys, one wallet</div>
@@ -948,6 +1040,7 @@ hodlRootEl.innerHTML = `
       <p>D++ D8 &amp; D16 method: <a href="https://thesimplestbitcoinbook.net/wp-content/uploads/2023/09/Roll-Your-Own-Seed-Phrase-PDF.pdf" target="_blank" rel="noopener noreferrer">Roll Your Own Bitcoin Seed Phrase</a> \u2014 the published 24-word workflow uses one D8 labeled 1\u20138 and two hexadecimal D16 dice labeled 0\u2013F per word, then a final D8.</p>
       <p>Jade anti-exfil (sign-to-contract): <a href="https://blog.blockstream.com/anti-exfil-stopping-key-exfiltration/" target="_blank" rel="noopener noreferrer">Anti-Exfil: Stopping Key Exfiltration</a> \u2014 secp256k1-zkp <code>ecdsa_s2c</code> / <code>anti_exfil_host_verify</code>.</p>
       <p>BIP-85 deterministic entropy: <a href="https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki" target="_blank" rel="noopener noreferrer">bip-0085.mediawiki</a> — HMAC-SHA512 of a fully hardened child; English BIP-39 / WIF / XPRV / HEX / password applications match COLDCARD.</p>
+      <p>Entropy Journal: AES-256-GCM with HKDF-SHA-256 from user-supplied dice (Web Crypto). Salt and IV are stored with the ciphertext. No relays, no accounts, no localStorage for secrets.</p>
       <p>BIP-352 Silent Payments: <a href="https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki" target="_blank" rel="noopener noreferrer">bips/bip-0352</a> — reusable <code>sp1q…</code> addresses and unique taproot outputs. Descriptors: <a href="https://github.com/bitcoin/bips/blob/master/bip-0392.mediawiki" target="_blank" rel="noopener noreferrer">BIP-392</a>.</p>
       <p>Inscription envelopes: <a href="https://docs.ordinals.com/inscriptions.html" target="_blank" rel="noopener noreferrer">docs.ordinals.com/inscriptions</a> — <code>OP_FALSE OP_IF "ord"</code> parser only. This tool does not create inscriptions or number sats.</p>
     </section>
@@ -9150,6 +9243,434 @@ function hodlInitBip85() {
   }
   hodlBip85SyncOptions();
 }
+var hodlJournalKey = null, hodlJournalSalt = null, hodlJournalVerify = null, hodlJournalDoc = null, hodlJournalFileText = "", hodlJournalDirty = false, hodlJournalGate = "create", hodlJournalReveal = false, hodlJournalEditingId = null, hodlJournalDeleteArmed = false;
+function hodlJournalError(message) {
+  let error = document.getElementById("journal-error");
+  if (error) error.textContent = message || "";
+}
+function hodlJournalWipeMem() {
+  hodlJournalWipeDocument(hodlJournalDoc);
+  hodlJournalDoc = null;
+  hodlJournalKey = null;
+  hodlJournalWipeBytes(hodlJournalSalt);
+  hodlJournalSalt = null;
+  hodlJournalWipeBytes(hodlJournalVerify);
+  hodlJournalVerify = null;
+  hodlJournalFileText = "";
+  hodlJournalDirty = false;
+  hodlJournalReveal = false;
+  hodlJournalEditingId = null;
+  hodlJournalDeleteArmed = false;
+}
+function hodlJournalCopy(button, label) {
+  let phrase = button?.dataset.phrase;
+  if (phrase == null || button.disabled) return;
+  let done = () => {
+    button.textContent = "Copied";
+    clearTimeout(button.hodlCopiedTimer);
+    button.hodlCopiedTimer = setTimeout(() => {
+      if (button.isConnected) button.textContent = label;
+    }, 1600);
+  };
+  let fallback = () => {
+    let field = document.createElement("textarea");
+    field.value = phrase;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.left = "-9999px";
+    document.body.appendChild(field);
+    field.select();
+    try {
+      document.execCommand("copy");
+      done();
+    } finally {
+      field.remove();
+    }
+  };
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") navigator.clipboard.writeText(phrase).then(done).catch(fallback);
+  else fallback();
+}
+function hodlJournalClearFields() {
+  for (let id of ["journal-create-dice", "journal-create-dice-confirm", "journal-open-dice", "journal-input", "journal-phrase", "journal-label", "journal-notes", "journal-search"]) {
+    let field = document.getElementById(id);
+    if (field) field.value = "";
+  }
+  let file = document.getElementById("journal-file");
+  if (file) file.value = "";
+  let list = document.getElementById("journal-list"), view = document.getElementById("journal-view"), error = document.getElementById("journal-error");
+  if (list) list.innerHTML = "";
+  if (view) view.innerHTML = "";
+  if (error) error.textContent = "";
+}
+function hodlJournalSetGate(mode) {
+  hodlJournalGate = mode === "open" ? "open" : "create";
+  document.querySelectorAll("#journal-gate-modes [data-journal-gate]").forEach((button) => {
+    let active = button.dataset.journalGate === hodlJournalGate;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  let create = document.getElementById("journal-create-panel"), open = document.getElementById("journal-open-panel");
+  if (create) create.hidden = hodlJournalGate !== "create";
+  if (open) open.hidden = hodlJournalGate !== "open";
+}
+function hodlJournalSyncDiceHelp() {
+  let help = document.getElementById("journal-create-dice-help");
+  if (!help) return;
+  let parsed = parseDiceTranscript(document.getElementById("journal-create-dice")?.value || "");
+  help.textContent = parsed.count ? `${parsed.count} roll${parsed.count === 1 ? "" : "s"} \u2248 ${parsed.bits.toFixed(1)} bits. 50 rolls \u2248 129 bits \xB7 99 rolls \u2248 256 bits.` : "50 rolls \u2248 129 bits \xB7 99 rolls \u2248 256 bits. This is the key, not a wallet seed.";
+}
+function hodlJournalUnlocked() {
+  return Boolean(hodlJournalKey && hodlJournalDoc && hodlJournalSalt);
+}
+function hodlJournalNoteText() {
+  if (!hodlJournalDoc) return "Create a journal or open an encrypted file.";
+  let n = hodlJournalDoc.entries.length;
+  let unsaved = hodlJournalDirty ? " Unsaved changes \u2014 save the encrypted file before locking." : "";
+  if (!n) return "No entries yet. Save the encrypted file after you add one." + unsaved;
+  return `${n} ${n === 1 ? "entry" : "entries"} in this page only.${unsaved}`;
+}
+function hodlJournalFillLifehash(image, digest) {
+  if (!image) return;
+  if (!(digest instanceof Uint8Array) || typeof hodlLifeHash?.fromDigest !== "function") {
+    image.hidden = true;
+    image.removeAttribute("src");
+    return;
+  }
+  hodlLifeHash.fromDigest(digest).then((url) => {
+    if (!image.isConnected) return;
+    image.src = url;
+    image.hidden = false;
+  }).catch(() => {
+    image.hidden = true;
+  });
+}
+function hodlJournalFillFingerprint(image, fingerprint) {
+  if (!image) return;
+  if (!fingerprint || typeof hodlLifeHash?.fromFingerprint !== "function") {
+    image.hidden = true;
+    image.removeAttribute("src");
+    return;
+  }
+  hodlLifeHash.fromFingerprint(fingerprint).then((url) => {
+    if (!image.isConnected) return;
+    image.src = url;
+    image.hidden = false;
+  }).catch(() => {
+    image.hidden = true;
+  });
+}
+function hodlJournalFillWallets(selected) {
+  let select = document.getElementById("journal-wallet");
+  if (!select) return;
+  let current = selected == null ? select.value : String(selected);
+  select.innerHTML = "";
+  let none = document.createElement("option");
+  none.value = "";
+  none.textContent = "None";
+  select.append(none);
+  hodlKeys.filter((state) => !state.isLab).forEach((state) => {
+    let option = document.createElement("option");
+    option.value = String(state.id);
+    option.textContent = state.name || `Key ${state.number}`;
+    select.append(option);
+  });
+  select.value = [...select.options].some((option) => option.value === current) ? current : "";
+}
+function hodlJournalShowWork() {
+  let locked = document.getElementById("journal-locked-panel"), work = document.getElementById("journal-work-panel");
+  if (locked) locked.hidden = hodlJournalUnlocked();
+  if (work) work.hidden = !hodlJournalUnlocked();
+  let note = document.getElementById("journal-status-note");
+  if (note) note.textContent = hodlJournalNoteText();
+  hodlJournalFillLifehash(document.getElementById("journal-lifehash"), hodlJournalVerify);
+  hodlJournalRenderList();
+}
+function hodlJournalRenderList() {
+  let box = document.getElementById("journal-list");
+  if (!box) return;
+  if (!hodlJournalDoc) {
+    box.innerHTML = "";
+    return;
+  }
+  let entries = hodlJournalSearch(hodlJournalDoc, document.getElementById("journal-search")?.value || "");
+  if (!entries.length) {
+    box.innerHTML = `<p class="journal-empty">${hodlJournalDoc.entries.length ? "No labels match that search." : "No entries yet."}</p>`;
+    return;
+  }
+  box.innerHTML = entries.map((entry) => `<button type="button" class="journal-item" data-journal-id="${entry.id}">
+      <img class="journal-item-lifehash" alt="" width="32" height="32" hidden>
+      <span class="journal-item-label">${hodlEscapeHtml(entry.label)}</span>
+      <span class="journal-item-meta">${hodlEscapeHtml(hodlJournalMethodLabels[entry.method] || entry.method)} \xB7 ${hodlEscapeHtml(String(entry.created).slice(0, 10))}</span>
+    </button>`).join("");
+  [...box.querySelectorAll(".journal-item")].forEach((button, index) => {
+    let entry = entries[index];
+    hodlJournalFillFingerprint(button.querySelector(".journal-item-lifehash"), entry.fingerprint);
+    button.onclick = () => hodlJournalOpenView(entry.id);
+  });
+}
+function hodlJournalHideEditor() {
+  hodlJournalEditingId = null;
+  let editor = document.getElementById("journal-editor"), view = document.getElementById("journal-view"), list = document.getElementById("journal-list");
+  if (editor) editor.hidden = true;
+  if (view) {
+    view.hidden = true;
+    view.innerHTML = "";
+  }
+  if (list) list.hidden = false;
+  for (let id of ["journal-input", "journal-phrase", "journal-label", "journal-notes"]) {
+    let field = document.getElementById(id);
+    if (field) field.value = "";
+  }
+  let method = document.getElementById("journal-method");
+  if (method) method.value = "dice";
+  hodlJournalFillWallets("");
+}
+function hodlJournalApplySnapshot(snapshot) {
+  if (!snapshot) throw new Error("Derive a key first, then return to the journal.");
+  let method = document.getElementById("journal-method");
+  if (method) method.value = snapshot.method;
+  let input = document.getElementById("journal-input");
+  if (input) input.value = snapshot.input;
+  let phrase = document.getElementById("journal-phrase");
+  if (phrase) phrase.value = snapshot.phrase;
+  let label = document.getElementById("journal-label");
+  if (label && !label.value.trim()) label.value = snapshot.label;
+  let notes = document.getElementById("journal-notes");
+  if (notes && !notes.value.trim()) notes.value = snapshot.notes;
+  hodlJournalFillWallets(snapshot.walletId ?? "");
+}
+function hodlJournalShowEditor(entry) {
+  if (!hodlJournalUnlocked()) throw new Error("Create or open a journal first.");
+  hodlJournalEditingId = entry?.id ?? null;
+  hodlJournalDeleteArmed = false;
+  document.getElementById("journal-list").hidden = true;
+  document.getElementById("journal-view").hidden = true;
+  document.getElementById("journal-view").innerHTML = "";
+  document.getElementById("journal-editor").hidden = false;
+  document.getElementById("journal-method").value = entry?.method || "dice";
+  document.getElementById("journal-input").value = entry?.input || "";
+  document.getElementById("journal-phrase").value = entry?.phrase || "";
+  document.getElementById("journal-label").value = entry?.label || "";
+  document.getElementById("journal-notes").value = entry?.notes || "";
+  hodlJournalFillWallets(entry?.walletId ?? "");
+}
+function hodlJournalPrivateValue(value) {
+  let mask = "************", text = String(value ?? "\u2014");
+  if (hodlJournalReveal) return `<span class="secret private-field-value">${hodlEscapeHtml(text)}</span>`;
+  let bullets = "\u2022".repeat(Math.max(Array.from(text).length, mask.length));
+  return `<span class="secret private-field-value secret-placeholder"><span class="secret-placeholder-mask" aria-hidden="true">${bullets}</span><span class="secret-placeholder-message" aria-hidden="true">${mask}</span><span class="secret-placeholder-label">Private value hidden</span></span>`;
+}
+function hodlJournalOpenView(id) {
+  let entry = hodlJournalDoc?.entries.find((item) => item.id === id);
+  if (!entry) return;
+  hodlJournalEditingId = id;
+  hodlJournalReveal = false;
+  hodlJournalDeleteArmed = false;
+  document.getElementById("journal-editor").hidden = true;
+  document.getElementById("journal-list").hidden = true;
+  let view = document.getElementById("journal-view");
+  view.hidden = false;
+  let wallet = entry.walletName || (entry.walletId != null ? `Key ${entry.walletId}` : "");
+  view.innerHTML = `<section class="wallet-data-section wallet-private-section" aria-labelledby="journal-entry-heading">
+      <div class="wallet-data-section-head">
+        <h3 id="journal-entry-heading">${hodlEscapeHtml(entry.label)}</h3>
+        <p class="muted" id="journal-private-description">Anyone with the journal file and the journal dice can read this entry.</p>
+      </div>
+      <div class="wallet-data-actions no-print">
+        <label class="reveal-private-toggle">
+          <input type="checkbox" id="journal-reveal" ${hodlJournalReveal ? "checked" : ""} aria-describedby="journal-private-description">
+          <span>Show seed <span class="reveal-private-toggle-note">(air-gap only)</span></span>
+        </label>
+        <button class="btn secondary" id="journal-copy-input" type="button">Copy input</button>
+        <button class="btn secondary" id="journal-copy-phrase" type="button">Copy seed</button>
+        <button class="btn secondary" id="journal-edit" type="button">Edit</button>
+        <button class="btn secondary" id="journal-delete" type="button">Delete</button>
+        <button class="btn secondary" id="journal-back" type="button">Back</button>
+      </div>
+      <div class="wallet-data-fields">
+        ${hodlPublicFieldHtml("Method", hodlJournalMethodLabels[entry.method] || entry.method)}
+        ${hodlPublicFieldHtml("Recorded", entry.created)}
+        ${wallet ? hodlPublicFieldHtml("Session wallet", wallet) : ""}
+        ${entry.fingerprint ? hodlPublicFieldHtml("Master fingerprint", entry.fingerprint) : ""}
+        ${hodlPublicFieldHtml("Raw input", entry.input || "\u2014")}
+        <p class="private-field"><span class="muted">BIP39 seed or passphrase</span>${hodlJournalPrivateValue(entry.phrase)}</p>
+        ${entry.notes ? hodlPublicFieldHtml("Notes", entry.notes) : ""}
+      </div>
+    </section>`;
+  document.getElementById("journal-reveal")?.addEventListener("change", (event) => {
+    hodlJournalReveal = event.target.checked;
+    hodlJournalOpenView(id);
+    requestAnimationFrame(() => document.getElementById("journal-reveal")?.focus({ preventScroll: true }));
+  });
+  let copyInput = document.getElementById("journal-copy-input");
+  if (copyInput) {
+    copyInput.dataset.phrase = entry.input;
+    copyInput.onclick = () => hodlJournalCopy(copyInput, "Copy input");
+  }
+  let copyPhrase = document.getElementById("journal-copy-phrase");
+  if (copyPhrase) {
+    copyPhrase.dataset.phrase = entry.phrase;
+    copyPhrase.onclick = () => hodlJournalCopy(copyPhrase, "Copy seed");
+  }
+  document.getElementById("journal-edit").onclick = () => hodlJournalShowEditor(entry);
+  document.getElementById("journal-back").onclick = () => {
+    hodlJournalHideEditor();
+    hodlJournalRenderList();
+  };
+  document.getElementById("journal-delete").onclick = () => {
+    if (!hodlJournalDeleteArmed) {
+      hodlJournalDeleteArmed = true;
+      document.getElementById("journal-delete").textContent = "Confirm delete";
+      return;
+    }
+    hodlJournalRemoveEntry(hodlJournalDoc, id);
+    hodlJournalDirty = true;
+    hodlJournalHideEditor();
+    hodlJournalShowWork();
+  };
+}
+async function hodlJournalCreate() {
+  hodlJournalError("");
+  try {
+    let created = await hodlJournalCreateDocument(document.getElementById("journal-create-dice")?.value || "", document.getElementById("journal-create-dice-confirm")?.value || "");
+    hodlJournalWipeMem();
+    hodlJournalKey = created.key;
+    hodlJournalSalt = created.salt;
+    hodlJournalVerify = created.verify;
+    hodlJournalDoc = created.doc;
+    hodlJournalDirty = true;
+    document.getElementById("journal-create-dice").value = "";
+    document.getElementById("journal-create-dice-confirm").value = "";
+    hodlJournalHideEditor();
+    hodlJournalShowWork();
+  } catch (exception) {
+    hodlJournalError(exception.message || String(exception));
+  }
+}
+async function hodlJournalUnlock() {
+  hodlJournalError("");
+  try {
+    if (!hodlJournalFileText) throw new Error("Choose an encrypted journal file first.");
+    let opened = await hodlJournalOpenDocument(hodlJournalFileText, parseDiceTranscript(document.getElementById("journal-open-dice")?.value || "").digits);
+    hodlJournalWipeMem();
+    hodlJournalKey = opened.key;
+    hodlJournalSalt = opened.salt;
+    hodlJournalVerify = opened.verify;
+    hodlJournalDoc = opened.doc;
+    hodlJournalDirty = false;
+    document.getElementById("journal-open-dice").value = "";
+    document.getElementById("journal-file").value = "";
+    hodlJournalFileText = "";
+    hodlJournalHideEditor();
+    hodlJournalShowWork();
+  } catch (exception) {
+    hodlJournalError(exception.message || String(exception));
+  }
+}
+async function hodlJournalSaveFile() {
+  hodlJournalError("");
+  try {
+    if (!hodlJournalUnlocked()) throw new Error("Create or open a journal first.");
+    let file = await hodlJournalSealDocument(hodlJournalDoc, hodlJournalKey, hodlJournalSalt);
+    let blob = new Blob([JSON.stringify(file, null, 2) + "\n"], { type: "application/json" }), url = URL.createObjectURL(blob), link = document.createElement("a");
+    link.href = url;
+    link.download = "entropylab-journal.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    hodlJournalDirty = false;
+    hodlJournalShowWork();
+  } catch (exception) {
+    hodlJournalError(exception.message || String(exception));
+  }
+}
+function hodlJournalCommit() {
+  hodlJournalError("");
+  try {
+    if (!hodlJournalUnlocked()) throw new Error("Create or open a journal first.");
+    let wallet = document.getElementById("journal-wallet");
+    let walletId = wallet?.value ? Number(wallet.value) : null;
+    let state = walletId == null ? null : hodlKeys.find((item) => item.id === walletId);
+    let fields = {
+      method: document.getElementById("journal-method")?.value || "dice",
+      input: document.getElementById("journal-input")?.value || "",
+      phrase: document.getElementById("journal-phrase")?.value || "",
+      label: document.getElementById("journal-label")?.value || "",
+      notes: document.getElementById("journal-notes")?.value || "",
+      walletId,
+      walletName: state?.name || "",
+      fingerprint: state?.result?.masterFingerprint || "",
+    };
+    if (hodlJournalEditingId) hodlJournalReplaceEntry(hodlJournalDoc, hodlJournalEditingId, fields);
+    else hodlJournalAddEntry(hodlJournalDoc, fields);
+    hodlJournalDirty = true;
+    hodlJournalHideEditor();
+    hodlJournalShowWork();
+  } catch (exception) {
+    hodlJournalError(exception.message || String(exception));
+  }
+}
+function hodlJournalUseActiveKey() {
+  hodlJournalError("");
+  try {
+    if (hodlWorkspace === "calc") hodlCaptureKey();
+    hodlJournalApplySnapshot(hodlJournalSnapshot(hodlKeys[hodlActiveKey]));
+  } catch (exception) {
+    hodlJournalError(exception.message || String(exception));
+  }
+}
+function hodlJournalLock() {
+  hodlJournalWipeMem();
+  hodlJournalClearFields();
+  hodlJournalHideEditor();
+  hodlJournalSetGate("create");
+  hodlJournalShowWork();
+  document.getElementById("journal-status-note").textContent = "Journal locked. Dice and entries were cleared (best effort).";
+}
+function hodlInitJournal() {
+  if (!document.getElementById("journal-create")) return;
+  document.querySelectorAll("#journal-gate-modes [data-journal-gate]").forEach((button) => {
+    button.onclick = () => hodlJournalSetGate(button.dataset.journalGate);
+  });
+  document.getElementById("journal-create-dice")?.addEventListener("input", hodlJournalSyncDiceHelp);
+  document.getElementById("journal-create")?.addEventListener("click", hodlJournalCreate);
+  document.getElementById("journal-unlock")?.addEventListener("click", hodlJournalUnlock);
+  document.getElementById("journal-file")?.addEventListener("change", async (event) => {
+    hodlJournalError("");
+    let file = event.target.files?.[0];
+    hodlJournalFileText = file ? await file.text() : "";
+  });
+  document.getElementById("journal-add")?.addEventListener("click", () => {
+    hodlJournalError("");
+    try { hodlJournalShowEditor(null); } catch (exception) { hodlJournalError(exception.message || String(exception)); }
+  });
+  document.getElementById("journal-save")?.addEventListener("click", hodlJournalSaveFile);
+  document.getElementById("journal-lock")?.addEventListener("click", hodlJournalLock);
+  document.getElementById("journal-commit")?.addEventListener("click", hodlJournalCommit);
+  document.getElementById("journal-use-calc")?.addEventListener("click", hodlJournalUseActiveKey);
+  document.getElementById("journal-cancel")?.addEventListener("click", () => {
+    hodlJournalHideEditor();
+    hodlJournalRenderList();
+  });
+  document.getElementById("journal-search")?.addEventListener("input", hodlJournalRenderList);
+  let open = document.getElementById("journal-open");
+  if (open) open.onclick = () => {
+    if (hodlWorkspace === "calc") hodlCaptureKey();
+    hodlShowWorkspace("journal");
+    hodlJournalError("");
+    try {
+      if (!hodlJournalUnlocked()) {
+        hodlJournalError("Create or open a journal, then save this key into it.");
+        return;
+      }
+      hodlJournalShowEditor(null);
+      hodlJournalUseActiveKey();
+    } catch (exception) {
+      hodlJournalError(exception.message || String(exception));
+    }
+  };
+  hodlJournalSetGate("create");
+  hodlJournalShowWork();
+}
 function hodlRunPsbt() {
   let output = document.getElementById("psbt-out"), manual = document.getElementById("psbt-key").value;
   hodlSetPsbtError(null);
@@ -11041,10 +11562,11 @@ function hodlShowWorkspace(id) {
   document.getElementById("psbt-card").hidden = id !== "psbt";
   document.getElementById("psbted-card").hidden = id !== "psbted";
   document.getElementById("bip85-card").hidden = id !== "bip85";
+  document.getElementById("journal-card").hidden = id !== "journal";
   document.getElementById("sp-card").hidden = id !== "sp";
   // The context block sits outside its tool's card, so it is shown and hidden
   // with the card rather than by it.
-  ["psbt", "psbted", "bip85", "sp", "msig", "calc"].forEach((tool) => {
+  ["psbt", "psbted", "bip85", "journal", "sp", "msig", "calc"].forEach((tool) => {
     document.getElementById(`${tool}-tool-intro`).hidden = id !== tool;
   });
   hodlWalletResult = null;
@@ -11060,6 +11582,9 @@ function hodlShowWorkspace(id) {
     hodlRenderBip85Tabs();
     hodlSyncBip85View();
     hodlBip85SyncOptions();
+  } else if (id === "journal") {
+    hodlJournalFillWallets();
+    hodlJournalShowWork();
   }
   if (hodlWorkspaceScrollFrame) cancelAnimationFrame(hodlWorkspaceScrollFrame);
   window.scrollTo(preservedLeft, preservedTop);
@@ -11160,7 +11685,7 @@ function hodlInitDefaultTabStates() {
 }
 // Each tool carries a full name and a short one. Narrow screens show the
 // short form so more tools stay on screen instead of off the right edge.
-var hodlWorkspaceTabs = [["calc", "workspace.key", "workspace.keyShort"], ["bip85", "workspace.bip85", "workspace.bip85Short"], ["msig", "workspace.msig", "workspace.msigShort"], ["sp", "workspace.sp", "workspace.spShort"], ["psbt", "workspace.psbt", "workspace.psbtShort"], ["psbted", "workspace.psbted", "workspace.psbtedShort"]];
+var hodlWorkspaceTabs = [["calc", "workspace.key", "workspace.keyShort"], ["journal", "workspace.journal", "workspace.journalShort"], ["bip85", "workspace.bip85", "workspace.bip85Short"], ["msig", "workspace.msig", "workspace.msigShort"], ["sp", "workspace.sp", "workspace.spShort"], ["psbt", "workspace.psbt", "workspace.psbtShort"], ["psbted", "workspace.psbted", "workspace.psbtedShort"]];
 // The switcher keeps every tool on screen as a folder-tab strip that scrolls
 // when it must, in the shape the Keys section uses for its own tabs.
 function hodlWorkspaceTabKeydown(event, index) {
@@ -11236,6 +11761,7 @@ function hodlInitWorkspace() {
   hodlInitPsbt();
   initPsbtEditor();
   hodlInitBip85();
+  hodlInitJournal();
   hodlInitSp();
 }
 var hodlKeyClearSyncQueued = false, hodlMsigClearSyncQueued = false, hodlDeriveSyncQueued = false;
@@ -11475,6 +12001,7 @@ function hodlInitSecretFieldAutoClear() {
   let clearSecretFields = () => {
     hodlPsbtWipeMem();
     hodlBip85WipeMem();
+    hodlJournalWipeMem();
     hodlSpWipeMem();
     hodlKeys = hodlKeys.map((state) => {
       let fields = state.fields || {}, privateKeys = fields.privateKeys;
@@ -11514,6 +12041,10 @@ function hodlInitSecretFieldAutoClear() {
     if (bip85Session) bip85Session.textContent = hodlBip85Note;
     hodlRenderBip85Tabs();
     hodlSyncBip85View();
+    hodlJournalClearFields();
+    hodlJournalHideEditor();
+    hodlJournalSetGate("create");
+    hodlJournalShowWork();
     let spKey = document.getElementById("sp-key"), spPass = document.getElementById("sp-pass");
     if (spKey) spKey.value = "";
     if (spPass) spPass.value = "";

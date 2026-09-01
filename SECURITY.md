@@ -57,7 +57,8 @@ material. Its security posture rests on the following model:
   signing nonces, and HMAC/PBKDF2 blocks. The JavaScript layer zeroes the
   `Uint8Array`s it is done with (`.fill(0)`, `HDKey.wipePrivateData()`),
   including intermediate BIP32 path nodes, per-address child keys, and the
-  PSBT/BIP-85/Silent-Payments session roots when a session ends or the page
+  PSBT/BIP-85/Silent-Payments session roots and the Entropy Journal key,
+  salt, and entries when a session ends or the page
   unloads. The limits are structural: JavaScript strings and DOM values
   (displayed seed phrases, WIF keys, typed input) cannot be overwritten, only
   dereferenced — the "(best effort)" the UI already states — and copies made
@@ -97,6 +98,13 @@ material. Its security posture rests on the following model:
   that root (the same rule COLDCARD uses). Anyone who has the parent seed,
   the exact passphrase, the application, and the index can reproduce every
   child; protect the parent for the combined value of all derived wallets.
+- The Entropy Journal is an encrypted notebook of entropy the user already
+  produced, not a password manager and not a key generator. The AES-256-GCM
+  key is HKDF-SHA-256 of dice rolls the user supplies at setup — never a typed
+  password. crypto.getRandomValues is used only for the public HKDF salt and
+  AES-GCM IV stored in the downloaded file; those values are not secret wallet
+  entropy. The plaintext never goes to localStorage, IndexedDB, or the
+  network. Anyone with the file and the journal dice can read every entry.
 - The single-file design inlines all scripts (`script-src 'unsafe-inline'`),
   and the secp256k1 WebAssembly module adds `wasm-unsafe-eval` to the
   content security policy: Chromium and WebKit engines refuse to compile a

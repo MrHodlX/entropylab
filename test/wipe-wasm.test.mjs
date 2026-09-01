@@ -151,6 +151,9 @@ test("app derivation paths wipe seeds, roots, and per-address keys (source guard
   assert.match(psbtWipe, /hodlPsbtHd\.wipePrivateData\(\)/, "the PSBT session root must be wiped, not a getter copy");
   const bip85Wipe = app.slice(app.indexOf("function hodlBip85WipeMem()"), app.indexOf("function hodlBip85PrivateValue"));
   assert.match(bip85Wipe, /hodlBip85Root\.wipePrivateData\(\)/, "the BIP-85 root must be wiped, not a getter copy");
+  const journalWipe = app.slice(app.indexOf("function hodlJournalWipeMem()"), app.indexOf("function hodlJournalCopy"));
+  assert.match(journalWipe, /hodlJournalWipeDocument\(hodlJournalDoc\)/, "journal entries must be wiped");
+  assert.match(journalWipe, /hodlJournalWipeBytes\(hodlJournalSalt\)/, "the journal salt buffer must be wiped");
   const spWipe = app.slice(app.indexOf("function hodlSpWipeKeys()"), app.indexOf("function hodlSpWipeMem"));
   assert.match(spWipe, /hodlSpHd\.wipePrivateData\(\)/, "the Silent Payments root must be wiped, not a getter copy");
   const mnemonicPath = app.slice(app.indexOf("async function hodlMnemonicWalletWithProgress("), app.indexOf("async function hodlEntropyWalletWithProgress("));

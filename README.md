@@ -97,6 +97,13 @@ Official website: [entropylab.online](https://entropylab.online)
   reproduce the same child — this is a calculator, not a generator. Children
   follow the published BIP-85 vectors and match COLDCARD, including derivation
   from a passphrase-extended root when a BIP-39 passphrase is in effect.
+- Keeps an **Entropy Journal**: an encrypted notebook of dice rolls, coin
+  flips, hex, brain-wallet text, or a seed the user already produced. The
+  AES-256-GCM key is HKDF-SHA-256 of dice rolls supplied at setup — never a
+  typed password. Salt and IV travel with the ciphertext in one JSON file the
+  user downloads and loads back. No localStorage, no accounts, no relays. This
+  is a calculator companion, not a password manager: it only stores material
+  the user generated themselves.
 - Derives BIP-352 Silent Payment addresses (`sp1q…` / `tsp1q…`) from a seed or
   root xprv, including labeled codes, BIP-392 `spscan` / `spspend` descriptors,
   sender taproot outputs from pasted vin JSON, and receiver verification of
