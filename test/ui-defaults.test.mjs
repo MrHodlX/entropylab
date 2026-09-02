@@ -1548,7 +1548,7 @@ test("virtual keypads never focus the field on touch so the mobile keyboard stay
 });
 
 test("workspace tabs place BIP-85 between Keys and Multi Signature", () => {
-  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\]/);
+  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\], \["ots", "workspace\.ots", "workspace\.otsShort"\]/);
   for (const markup of [template, appSource]) {
     assert.match(markup, /id="bip85-card"/);
     assert.match(markup, /id="bip85-go"/);
@@ -1581,6 +1581,26 @@ test("PSBT Editor tab follows PSBT / Nonce and wires the rust-bitcoin editor", (
   assert.match(css, /#psbted-card\[hidden\]/);
 });
 
+test("OpenTimestamps sits after PSBT Editor as an offline hash and verify calculator", () => {
+  assert.match(appSource, /\["psbted", "workspace\.psbted", "workspace\.psbtedShort"\], \["ots", "workspace\.ots", "workspace\.otsShort"\]/);
+  assert.match(appSource, /getElementById\("ots-card"\)\.hidden = id !== "ots"/);
+  assert.match(appSource, /hodlInitOts\(\)/);
+  assert.match(appSource, /hashGo\.addEventListener\("click", hodlOtsHashGo\)/);
+  assert.match(appSource, /verifyGo\.addEventListener\("click", hodlOtsVerifyGo\)/);
+  assert.doesNotMatch(appSource, /function hodlInitOts\(\) \{[\s\S]*hodlOtsHashGo\(\)/);
+  assert.doesNotMatch(appSource, /function hodlInitOts\(\) \{[\s\S]*hodlOtsVerifyGo\(\)/);
+  for (const markup of [template, appSource]) {
+    assert.match(markup, /id="ots-card"/);
+    assert.match(markup, /id="ots-hash-go"/);
+    assert.match(markup, /id="ots-verify-go"/);
+    assert.match(markup, /id="ots-header-text"/);
+    assert.match(markup, /does not talk to calendar servers/);
+    assert.match(markup, /Never taken from the proof/);
+  }
+  assert.match(css, /#ots-card\[hidden\]/);
+  assert.match(appSource, /from "\.\/ots\.js"/);
+});
+
 test("BIP-85 entry point sits beside Derive Key and opens the BIP-85 tab", () => {
   for (const markup of [template, appSource]) {
     assert.match(markup, /id="go"[^>]*>Derive Key<\/button>[\s\S]*?id="bip85-open"[^>]*>Derive BIP-85 child<\/button>[\s\S]*?id="wipe"/);
@@ -1593,7 +1613,7 @@ test("BIP-85 entry point sits beside Derive Key and opens the BIP-85 tab", () =>
 test("Silent Payments sits between Multi Signature and PSBT / Nonce", () => {
   const order = /Keys[\s\S]*Multi Signature[\s\S]*Silent Payments[\s\S]*PSBT \/ Nonce/;
   assert.match(template, order);
-  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\]/);
+  assert.match(appSource, /\["calc", "workspace\.key", "workspace\.keyShort"\], \["bip85", "workspace\.bip85", "workspace\.bip85Short"\], \["msig", "workspace\.msig", "workspace\.msigShort"\], \["sp", "workspace\.sp", "workspace\.spShort"\], \["psbt", "workspace\.psbt", "workspace\.psbtShort"\], \["psbted", "workspace\.psbted", "workspace\.psbtedShort"\], \["ots", "workspace\.ots", "workspace\.otsShort"\]/);
   for (const markup of [template, appSource]) {
     assert.match(markup, /id="sp-card"/);
     assert.match(markup, /id="sp-key"/);
@@ -1632,7 +1652,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   assert.match(template, /<div class="workspace-tabs" id="workspace-tabs" role="tablist" aria-label="Tool">/);
   // All five tools ship in the static markup, each with a full name and the
   // short form narrow screens show instead.
-  for (const [full, short, key, shortKey] of [["Keys", "Keys", "workspace.key", "workspace.keyShort"], ["BIP-85", "BIP85", "workspace.bip85", "workspace.bip85Short"], ["Multi Signature", "MultiSig", "workspace.msig", "workspace.msigShort"], ["Silent Payments", "SP", "workspace.sp", "workspace.spShort"], ["PSBT / Nonce", "PSBT", "workspace.psbt", "workspace.psbtShort"], ["PSBT Editor", "Editor", "workspace.psbted", "workspace.psbtedShort"]]) {
+  for (const [full, short, key, shortKey] of [["Keys", "Keys", "workspace.key", "workspace.keyShort"], ["BIP-85", "BIP85", "workspace.bip85", "workspace.bip85Short"], ["Multi Signature", "MultiSig", "workspace.msig", "workspace.msigShort"], ["Silent Payments", "SP", "workspace.sp", "workspace.spShort"], ["PSBT / Nonce", "PSBT", "workspace.psbt", "workspace.psbtShort"], ["PSBT Editor", "Editor", "workspace.psbted", "workspace.psbtedShort"], ["OpenTimestamps", "OTS", "workspace.ots", "workspace.otsShort"]]) {
     assert.ok(
       template.includes(`<span class="workspace-tab-full">${full}</span><span class="workspace-tab-short">${short}</span>`),
       `${full} is missing from the workspace strip`,
@@ -1646,7 +1666,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // Hidden text leaves the accessibility tree, so the full name is stated on
   // the tab itself and assistive tech hears it at every width.
   assert.match(appSource, /button\.setAttribute\("aria-label", hodlT\(label\)\);/);
-  for (const full of ["Keys", "BIP-85", "Multi Signature", "Silent Payments", "PSBT / Nonce"]) {
+  for (const full of ["Keys", "BIP-85", "Multi Signature", "Silent Payments", "PSBT / Nonce", "OpenTimestamps"]) {
     assert.match(template, new RegExp(`aria-label="${full.replace("/", "\\/")}">[\\s\\S]*?<span class="workspace-tab-full">${full.replace("/", "\\/")}</span>`), `${full} tab needs its accessible name`);
   }
   // A tablist owes arrow keys; the key and multisig strips already answer them.
@@ -1684,7 +1704,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // Every tool panel lives inside it, and the closing Sources card does not.
   for (const markup of [template, appSource]) {
     const panel = markup.slice(markup.indexOf('<div class="workspace-panel"'), markup.indexOf('class="card muted sources"'));
-    for (const id of ["calc-card", "bip85-card", "msig-card", "sp-card", "psbt-card"]) {
+    for (const id of ["calc-card", "bip85-card", "msig-card", "sp-card", "psbt-card", "ots-card"]) {
       assert.ok(panel.includes(`id="${id}"`), `${id} must sit inside the workspace panel`);
     }
     assert.ok(panel.includes('<div id="out">'), "the results region must sit inside the workspace panel");

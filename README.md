@@ -97,6 +97,12 @@ Official website: [entropylab.online](https://entropylab.online)
   reproduce the same child — this is a calculator, not a generator. Children
   follow the published BIP-85 vectors and match COLDCARD, including derivation
   from a passphrase-extended root when a BIP-39 passphrase is in effect.
+- Hashes files or pasted bytes with SHA-256 and verifies OpenTimestamps
+  `.ots` proofs offline against a block header (or merkle root) the user
+  pastes from their own node. Incomplete calendar proofs stay incomplete.
+  The page never talks to calendar servers, explorers, or bitcoind. Stamp
+  on a different, online machine. The proof parser is a public-domain
+  reimplementation; it does not vendor the LGPL JavaScript client.
 - Derives BIP-352 Silent Payment addresses (`sp1q…` / `tsp1q…`) from a seed or
   root xprv, including labeled codes, BIP-392 `spscan` / `spspend` descriptors,
   sender taproot outputs from pasted vin JSON, and receiver verification of

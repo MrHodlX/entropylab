@@ -851,9 +851,9 @@
   await test("tool tabs answer the arrow keys and name themselves in full", async () => {
     const strip = document.getElementById("workspace-tabs");
     const tabs = [...strip.querySelectorAll("[data-workspace]")];
-    assert(tabs.length === 6, `Expected six tool tabs, found ${tabs.length}`);
+    assert(tabs.length === 7, `Expected seven tool tabs, found ${tabs.length}`);
     // The visible label may be abbreviated; the accessible name never is.
-    const names = ["Keys", "BIP-85", "Multi Signature", "Silent Payments", "PSBT / Nonce", "PSBT Editor"];
+    const names = ["Keys", "BIP-85", "Multi Signature", "Silent Payments", "PSBT / Nonce", "PSBT Editor", "OpenTimestamps"];
     tabs.forEach((tab, i) => {
       assert(tab.getAttribute("aria-label") === names[i], `Tab ${i} should be named "${names[i]}"`);
     });
@@ -868,13 +868,13 @@
       assert(tabs[1].getAttribute("aria-selected") === "true", "The reached tab should be selected");
       // End jumps to the last tool, Home returns to the first.
       tabs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
-      await until(() => !document.getElementById("psbted-card").hidden, "End to reach the last tool");
-      assert(document.activeElement === tabs[5], "End should move focus to the last tab");
-      tabs[5].dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+      await until(() => !document.getElementById("ots-card").hidden, "End to reach the last tool");
+      assert(document.activeElement === tabs[6], "End should move focus to the last tab");
+      tabs[6].dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
       await until(() => document.activeElement === tabs[0], "Home to return to the first tab");
       // Left from the first wraps round to the last.
       tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
-      await until(() => document.activeElement === tabs[5], "ArrowLeft to wrap to the last tab");
+      await until(() => document.activeElement === tabs[6], "ArrowLeft to wrap to the last tab");
     } finally {
       document.querySelector('#workspace [data-workspace="calc"]').click();
       await until(() => !document.getElementById("key-manager").hidden, "key workspace");

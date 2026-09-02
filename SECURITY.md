@@ -74,6 +74,11 @@ material. Its security posture rests on the following model:
   addresses, sender outputs, and spend tweaks from user-supplied keys and
   pasted transaction data. It does not connect to a node, Electrum server, or
   indexer, and cannot detect payments on its own.
+- OpenTimestamps support is a calculator: it hashes local bytes and replays
+  a detached `.ots` proof against a block header or merkle root the user
+  pastes. It does not contact calendar servers, block explorers, or a node.
+  A pending calendar URI is not a Bitcoin attestation. The header is never
+  taken from the proof — a lying header makes a lying timestamp.
 - Inscription envelope detection is a parser of witness/tap-leaf scripts. It
   does not render inscription media, assign sat numbers, or contact an indexer.
 - OP_RETURN detection is a parser of output scripts. It does not create

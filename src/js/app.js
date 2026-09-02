@@ -33,6 +33,7 @@ import { wordlist as bip39English } from "./bip39-english.js";
 import { initPsbtEditor } from "./psbt-editor.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
+import { hashSha256 as hodlOtsHash, inspectProof as hodlInspectOts, parseChainInput as hodlParseOtsChain, parseHexBytes as hodlParseOtsHex, parseProof as hodlParseOtsProof, summarizeInspect as hodlSummarizeOts } from "./ots.js";
 import { t as hodlT, hodlInitLocale, hodlFillLocaleSelect, hodlGetLocale } from "./i18n.js";
 const hodlBip39Wordlist = Object.freeze(bip39English);
 function hodlNote(key, vars) {
@@ -939,6 +940,53 @@ hodlRootEl.innerHTML = `
       <div id="psbted-out" aria-live="polite"></div>
       <p class="muted">Fees and input amounts shown here are unverified PSBT claims; the editor does not check them against previous transactions or the blockchain. Nothing is signed or broadcast.</p>
     </section>
+    <div class="tool-intro" id="ots-tool-intro" hidden>
+        <div class="kicker">Hash here. Stamp elsewhere. Verify against your node.</div>
+        <h2>OpenTimestamps calculator</h2>
+        <p class="muted tool-intro-note">Peter Todd's OpenTimestamps proves bytes existed before a Bitcoin block. This page does not talk to calendar servers or explorers. Hash a file for later stamping on a different, online machine. Verify a complete .ots proof by pasting the 80-byte header (or merkle root) from your node. Incomplete calendar proofs stay incomplete.</p>
+      </div>
+      <section class="card no-print" id="ots-card" role="tabpanel" hidden>
+      <div class="row segmented-control" id="ots-modes" role="group" aria-label="OpenTimestamps mode">
+        <button type="button" class="tab active" data-ots-mode="hash" aria-pressed="true">Hash</button>
+        <button type="button" class="tab" data-ots-mode="verify" aria-pressed="false">Verify</button>
+      </div>
+      <div id="ots-hash-panel">
+        <label class="field">Bytes to hash
+          <textarea id="ots-hash-text" placeholder="Paste text, or leave blank and choose a file" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        </label>
+        <label class="field">Or a file
+          <input id="ots-hash-file" type="file">
+        </label>
+        <div class="row bip85-actions">
+          <button class="btn primary" id="ots-hash-go" type="button">Hash SHA-256</button>
+        </div>
+        <div id="ots-hash-out" aria-live="polite"></div>
+      </div>
+      <div id="ots-verify-panel" hidden>
+        <label class="field">OpenTimestamps proof (.ots or hex)
+          <textarea id="ots-proof-text" placeholder="Paste hex, or choose a .ots file" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        </label>
+        <label class="field">.ots file
+          <input id="ots-proof-file" type="file" accept=".ots,.txt">
+        </label>
+        <label class="field">Original file or text
+          <textarea id="ots-original-text" placeholder="The bytes the proof commits to" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        </label>
+        <label class="field">Original file
+          <input id="ots-original-file" type="file">
+        </label>
+        <label class="field">Block header or merkle root from your node
+          <textarea id="ots-header-text" placeholder="80-byte header hex, or 32-byte merkle root from bitcoin-cli getblockheader" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          <span class="field-note">Never taken from the proof. A lying header makes a lying timestamp.</span>
+        </label>
+        <div class="row bip85-actions">
+          <button class="btn primary" id="ots-verify-go" type="button">Verify proof</button>
+        </div>
+        <div id="ots-verify-out" aria-live="polite"></div>
+      </div>
+      <p class="err" id="ots-error" role="alert"></p>
+      <p class="muted">This page never contacts calendars, explorers, or a node. Stamp with ots stamp or opentimestamps.org on a different machine. Pending calendar attestations are not a Bitcoin attestation.</p>
+    </section>
     </div>
     <section class="card muted sources">
       <h3 class="sources-heading">Sources</h3>
@@ -950,6 +998,7 @@ hodlRootEl.innerHTML = `
       <p>BIP-85 deterministic entropy: <a href="https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki" target="_blank" rel="noopener noreferrer">bip-0085.mediawiki</a> — HMAC-SHA512 of a fully hardened child; English BIP-39 / WIF / XPRV / HEX / password applications match COLDCARD.</p>
       <p>BIP-352 Silent Payments: <a href="https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki" target="_blank" rel="noopener noreferrer">bips/bip-0352</a> — reusable <code>sp1q…</code> addresses and unique taproot outputs. Descriptors: <a href="https://github.com/bitcoin/bips/blob/master/bip-0392.mediawiki" target="_blank" rel="noopener noreferrer">BIP-392</a>.</p>
       <p>Inscription envelopes: <a href="https://docs.ordinals.com/inscriptions.html" target="_blank" rel="noopener noreferrer">docs.ordinals.com/inscriptions</a> — <code>OP_FALSE OP_IF "ord"</code> parser only. This tool does not create inscriptions or number sats.</p>
+      <p>OpenTimestamps: <a href="https://opentimestamps.org/" target="_blank" rel="noopener noreferrer">opentimestamps.org</a> — Peter Todd's Bitcoin timestamp proofs. This page hashes and verifies offline; it does not talk to calendar servers.</p>
     </section>
     <footer class="page-footer muted no-print"><div>Team Ooga Booga</div><div class="page-footer-emoji">🪨 🔥 🎲 🍌</div><div>Since 964013 · <span class="page-footer-build">v{{VERSION}} · commit <code>{{COMMIT_SHORT}}</code> <img class="page-footer-lifehash" id="page-footer-lifehash" data-commit="{{COMMIT}}" width="20" height="20" alt="LifeHash of the build commit" hidden></span></div><div class="page-footer-links"><a class="btn secondary github-repo-link" href="https://github.com/w-s-bitcoin/entropylab" target="_blank" rel="noopener noreferrer" aria-label="View the EntropyLab GitHub repository in a new tab"><svg class="github-mark" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span class="control-label">GitHub</span></a><button type="button" class="theme-toggle" id="theme-toggle" data-theme-mode="dark" aria-label="Theme: dark. Switch to light"><svg class="theme-icon-dark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="theme-icon-light" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button></div></footer>
   </div>
@@ -9150,6 +9199,101 @@ function hodlInitBip85() {
   }
   hodlBip85SyncOptions();
 }
+function hodlOtsSetError(message) {
+  let el = document.getElementById("ots-error");
+  if (el) el.textContent = message || "";
+}
+function hodlOtsCopy(button, text) {
+  if (!text) return;
+  let done = () => {
+    let previous = button.textContent;
+    button.textContent = "Copied";
+    clearTimeout(button.hodlCopiedTimer);
+    button.hodlCopiedTimer = setTimeout(() => {
+      button.textContent = previous;
+    }, 1500);
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, done);
+  else done();
+}
+function hodlOtsReadFile(input) {
+  let file = input?.files?.[0];
+  if (!file) return Promise.resolve(null);
+  return file.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+}
+function hodlOtsSetMode(mode) {
+  let hash = mode === "hash";
+  document.querySelectorAll("#ots-modes [data-ots-mode]").forEach((button) => {
+    let on = button.dataset.otsMode === mode;
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+  document.getElementById("ots-hash-panel").hidden = !hash;
+  document.getElementById("ots-verify-panel").hidden = hash;
+  hodlOtsSetError("");
+}
+function hodlOtsHashGo() {
+  hodlOtsSetError("");
+  let out = document.getElementById("ots-hash-out");
+  out.innerHTML = "";
+  let finish = (bytes, label) => {
+    if (!bytes || !bytes.length) throw new Error("Paste text or choose a file to hash.");
+    let digest = hodlHex.encode(hodlOtsHash(bytes));
+    out.innerHTML = `<p class="label">SHA-256</p><p class="mono ots-digest" id="ots-hash-digest">${digest}</p><p class="muted">${label}, ${bytes.length} byte${bytes.length === 1 ? "" : "s"}. Copy the hex and stamp it on a different, online machine. This page will not contact a calendar.</p><div class="row bip85-actions"><button class="btn secondary" id="ots-hash-copy" type="button">Copy hash</button></div>`;
+    document.getElementById("ots-hash-copy").onclick = () => hodlOtsCopy(document.getElementById("ots-hash-copy"), digest);
+  };
+  hodlOtsReadFile(document.getElementById("ots-hash-file")).then((fileBytes) => {
+    if (fileBytes) {
+      finish(fileBytes, document.getElementById("ots-hash-file").files[0].name);
+      return;
+    }
+    finish(new TextEncoder().encode(document.getElementById("ots-hash-text").value), "Pasted text");
+  }).catch((error) => {
+    hodlOtsSetError(error instanceof Error ? error.message : String(error));
+  });
+}
+function hodlOtsProofBytes(text, fileBytes) {
+  if (fileBytes && fileBytes.length) return fileBytes;
+  let raw = (text || "").trim();
+  if (!raw) throw new Error("Paste a proof or choose a .ots file.");
+  if (/^[0-9a-fA-Fx\s]+$/.test(raw) && raw.replace(/[\s0x]/gi, "").length >= 16) return hodlParseOtsHex(raw);
+  return new TextEncoder().encode(raw);
+}
+function hodlOtsVerifyGo() {
+  hodlOtsSetError("");
+  let out = document.getElementById("ots-verify-out");
+  out.innerHTML = "";
+  Promise.all([
+    hodlOtsReadFile(document.getElementById("ots-proof-file")),
+    hodlOtsReadFile(document.getElementById("ots-original-file"))
+  ]).then(([proofFile, originalFile]) => {
+    let proof = hodlParseOtsProof(hodlOtsProofBytes(document.getElementById("ots-proof-text").value, proofFile));
+    let original = originalFile;
+    if (!original) {
+      let text = document.getElementById("ots-original-text").value;
+      if (text) original = new TextEncoder().encode(text);
+    }
+    let headerText = document.getElementById("ots-header-text").value.trim();
+    let chain = headerText ? hodlParseOtsChain(headerText) : null;
+    let result = hodlInspectOts(proof, { bytes: original || undefined, chain });
+    let klass = result.status === "verified" ? "ots-ok" : result.status === "pending" || result.status === "unverified" ? "ots-warn" : "ots-bad";
+    let pending = result.pending.length ? `<p class="muted">Pending calendar (text only, not fetched): <code>${result.pending.map((uri) => uri.replace(/</g, "")).join("</code>, <code>")}</code></p>` : "";
+    let bitcoin = result.bitcoin.map((item) => `<p class="mono">height ${item.height} · digest ${item.digestHex}${item.status === "verified" ? " · match" : item.status === "mismatch" ? " · mismatch" : " · header not pasted"}</p>`).join("");
+    out.innerHTML = `<p class="label ${klass}">${hodlSummarizeOts(result)}</p><p class="muted">File SHA-256 <code>${result.fileHashHex}</code>${result.bytesMatch == null ? " · original bytes not supplied" : result.bytesMatch ? " · original matches" : " · original does not match"}</p>${bitcoin}${pending}`;
+  }).catch((error) => {
+    hodlOtsSetError(error instanceof Error ? error.message : String(error));
+  });
+}
+function hodlInitOts() {
+  let hashGo = document.getElementById("ots-hash-go");
+  let verifyGo = document.getElementById("ots-verify-go");
+  if (!hashGo || !verifyGo) return;
+  document.querySelectorAll("#ots-modes [data-ots-mode]").forEach((button) => {
+    button.addEventListener("click", () => hodlOtsSetMode(button.dataset.otsMode));
+  });
+  hashGo.addEventListener("click", hodlOtsHashGo);
+  verifyGo.addEventListener("click", hodlOtsVerifyGo);
+}
 function hodlRunPsbt() {
   let output = document.getElementById("psbt-out"), manual = document.getElementById("psbt-key").value;
   hodlSetPsbtError(null);
@@ -11042,9 +11186,10 @@ function hodlShowWorkspace(id) {
   document.getElementById("psbted-card").hidden = id !== "psbted";
   document.getElementById("bip85-card").hidden = id !== "bip85";
   document.getElementById("sp-card").hidden = id !== "sp";
+  document.getElementById("ots-card").hidden = id !== "ots";
   // The context block sits outside its tool's card, so it is shown and hidden
   // with the card rather than by it.
-  ["psbt", "psbted", "bip85", "sp", "msig", "calc"].forEach((tool) => {
+  ["psbt", "psbted", "bip85", "sp", "msig", "calc", "ots"].forEach((tool) => {
     document.getElementById(`${tool}-tool-intro`).hidden = id !== tool;
   });
   hodlWalletResult = null;
@@ -11160,7 +11305,7 @@ function hodlInitDefaultTabStates() {
 }
 // Each tool carries a full name and a short one. Narrow screens show the
 // short form so more tools stay on screen instead of off the right edge.
-var hodlWorkspaceTabs = [["calc", "workspace.key", "workspace.keyShort"], ["bip85", "workspace.bip85", "workspace.bip85Short"], ["msig", "workspace.msig", "workspace.msigShort"], ["sp", "workspace.sp", "workspace.spShort"], ["psbt", "workspace.psbt", "workspace.psbtShort"], ["psbted", "workspace.psbted", "workspace.psbtedShort"]];
+var hodlWorkspaceTabs = [["calc", "workspace.key", "workspace.keyShort"], ["bip85", "workspace.bip85", "workspace.bip85Short"], ["msig", "workspace.msig", "workspace.msigShort"], ["sp", "workspace.sp", "workspace.spShort"], ["psbt", "workspace.psbt", "workspace.psbtShort"], ["psbted", "workspace.psbted", "workspace.psbtedShort"], ["ots", "workspace.ots", "workspace.otsShort"]];
 // The switcher keeps every tool on screen as a folder-tab strip that scrolls
 // when it must, in the shape the Keys section uses for its own tabs.
 function hodlWorkspaceTabKeydown(event, index) {
@@ -11237,6 +11382,7 @@ function hodlInitWorkspace() {
   initPsbtEditor();
   hodlInitBip85();
   hodlInitSp();
+  hodlInitOts();
 }
 var hodlKeyClearSyncQueued = false, hodlMsigClearSyncQueued = false, hodlDeriveSyncQueued = false;
 function hodlQueueKeyClearButtonSync() {
