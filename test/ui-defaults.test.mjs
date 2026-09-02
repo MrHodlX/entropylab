@@ -1650,7 +1650,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   assert.match(appSource, /<nav class="workspace no-print" id="workspace"><\/nav>/);
   assert.doesNotMatch(template, /segmented-control" id="workspace"/);
   assert.match(template, /<div class="workspace-tabs" id="workspace-tabs" role="tablist" aria-label="Tool">/);
-  // All five tools ship in the static markup, each with a full name and the
+  // All seven tools ship in the static markup, each with a full name and the
   // short form narrow screens show instead.
   for (const [full, short, key, shortKey] of [["Keys", "Keys", "workspace.key", "workspace.keyShort"], ["BIP-85", "BIP85", "workspace.bip85", "workspace.bip85Short"], ["Multi Signature", "MultiSig", "workspace.msig", "workspace.msigShort"], ["Silent Payments", "SP", "workspace.sp", "workspace.spShort"], ["PSBT / Nonce", "PSBT", "workspace.psbt", "workspace.psbtShort"], ["PSBT Editor", "Editor", "workspace.psbted", "workspace.psbtedShort"], ["OpenTimestamps", "OTS", "workspace.ots", "workspace.otsShort"]]) {
     assert.ok(

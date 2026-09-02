@@ -974,9 +974,9 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .workspace-tabs.dragging, .workspace-tabs.dragging .workspace-tab { cursor: grabbing; user-select: none; }
 .workspace-tab {
   position: relative; display: inline-flex; align-items: center; flex: 0 0 auto;
-  width: max-content; min-height: 44px; padding: 0 16px; white-space: nowrap;
+  width: max-content; min-height: 44px; padding: 0 10px; white-space: nowrap;
   border: 1px solid transparent; border-radius: 10px 10px 0 0; background: transparent;
-  color: var(--muted); font-weight: 600;
+  color: var(--muted); font-weight: 600; font-size: 14px;
 }
 .workspace-tab:not(.active):hover { background: color-mix(in oklab, var(--surface-2) 60%, transparent); color: var(--fg); }
 /* Hairlines between neighbours, dropped beside the active tab and at the end,

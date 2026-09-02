@@ -981,10 +981,18 @@
     assert(!hint.hasAttribute("aria-hidden"), "An interactive control must not be hidden from assistive tech");
     assert(hint.getAttribute("aria-label"), "The hint needs a label naming what it does");
     const width = strip.style.maxWidth;
+    const wrap = document.querySelector(".wrap");
+    const wrapMax = wrap.style.maxWidth;
     try {
       // Wide enough for every tab: nothing is out of reach, so no hint.
+      // The wrap is 1000px; adding a tool can overflow that, so the test
+      // gives the strip a known wide parent rather than assuming the page.
+      wrap.style.maxWidth = "1600px";
+      strip.style.maxWidth = "";
+      strip.scrollLeft = 0;
       await until(() => hint.hidden, "the hint to stay hidden when every tool fits");
       // Squeeze the strip until tabs overflow.
+      wrap.style.maxWidth = wrapMax;
       strip.style.maxWidth = "180px";
       await until(() => !hint.hidden, "the hint to appear once tools overflow");
       assert(/more tools/i.test(hint.textContent), "The hint should name what is off-screen");
@@ -1003,6 +1011,7 @@
         "A single click should land at the far right, not part of the way",
       );
     } finally {
+      wrap.style.maxWidth = wrapMax;
       strip.style.maxWidth = width;
       strip.scrollLeft = 0;
     }
