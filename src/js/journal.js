@@ -1,26 +1,24 @@
 // Entropy Journal: an encrypted, downloadable notebook of entropy the user
 // already produced. It is a calculator companion, not a password manager and
-// not a key generator. The AES-256-GCM key is HKDF-SHA-256 of dice rolls the
-// user supplies — never a typed password, never CSPRNG for secret material.
-// getRandomValues for secret material.
+// not a key generator.
 //
-// crypto.getRandomValues is used only for the public HKDF salt (16 bytes,
-// once per journal) and the public AES-GCM IV (12 bytes, once per save).
-// Both are stored in the downloaded file in the clear. They are AEAD
-// parameters, not wallet entropy, and cannot become keys, seeds, or
-// passphrases. Same dice plus the same file always decrypts; a new journal
-// with the same dice is a different file because the salt is different.
+// Encryption is a pure function of the user's password and the entries — the
+// journal never calls a CSPRNG. The AES-256-GCM key is PBKDF2-SHA-256
+// (600,000 rounds) of the password, with the salt derived from the password
+// itself under a domain separator. The IV is HMAC-SHA-256 of the plaintext
+// under a second derived key (a synthetic IV), so the same password and the
+// same entries always produce the same file.
 import { hex as hexCoder } from "./coders.js";
 
-export const JOURNAL_VERSION = 1;
-export const JOURNAL_KDF = "HKDF-SHA-256";
+export const JOURNAL_VERSION = 2;
+export const JOURNAL_KDF = "PBKDF2-SHA-256";
 export const JOURNAL_CIPHER = "AES-256-GCM";
-export const JOURNAL_INFO = "entropylab-journal-v1";
-export const JOURNAL_VERIFY_PREFIX = "entropylab-journal-verify:";
-export const SALT_BYTES = 16;
+export const JOURNAL_ITERATIONS = 600_000; // OWASP 2023 floor for PBKDF2-HMAC-SHA-256
+export const JOURNAL_MIN_ITERATIONS = 100_000; // never open a file cheaper than this
+export const JOURNAL_MAX_ITERATIONS = 10_000_000; // a crafted file must not hang the page
+export const JOURNAL_SALT_PREFIX = "entropylab-journal-salt-v1:";
 export const IV_BYTES = 12;
-export const DICE_MIN_ROLLS = 50; // log2(6)*50 ≈ 129 bits
-export const DICE_RECOMMENDED_ROLLS = 99; // log2(6)*99 ≈ 256 bits
+export const PASSWORD_MIN_LENGTH = 12;
 export const METHODS = Object.freeze(["dice", "coin", "hex", "brain", "seed", "cards"]);
 export const METHOD_LABELS = Object.freeze({
   dice: "Dice rolls",
@@ -56,50 +54,10 @@ export function wipeDocument(doc) {
   doc.nextId = 1;
 }
 
-export function diceBits(rolls) {
-  const n = typeof rolls === "number" ? rolls : 0;
-  return n <= 0 ? 0 : n * Math.log2(6);
-}
-
-export function parseDiceTranscript(text) {
-  const raw = String(text ?? "");
-  const rolls = [];
-  let leftover = "";
-  for (const ch of raw) {
-    if (/\s|,|;|\|/.test(ch)) continue;
-    if (ch >= "1" && ch <= "6") rolls.push(ch);
-    else leftover += ch;
-  }
-  return {
-    digits: rolls.join(""),
-    count: rolls.length,
-    bits: diceBits(rolls.length),
-    leftover,
-  };
-}
-
-export function assertDiceKey(text, { confirm } = {}) {
-  const parsed = parseDiceTranscript(text);
-  if (parsed.count < DICE_MIN_ROLLS) {
-    throw new Error(`Journal key needs at least ${DICE_MIN_ROLLS} six-sided dice rolls (about 129 bits). You entered ${parsed.count}.`);
-  }
-  if (parsed.leftover) throw new Error("Journal key dice must be the digits 1–6. Other characters were entered.");
-  if (confirm != null) {
-    const other = parseDiceTranscript(confirm);
-    if (other.digits !== parsed.digits) throw new Error("The two dice transcripts do not match.");
-  }
-  return parsed;
-}
-
-// Public AEAD parameters only. Not secret wallet entropy.
-export function publicRandomBytes(length) {
-  if (!Number.isInteger(length) || length < 1 || length > 1024) throw new Error("Random length must be an integer from 1 to 1024.");
-  if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
-    throw new Error("This host has no CSPRNG. Open EntropyLab in a current browser on a trusted computer.");
-  }
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  return bytes;
+export function assertPassword(password, { confirm } = {}) {
+  if (typeof password !== "string" || !password) throw new Error("Journal password is missing.");
+  if (Array.from(password).length < PASSWORD_MIN_LENGTH) throw new Error(`Journal password needs at least ${PASSWORD_MIN_LENGTH} characters.`);
+  if (confirm != null && confirm !== password) throw new Error("The two passwords do not match.");
 }
 
 function requireSubtle() {
@@ -109,33 +67,45 @@ function requireSubtle() {
   return crypto.subtle;
 }
 
-export async function verifyDigest(digits) {
+// The PBKDF2 salt is derived from the password itself (domain-separated), not
+// generated: the journal file stays a pure function of what the user typed.
+// Salts still differ between passwords, so no precomputed table can be shared
+// from one password to the next.
+async function deriveMasterBits(password, iterations) {
   const subtle = requireSubtle();
-  const bytes = encoder.encode(JOURNAL_VERIFY_PREFIX + digits);
+  const ikm = encoder.encode(password);
+  const saltInput = encoder.encode(JOURNAL_SALT_PREFIX + password);
+  let baseKey;
   try {
-    return new Uint8Array(await subtle.digest("SHA-256", bytes));
+    const salt = new Uint8Array(await subtle.digest("SHA-256", saltInput));
+    try {
+      baseKey = await subtle.importKey("raw", ikm, "PBKDF2", false, ["deriveBits"]);
+      return new Uint8Array(await subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, baseKey, 512));
+    } finally {
+      wipeBytes(salt);
+    }
   } finally {
-    wipeBytes(bytes);
+    wipeBytes(ikm);
+    wipeBytes(saltInput);
   }
 }
 
-export async function deriveJournalKey(digits, salt) {
-  if (typeof digits !== "string" || !digits) throw new Error("Journal key dice are missing.");
-  if (!(salt instanceof Uint8Array) || salt.length !== SALT_BYTES) throw new Error("Journal salt must be 16 bytes.");
+// One PBKDF2 run yields 512 bits: the first half keys AES-GCM, the second
+// keys the HMAC that derives IVs. Both are imported non-extractable.
+export async function deriveJournalKeys(password, iterations = JOURNAL_ITERATIONS) {
+  if (typeof password !== "string" || !password) throw new Error("Journal password is missing.");
+  if (!Number.isInteger(iterations) || iterations < JOURNAL_MIN_ITERATIONS || iterations > JOURNAL_MAX_ITERATIONS) {
+    throw new Error("This journal file uses an unsupported key-derivation cost.");
+  }
   const subtle = requireSubtle();
-  const ikm = encoder.encode(digits);
-  let baseKey;
+  const master = await deriveMasterBits(password, iterations);
   try {
-    baseKey = await subtle.importKey("raw", ikm, "HKDF", false, ["deriveKey"]);
-    return await subtle.deriveKey(
-      { name: "HKDF", hash: "SHA-256", salt, info: encoder.encode(JOURNAL_INFO) },
-      baseKey,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt", "decrypt"],
-    );
+    const encKey = await subtle.importKey("raw", master.subarray(0, 32), { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    const ivKey = await subtle.importKey("raw", master.subarray(32), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const verify = new Uint8Array(await subtle.digest("SHA-256", master));
+    return { encKey, ivKey, verify, iterations };
   } finally {
-    wipeBytes(ikm);
+    wipeBytes(master);
   }
 }
 
@@ -247,15 +217,15 @@ export function snapshotFromKeyState(state) {
   };
 }
 
-export function encodeFile({ salt, iv, ciphertext }) {
-  if (!(salt instanceof Uint8Array) || salt.length !== SALT_BYTES) throw new Error("Journal salt must be 16 bytes.");
+export function encodeFile({ iv, ciphertext, iterations = JOURNAL_ITERATIONS }) {
   if (!(iv instanceof Uint8Array) || iv.length !== IV_BYTES) throw new Error("Journal IV must be 12 bytes.");
   if (!(ciphertext instanceof Uint8Array) || !ciphertext.length) throw new Error("Journal ciphertext is missing.");
+  if (!Number.isInteger(iterations) || iterations < JOURNAL_MIN_ITERATIONS || iterations > JOURNAL_MAX_ITERATIONS) throw new Error("Journal iteration count is out of range.");
   return {
     entropylabJournal: JOURNAL_VERSION,
     kdf: JOURNAL_KDF,
+    iterations,
     cipher: JOURNAL_CIPHER,
-    salt: hexCoder.encode(salt),
     iv: hexCoder.encode(iv),
     ciphertext: hexCoder.encode(ciphertext),
   };
@@ -270,18 +240,20 @@ export function parseFile(text) {
   }
   if (!parsed || parsed.entropylabJournal !== JOURNAL_VERSION) throw new Error("That file is not an EntropyLab journal.");
   if (parsed.kdf !== JOURNAL_KDF || parsed.cipher !== JOURNAL_CIPHER) throw new Error("This journal uses an unsupported cipher.");
-  let salt, iv, ciphertext;
+  if (!Number.isInteger(parsed.iterations) || parsed.iterations < JOURNAL_MIN_ITERATIONS || parsed.iterations > JOURNAL_MAX_ITERATIONS) {
+    throw new Error("This journal uses an unsupported key-derivation cost.");
+  }
+  let iv, ciphertext;
   try {
-    salt = hexCoder.decode(String(parsed.salt || ""));
     iv = hexCoder.decode(String(parsed.iv || ""));
     ciphertext = hexCoder.decode(String(parsed.ciphertext || ""));
   } catch {
-    throw new Error("That journal file is missing salt, IV, or ciphertext.");
+    throw new Error("That journal file is missing its IV or ciphertext.");
   }
-  if (salt.length !== SALT_BYTES || iv.length !== IV_BYTES || !ciphertext.length) {
-    throw new Error("That journal file is missing salt, IV, or ciphertext.");
+  if (iv.length !== IV_BYTES || !ciphertext.length) {
+    throw new Error("That journal file is missing its IV or ciphertext.");
   }
-  return { salt, iv, ciphertext };
+  return { iv, ciphertext, iterations: parsed.iterations };
 }
 
 function parseDocument(plain) {
@@ -299,38 +271,44 @@ function parseDocument(plain) {
   return { version: JOURNAL_VERSION, nextId, entries };
 }
 
-export async function sealDocument(doc, key, salt, randomBytes = publicRandomBytes) {
-  if (!key) throw new Error("Unlock the journal before saving.");
-  if (!(salt instanceof Uint8Array) || salt.length !== SALT_BYTES) throw new Error("Journal salt must be 16 bytes.");
+// The IV is a synthetic nonce — HMAC-SHA-256 of the plaintext under its own
+// derived key. The same password and entries produce the same file; two
+// different plaintexts share an IV only on an HMAC collision. No randomness
+// is generated, matching the rest of EntropyLab.
+export async function sealDocument(doc, keys) {
+  if (!keys?.encKey || !keys?.ivKey) throw new Error("Unlock the journal before saving.");
   const subtle = requireSubtle();
-  const iv = randomBytes(IV_BYTES);
   const plain = encoder.encode(JSON.stringify({
     version: JOURNAL_VERSION,
     nextId: doc.nextId,
     entries: doc.entries,
   }));
   try {
-    const ciphertext = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
-    return encodeFile({ salt, iv, ciphertext });
+    const tag = new Uint8Array(await subtle.sign("HMAC", keys.ivKey, plain));
+    try {
+      const iv = tag.slice(0, IV_BYTES);
+      const ciphertext = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv }, keys.encKey, plain));
+      return encodeFile({ iv, ciphertext, iterations: keys.iterations });
+    } finally {
+      wipeBytes(tag);
+    }
   } finally {
     wipeBytes(plain);
   }
 }
 
-export async function openDocument(file, digits) {
+export async function openDocument(file, password) {
   const parsed = parseFile(file);
-  const key = await deriveJournalKey(digits, parsed.salt);
+  const keys = await deriveJournalKeys(password, parsed.iterations);
   const subtle = requireSubtle();
   let plainBytes;
   try {
-    plainBytes = new Uint8Array(await subtle.decrypt({ name: "AES-GCM", iv: parsed.iv }, key, parsed.ciphertext));
+    plainBytes = new Uint8Array(await subtle.decrypt({ name: "AES-GCM", iv: parsed.iv }, keys.encKey, parsed.ciphertext));
   } catch {
-    throw new Error("Wrong dice, or the file is damaged.");
+    throw new Error("Wrong password, or the file is damaged.");
   }
   try {
-    const doc = parseDocument(decoder.decode(plainBytes));
-    const digest = await verifyDigest(digits);
-    return { key, salt: parsed.salt, doc, verify: digest };
+    return { keys, doc: parseDocument(decoder.decode(plainBytes)) };
   } finally {
     wipeBytes(plainBytes);
     wipeBytes(parsed.iv);
@@ -338,10 +316,7 @@ export async function openDocument(file, digits) {
   }
 }
 
-export async function createDocument(dice, confirm, randomBytes = publicRandomBytes) {
-  const parsed = assertDiceKey(dice, { confirm });
-  const salt = randomBytes(SALT_BYTES);
-  const key = await deriveJournalKey(parsed.digits, salt);
-  const digest = await verifyDigest(parsed.digits);
-  return { key, salt, doc: emptyDocument(), verify: digest };
+export async function createDocument(password, confirm) {
+  assertPassword(password, { confirm });
+  return { keys: await deriveJournalKeys(password), doc: emptyDocument() };
 }

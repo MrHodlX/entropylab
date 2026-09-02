@@ -34,7 +34,7 @@ import { initPsbtEditor } from "./psbt-editor.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
 import { t as hodlT, hodlInitLocale, hodlFillLocaleSelect, hodlGetLocale } from "./i18n.js";
-import { METHOD_LABELS as hodlJournalMethodLabels, addEntry as hodlJournalAddEntry, createDocument as hodlJournalCreateDocument, openDocument as hodlJournalOpenDocument, parseDiceTranscript, removeEntry as hodlJournalRemoveEntry, replaceEntry as hodlJournalReplaceEntry, searchEntries as hodlJournalSearch, sealDocument as hodlJournalSealDocument, snapshotFromKeyState as hodlJournalSnapshot, wipeBytes as hodlJournalWipeBytes, wipeDocument as hodlJournalWipeDocument } from "./journal.js";
+import { METHOD_LABELS as hodlJournalMethodLabels, addEntry as hodlJournalAddEntry, createDocument as hodlJournalCreateDocument, openDocument as hodlJournalOpenDocument, removeEntry as hodlJournalRemoveEntry, replaceEntry as hodlJournalReplaceEntry, searchEntries as hodlJournalSearch, sealDocument as hodlJournalSealDocument, snapshotFromKeyState as hodlJournalSnapshot, wipeBytes as hodlJournalWipeBytes, wipeDocument as hodlJournalWipeDocument } from "./journal.js";
 const hodlBip39Wordlist = Object.freeze(bip39English);
 function hodlNote(key, vars) {
   return vars == null ? { key } : { key, vars };
@@ -683,7 +683,7 @@ hodlRootEl.innerHTML = `
     <div class="tool-intro" id="journal-tool-intro" hidden>
         <div class="kicker">Your rolls, on paper you control.</div>
         <h2>Entropy Journal</h2>
-        <p class="muted journal-intro">An encrypted notebook of entropy you already produced \u2014 dice, coins, hex, brain-wallet text, or a seed. The file stays on your machine. The encryption key is dice you roll at setup, never a typed password. This is not a password manager and does not invent entropy.</p>
+        <p class="muted journal-intro">An encrypted notebook of entropy you already produced \u2014 dice, coins, hex, brain-wallet text, or a seed. The file stays on your machine and opens with a password you choose. Encryption is a pure function of the password and the entries \u2014 nothing is generated for you. This is not a password manager and does not invent entropy.</p>
       </div>
       <section class="card no-print" id="journal-card" role="tabpanel" hidden>
       <div id="journal-locked-panel">
@@ -692,12 +692,12 @@ hodlRootEl.innerHTML = `
           <button type="button" class="tab" data-journal-gate="open" aria-pressed="false">Open file</button>
         </div>
         <div id="journal-create-panel">
-          <label class="field">Dice for the journal key
-            <textarea id="journal-create-dice" placeholder="Roll at least 50 six-sided dice. Spaces are fine." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
-            <span class="field-note" id="journal-create-dice-help">50 rolls \u2248 129 bits \xB7 99 rolls \u2248 256 bits. This is the key, not a wallet seed.</span>
+          <label class="field">Password for the journal
+            <input id="journal-create-password" type="password" placeholder="At least 12 characters" autocomplete="new-password">
+            <span class="field-note">A long passphrase you can picture beats a short clever one. There is no recovery: lose the password and the file stays sealed.</span>
           </label>
-          <label class="field">Confirm the same rolls
-            <textarea id="journal-create-dice-confirm" placeholder="Enter the same rolls again" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          <label class="field">Confirm the password
+            <input id="journal-create-confirm" type="password" placeholder="Enter the same password again" autocomplete="new-password">
           </label>
           <div class="row bip85-actions">
             <button class="btn primary" id="journal-create" type="button">Create journal</button>
@@ -707,8 +707,8 @@ hodlRootEl.innerHTML = `
           <label class="field">Encrypted journal file
             <input id="journal-file" type="file" accept=".json,application/json">
           </label>
-          <label class="field">Dice for the journal key
-            <textarea id="journal-open-dice" placeholder="The rolls used when this file was created" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          <label class="field">Password for the journal
+            <input id="journal-open-password" type="password" placeholder="The password used when this file was created" autocomplete="off">
           </label>
           <div class="row bip85-actions">
             <button class="btn primary" id="journal-unlock" type="button">Open journal</button>
@@ -768,7 +768,7 @@ hodlRootEl.innerHTML = `
         <div id="journal-view" hidden></div>
       </div>
       <p class="err" id="journal-error" role="alert"></p>
-      <p class="muted">The journal lives in this page until you save the encrypted file. Anyone with that file and the journal dice can read every entry. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
+      <p class="muted">The journal lives in this page until you save the encrypted file. Anyone with that file and the journal password can read every entry. Memory clearing is best-effort; close the page before reconnecting the computer.</p>
     </section>
       <div class="tool-intro" id="msig-tool-intro" hidden>
         <div class="kicker">Multiple keys, one wallet</div>
@@ -1040,7 +1040,7 @@ hodlRootEl.innerHTML = `
       <p>D++ D8 &amp; D16 method: <a href="https://thesimplestbitcoinbook.net/wp-content/uploads/2023/09/Roll-Your-Own-Seed-Phrase-PDF.pdf" target="_blank" rel="noopener noreferrer">Roll Your Own Bitcoin Seed Phrase</a> \u2014 the published 24-word workflow uses one D8 labeled 1\u20138 and two hexadecimal D16 dice labeled 0\u2013F per word, then a final D8.</p>
       <p>Jade anti-exfil (sign-to-contract): <a href="https://blog.blockstream.com/anti-exfil-stopping-key-exfiltration/" target="_blank" rel="noopener noreferrer">Anti-Exfil: Stopping Key Exfiltration</a> \u2014 secp256k1-zkp <code>ecdsa_s2c</code> / <code>anti_exfil_host_verify</code>.</p>
       <p>BIP-85 deterministic entropy: <a href="https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki" target="_blank" rel="noopener noreferrer">bip-0085.mediawiki</a> — HMAC-SHA512 of a fully hardened child; English BIP-39 / WIF / XPRV / HEX / password applications match COLDCARD.</p>
-      <p>Entropy Journal: AES-256-GCM with HKDF-SHA-256 from user-supplied dice (Web Crypto). Salt and IV are stored with the ciphertext. No relays, no accounts, no localStorage for secrets.</p>
+      <p>Entropy Journal: AES-256-GCM from a typed password (Web Crypto) — PBKDF2-SHA-256, 600,000 rounds, with the salt derived from the password itself; the IV is HMAC-SHA-256 of the plaintext, so the same password and entries always reproduce the same file. No relays, no accounts, no localStorage for secrets.</p>
       <p>BIP-352 Silent Payments: <a href="https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki" target="_blank" rel="noopener noreferrer">bips/bip-0352</a> — reusable <code>sp1q…</code> addresses and unique taproot outputs. Descriptors: <a href="https://github.com/bitcoin/bips/blob/master/bip-0392.mediawiki" target="_blank" rel="noopener noreferrer">BIP-392</a>.</p>
       <p>Inscription envelopes: <a href="https://docs.ordinals.com/inscriptions.html" target="_blank" rel="noopener noreferrer">docs.ordinals.com/inscriptions</a> — <code>OP_FALSE OP_IF "ord"</code> parser only. This tool does not create inscriptions or number sats.</p>
     </section>
@@ -9243,7 +9243,7 @@ function hodlInitBip85() {
   }
   hodlBip85SyncOptions();
 }
-var hodlJournalKey = null, hodlJournalSalt = null, hodlJournalVerify = null, hodlJournalDoc = null, hodlJournalFileText = "", hodlJournalDirty = false, hodlJournalGate = "create", hodlJournalReveal = false, hodlJournalEditingId = null, hodlJournalDeleteArmed = false;
+var hodlJournalKeys = null, hodlJournalDoc = null, hodlJournalFileText = "", hodlJournalDirty = false, hodlJournalGate = "create", hodlJournalReveal = false, hodlJournalEditingId = null, hodlJournalDeleteArmed = false;
 function hodlJournalError(message) {
   let error = document.getElementById("journal-error");
   if (error) error.textContent = message || "";
@@ -9251,11 +9251,10 @@ function hodlJournalError(message) {
 function hodlJournalWipeMem() {
   hodlJournalWipeDocument(hodlJournalDoc);
   hodlJournalDoc = null;
-  hodlJournalKey = null;
-  hodlJournalWipeBytes(hodlJournalSalt);
-  hodlJournalSalt = null;
-  hodlJournalWipeBytes(hodlJournalVerify);
-  hodlJournalVerify = null;
+  // The AES-GCM and HMAC CryptoKeys are non-extractable, so the only wipeable
+  // bytes are the verify digest; nulling dereferences the keys themselves.
+  if (hodlJournalKeys) hodlJournalWipeBytes(hodlJournalKeys.verify);
+  hodlJournalKeys = null;
   hodlJournalFileText = "";
   hodlJournalDirty = false;
   hodlJournalReveal = false;
@@ -9291,7 +9290,7 @@ function hodlJournalCopy(button, label) {
   else fallback();
 }
 function hodlJournalClearFields() {
-  for (let id of ["journal-create-dice", "journal-create-dice-confirm", "journal-open-dice", "journal-input", "journal-phrase", "journal-label", "journal-notes", "journal-search"]) {
+  for (let id of ["journal-create-password", "journal-create-confirm", "journal-open-password", "journal-input", "journal-phrase", "journal-label", "journal-notes", "journal-search"]) {
     let field = document.getElementById(id);
     if (field) field.value = "";
   }
@@ -9313,14 +9312,8 @@ function hodlJournalSetGate(mode) {
   if (create) create.hidden = hodlJournalGate !== "create";
   if (open) open.hidden = hodlJournalGate !== "open";
 }
-function hodlJournalSyncDiceHelp() {
-  let help = document.getElementById("journal-create-dice-help");
-  if (!help) return;
-  let parsed = parseDiceTranscript(document.getElementById("journal-create-dice")?.value || "");
-  help.textContent = parsed.count ? `${parsed.count} roll${parsed.count === 1 ? "" : "s"} \u2248 ${parsed.bits.toFixed(1)} bits. 50 rolls \u2248 129 bits \xB7 99 rolls \u2248 256 bits.` : "50 rolls \u2248 129 bits \xB7 99 rolls \u2248 256 bits. This is the key, not a wallet seed.";
-}
 function hodlJournalUnlocked() {
-  return Boolean(hodlJournalKey && hodlJournalDoc && hodlJournalSalt);
+  return Boolean(hodlJournalKeys && hodlJournalDoc);
 }
 function hodlJournalNoteText() {
   if (!hodlJournalDoc) return "Create a journal or open an encrypted file.";
@@ -9382,7 +9375,7 @@ function hodlJournalShowWork() {
   if (work) work.hidden = !hodlJournalUnlocked();
   let note = document.getElementById("journal-status-note");
   if (note) note.textContent = hodlJournalNoteText();
-  hodlJournalFillLifehash(document.getElementById("journal-lifehash"), hodlJournalVerify);
+  hodlJournalFillLifehash(document.getElementById("journal-lifehash"), hodlJournalKeys?.verify);
   hodlJournalRenderList();
 }
 function hodlJournalRenderList() {
@@ -9474,7 +9467,7 @@ function hodlJournalOpenView(id) {
   view.innerHTML = `<section class="wallet-data-section wallet-private-section" aria-labelledby="journal-entry-heading">
       <div class="wallet-data-section-head">
         <h3 id="journal-entry-heading">${hodlEscapeHtml(entry.label)}</h3>
-        <p class="muted" id="journal-private-description">Anyone with the journal file and the journal dice can read this entry.</p>
+        <p class="muted" id="journal-private-description">Anyone with the journal file and the journal password can read this entry.</p>
       </div>
       <div class="wallet-data-actions no-print">
         <label class="reveal-private-toggle">
@@ -9532,15 +9525,13 @@ function hodlJournalOpenView(id) {
 async function hodlJournalCreate() {
   hodlJournalError("");
   try {
-    let created = await hodlJournalCreateDocument(document.getElementById("journal-create-dice")?.value || "", document.getElementById("journal-create-dice-confirm")?.value || "");
+    let created = await hodlJournalCreateDocument(document.getElementById("journal-create-password")?.value || "", document.getElementById("journal-create-confirm")?.value || "");
     hodlJournalWipeMem();
-    hodlJournalKey = created.key;
-    hodlJournalSalt = created.salt;
-    hodlJournalVerify = created.verify;
+    hodlJournalKeys = created.keys;
     hodlJournalDoc = created.doc;
     hodlJournalDirty = true;
-    document.getElementById("journal-create-dice").value = "";
-    document.getElementById("journal-create-dice-confirm").value = "";
+    document.getElementById("journal-create-password").value = "";
+    document.getElementById("journal-create-confirm").value = "";
     hodlJournalHideEditor();
     hodlJournalShowWork();
   } catch (exception) {
@@ -9551,14 +9542,12 @@ async function hodlJournalUnlock() {
   hodlJournalError("");
   try {
     if (!hodlJournalFileText) throw new Error("Choose an encrypted journal file first.");
-    let opened = await hodlJournalOpenDocument(hodlJournalFileText, parseDiceTranscript(document.getElementById("journal-open-dice")?.value || "").digits);
+    let opened = await hodlJournalOpenDocument(hodlJournalFileText, document.getElementById("journal-open-password")?.value || "");
     hodlJournalWipeMem();
-    hodlJournalKey = opened.key;
-    hodlJournalSalt = opened.salt;
-    hodlJournalVerify = opened.verify;
+    hodlJournalKeys = opened.keys;
     hodlJournalDoc = opened.doc;
     hodlJournalDirty = false;
-    document.getElementById("journal-open-dice").value = "";
+    document.getElementById("journal-open-password").value = "";
     document.getElementById("journal-file").value = "";
     hodlJournalFileText = "";
     hodlJournalHideEditor();
@@ -9571,7 +9560,7 @@ async function hodlJournalSaveFile() {
   hodlJournalError("");
   try {
     if (!hodlJournalUnlocked()) throw new Error("Create or open a journal first.");
-    let file = await hodlJournalSealDocument(hodlJournalDoc, hodlJournalKey, hodlJournalSalt);
+    let file = await hodlJournalSealDocument(hodlJournalDoc, hodlJournalKeys);
     let blob = new Blob([JSON.stringify(file, null, 2) + "\n"], { type: "application/json" }), url = URL.createObjectURL(blob), link = document.createElement("a");
     link.href = url;
     link.download = "entropylab-journal.json";
@@ -9624,14 +9613,13 @@ function hodlJournalLock() {
   hodlJournalHideEditor();
   hodlJournalSetGate("create");
   hodlJournalShowWork();
-  document.getElementById("journal-status-note").textContent = "Journal locked. Dice and entries were cleared (best effort).";
+  document.getElementById("journal-status-note").textContent = "Journal locked. Password and entries were cleared (best effort).";
 }
 function hodlInitJournal() {
   if (!document.getElementById("journal-create")) return;
   document.querySelectorAll("#journal-gate-modes [data-journal-gate]").forEach((button) => {
     button.onclick = () => hodlJournalSetGate(button.dataset.journalGate);
   });
-  document.getElementById("journal-create-dice")?.addEventListener("input", hodlJournalSyncDiceHelp);
   document.getElementById("journal-create")?.addEventListener("click", hodlJournalCreate);
   document.getElementById("journal-unlock")?.addEventListener("click", hodlJournalUnlock);
   document.getElementById("journal-file")?.addEventListener("change", async (event) => {

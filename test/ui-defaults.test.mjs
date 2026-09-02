@@ -1616,7 +1616,8 @@ test("Journal sits between Keys and BIP-85", () => {
     assert.match(markup, /id="journal-unlock"/);
     assert.match(markup, /id="journal-save"/);
     assert.match(markup, /id="journal-input"/);
-    assert.match(markup, /never a typed password/);
+    assert.match(markup, /id="journal-create-password"/);
+    assert.match(markup, /id="journal-open-password"/);
     assert.match(markup, /does not invent entropy/);
     assert.match(markup, /The journal lives in this page until you save the encrypted file/);
   }

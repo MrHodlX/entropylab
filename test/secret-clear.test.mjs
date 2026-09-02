@@ -48,10 +48,10 @@ test("BIP-85 parent and derived-child fields are explicitly cleared", () => {
   assert.match(lifecycle, /bip85Out\.innerHTML\s*=\s*""/);
 });
 
-test("Entropy Journal dice, entries, and encrypted session are explicitly cleared", () => {
+test("Entropy Journal password, entries, and encrypted session are explicitly cleared", () => {
   assert.match(lifecycle, /hodlJournalWipeMem\(\)/);
   assert.match(lifecycle, /hodlJournalClearFields\(\)/);
-  assert.match(app, /journal-create-dice/);
+  assert.match(app, /journal-create-password/);
   assert.match(app, /journal-input/);
   assert.match(app, /journal-phrase/);
 });

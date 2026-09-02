@@ -1,20 +1,20 @@
-// Entropy Journal: dice-derived AES-GCM, no invented secret entropy.
+// Entropy Journal: password-derived AES-GCM, fully deterministic — the module
+// never calls a CSPRNG, so the file is a pure function of password + entries.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  DICE_MIN_ROLLS,
+  JOURNAL_ITERATIONS,
+  JOURNAL_VERSION,
   METHODS,
   addEntry,
-  assertDiceKey,
+  assertPassword,
   createDocument,
-  diceBits,
   emptyDocument,
   encodeFile,
   openDocument,
-  parseDiceTranscript,
   parseFile,
   removeEntry,
   searchEntries,
@@ -26,30 +26,25 @@ import {
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const source = readFileSync(join(root, "src/js/journal.js"), "utf8");
 
-const fifty = "123456".repeat(9) + "12"; // 56 rolls
-const fiftyOther = "654321".repeat(9) + "65";
+const password = "correct horse battery staple";
+const otherPassword = "Tr0ub4dor & 3 ponies";
 const now = new Date("2026-09-01T15:04:05.000Z");
 const fill = (length, start = 1) => Uint8Array.from({ length }, (_, i) => (start + i) & 255);
 
-test("dice transcripts count only the digits 1-6 and estimate bits", () => {
-  const parsed = parseDiceTranscript("1 2,3;4|5\n6abc");
-  assert.equal(parsed.digits, "123456");
-  assert.equal(parsed.count, 6);
-  assert.equal(parsed.leftover, "abc");
-  assert.equal(diceBits(50).toFixed(2), (50 * Math.log2(6)).toFixed(2));
-  assert.throws(() => assertDiceKey("12345"), /at least 50/);
-  assert.throws(() => assertDiceKey(fifty + "x"), /digits 1/);
-  assert.deepEqual(assertDiceKey(`  ${fifty}  `).digits, fifty);
-  assert.throws(() => assertDiceKey(fifty, { confirm: fiftyOther }), /do not match/);
-  assert.equal(assertDiceKey(fifty, { confirm: fifty.split("").join(" ") }).count >= DICE_MIN_ROLLS, true);
+test("passwords need real length and a matching confirmation", () => {
+  assert.throws(() => assertPassword(""), /missing/);
+  assert.throws(() => assertPassword(42), /missing/);
+  assert.throws(() => assertPassword("short"), /at least 12/);
+  assert.throws(() => assertPassword(password, { confirm: otherPassword }), /do not match/);
+  assert.equal(assertPassword(password, { confirm: password }), undefined);
+  assert.equal(assertPassword("🐴".repeat(12)), undefined); // length counts characters, not bytes
 });
 
-test("the journal never invents secret entropy or talks to the network", () => {
+test("the journal never invents entropy or talks to the network", () => {
   const code = source.replace(/\/\/.*$/gm, "");
-  assert.doesNotMatch(code, /Math\.random|fetch\b|XMLHttpRequest|WebSocket|localStorage|indexedDB/);
-  assert.match(source, /crypto\.getRandomValues\(bytes\)/);
-  assert.match(source, /Public AEAD parameters only/);
-  assert.match(source, /never a typed password/);
+  assert.doesNotMatch(code, /Math\.random|crypto\.getRandomValues|fetch\b|XMLHttpRequest|WebSocket|localStorage|indexedDB/);
+  assert.match(source, /never calls a CSPRNG/);
+  assert.match(source, /PBKDF2-SHA-256/);
 });
 
 test("entries store the raw input, phrase, label, ISO time, and optional wallet link", () => {
@@ -105,38 +100,57 @@ test("a session key snapshot prefers the live dice / brain / seed transcript", (
   assert.equal(snapshotFromKeyState({ isLab: true, mode: "dice", fields: { dice: "123" } }), null);
 });
 
-test("AES-GCM round-trips with dice and fails on the wrong rolls", async () => {
-  let calls = 0;
-  const randomBytes = (n) => {
-    calls += 1;
-    return fill(n, calls * 3);
-  };
-  const created = await createDocument(fifty, fifty.split("").join("\n"), randomBytes);
+test("AES-GCM round-trips with the password and fails on the wrong one", async () => {
+  const created = await createDocument(password, password);
   assert.equal(created.doc.entries.length, 0);
   addEntry(created.doc, { method: "hex", input: "ab", phrase: "seed words here", label: "lab" }, now);
-  const file = await sealDocument(created.doc, created.key, created.salt, randomBytes);
-  assert.equal(file.entropylabJournal, 1);
-  assert.equal(file.kdf, "HKDF-SHA-256");
+  const file = await sealDocument(created.doc, created.keys);
+  assert.equal(file.entropylabJournal, JOURNAL_VERSION);
+  assert.equal(file.kdf, "PBKDF2-SHA-256");
+  assert.equal(file.iterations, JOURNAL_ITERATIONS);
   assert.equal(file.cipher, "AES-256-GCM");
-  assert.equal(file.salt.length, 32);
+  assert.equal(file.salt, undefined); // the salt is derived from the password, never stored
   assert.equal(file.iv.length, 24);
   assert.match(file.ciphertext, /^[0-9a-f]+$/);
   const packed = JSON.stringify(file);
-  const opened = await openDocument(packed, fifty);
+  const opened = await openDocument(packed, password);
   assert.equal(opened.doc.entries[0].label, "lab");
   assert.equal(opened.doc.entries[0].input, "ab");
   assert.equal(opened.doc.entries[0].phrase, "seed words here");
-  await assert.rejects(() => openDocument(packed, fiftyOther), /Wrong dice/);
+  assert.equal(opened.keys.iterations, JOURNAL_ITERATIONS);
+  await assert.rejects(() => openDocument(packed, otherPassword), /Wrong password/);
   wipeDocument(opened.doc);
   assert.equal(opened.doc.entries.length, 0);
 });
 
-test("encodeFile stores salt and IV next to the ciphertext", () => {
-  const file = encodeFile({ salt: fill(16), iv: fill(12, 9), ciphertext: fill(32, 4) });
+test("encryption is deterministic: same password and entries, same file", async () => {
+  const make = async () => {
+    const created = await createDocument(password, password);
+    addEntry(created.doc, { method: "dice", input: "1 2 3", phrase: "p", label: "same" }, now);
+    return sealDocument(created.doc, created.keys);
+  };
+  const first = await make();
+  const second = await make();
+  assert.deepEqual(second, first); // byte-identical — nothing was generated
+  // The synthetic IV covers the plaintext: a changed entry means a changed IV.
+  const created = await createDocument(password, password);
+  addEntry(created.doc, { method: "dice", input: "1 2 3", phrase: "p", label: "same" }, now);
+  const before = await sealDocument(created.doc, created.keys);
+  addEntry(created.doc, { method: "dice", input: "4 5 6", phrase: "q", label: "other" }, now);
+  const after = await sealDocument(created.doc, created.keys);
+  assert.notEqual(after.iv, before.iv);
+  assert.deepEqual(before, first);
+});
+
+test("encodeFile stores the IV and iteration count next to the ciphertext", () => {
+  const file = encodeFile({ iv: fill(12, 9), ciphertext: fill(32, 4) });
   const parsed = parseFile(JSON.stringify(file));
-  assert.equal(parsed.salt.length, 16);
   assert.equal(parsed.iv.length, 12);
   assert.equal(parsed.ciphertext.length, 32);
+  assert.equal(parsed.iterations, JOURNAL_ITERATIONS);
   assert.throws(() => parseFile("{}"), /not an EntropyLab journal/);
   assert.throws(() => parseFile("{"), /not valid JSON/);
+  assert.throws(() => parseFile(JSON.stringify({ ...file, iterations: 7 })), /key-derivation cost/);
+  assert.throws(() => parseFile(JSON.stringify({ ...file, iterations: 1e12 })), /key-derivation cost/);
+  assert.throws(() => encodeFile({ iv: fill(16), ciphertext: fill(32) }), /IV must be 12 bytes/);
 });

@@ -99,11 +99,13 @@ Official website: [entropylab.online](https://entropylab.online)
   from a passphrase-extended root when a BIP-39 passphrase is in effect.
 - Keeps an **Entropy Journal**: an encrypted notebook of dice rolls, coin
   flips, hex, brain-wallet text, or a seed the user already produced. The
-  AES-256-GCM key is HKDF-SHA-256 of dice rolls supplied at setup — never a
-  typed password. Salt and IV travel with the ciphertext in one JSON file the
-  user downloads and loads back. No localStorage, no accounts, no relays. This
-  is a calculator companion, not a password manager: it only stores material
-  the user generated themselves.
+  AES-256-GCM key is PBKDF2-SHA-256 (600,000 rounds) of a password the user
+  chooses, with the salt derived from the password itself; the IV is
+  HMAC-SHA-256 of the plaintext. Encryption is a pure function of the
+  password and the entries — the journal never calls a CSPRNG. One JSON file
+  the user downloads and loads back. No localStorage, no accounts, no relays.
+  This is a calculator companion, not a password manager: it only stores
+  material the user generated themselves.
 - Derives BIP-352 Silent Payment addresses (`sp1q…` / `tsp1q…`) from a seed or
   root xprv, including labeled codes, BIP-392 `spscan` / `spspend` descriptors,
   sender taproot outputs from pasted vin JSON, and receiver verification of
