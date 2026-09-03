@@ -9,7 +9,28 @@ This replaces the earlier "Frost pieces" plan — MuSig2 is the concrete scheme
 we want, built on FROST. It changes how transactions are constructed and signed,
 so it lands before anything that depends on signing assumptions.
 
-## 2. Tor-friendly mode
+## 2. Miniscript / Liana (`wsh()` policies)
+
+Decode, summarize, and inspect `wsh()` Miniscript descriptors in the
+air-gapped core. Target the same v1 scope SeedSigner #1026 is landing:
+policy review plus address derivation for `wsh()`, not taproot signing.
+
+Concrete first wallet: Liana-style inheritance
+`wsh(or_d(pk(primary), and_v(v:pkh(recovery), older(N))))`.
+
+The UI must show a plain-English policy, not just the descriptor string —
+e.g. "primary key now, or recovery key after N blocks." Hidden script
+paths must never be described as single-signature.
+
+Reuse the existing miniscript descriptor work already in-tree. Do not
+talk to Liana or any coordinator from the HTML file. File or QR import
+of a descriptor / PSBT is enough. Any Liana file-to-QR helper is a
+plugin later, not core.
+
+Out of scope for this slice: `tr()` address derivation and signing,
+persistent wallet registration, proof-of-registration.
+
+## 3. Tor-friendly mode
 
 Add a Tor-only toggle in settings. When enabled, every outbound request —
 plugins, Slipstream, update checks — routes through the Tor daemon via SOCKS5,
@@ -18,14 +39,14 @@ with a clear "connected via Tor" indicator in the UI.
 Longer term: host the online version as an onion service so air-gapped users
 can load it without touching clearnet DNS or certificates.
 
-## 3. Plugin system
+## 4. Plugin system
 
 Sandboxed iframes talking to the core over a versioned postMessage bridge.
 Narrow allowlisted messages only — seeds and private keys never leave the
 parent page. Ship a tiny SDK so plugin authors aren't hand-rolling plumbing.
 Read-only first; action requests (e.g. "please sign") come later.
 
-## 4. Slipstream (first plugin)
+## 5. Slipstream (first plugin)
 
 MARA's direct-to-miner relay. The plugin receives already-signed transaction
 bytes, posts them to slipstream.mara.com, and returns status. Trust model is
@@ -36,3 +57,4 @@ recommended path.
 
 Liquid, Lightning, and Ark stay out until their interfaces stabilize. Pull in
 only a thin adapter if something becomes a hard dependency.
+Taproot (`tr()`) signing stays deferred with Miniscript v1.
