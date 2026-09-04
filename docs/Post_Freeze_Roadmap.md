@@ -53,6 +53,22 @@ bytes, posts them to slipstream.mara.com, and returns status. Trust model is
 explicit: MARA sees the transaction and the caller's IP, so Tor routing is the
 recommended path.
 
+## 6. Watch-only wallet plugin
+
+A companion wallet plugin that turns the air-gapped core into a usable
+wallet without moving the trust boundary. The plugin builds transactions
+from the core's xpubs and addresses, hands the unsigned PSBT to the core
+for signing, receives the signed bytes back, and broadcasts them — via
+Slipstream, a node, or a public mempool relay.
+
+The plugin never holds keys, never signs, and never sees seed material.
+Signing stays in the air-gapped core; the plugin only displays and
+orchestrates. This is the same trust split as Slipstream: the plugin is
+the online half, the core is the offline half.
+
+Depends on the plugin system (item 4) and benefits from Tor-friendly mode
+(item 3) for the broadcast path.
+
 ## Deferred
 
 Liquid, Lightning, and Ark stay out until their interfaces stabilize. Pull in
