@@ -69,6 +69,19 @@ the online half, the core is the offline half.
 Depends on the plugin system (item 4) and benefits from Tor-friendly mode
 (item 3) for the broadcast path.
 
+## 7. Nonce reuse journal
+
+Every time the PSBT inspector decodes a signature, log the R-value (the
+public nonce commitment), the message hash, and the key origin into a local
+journal. R-values are public by design, so the journal syncs between the
+air-gapped core and the online sister app for cross-referencing across
+devices. A repeated R with a different message hash under the same key
+origin is a nonce reuse, and the private key is recoverable in one step.
+The journal flags it the moment it appears.
+
+Storage is cheap: 32 bytes per signature. The journal lives in both places
+so a collision on one device catches a reused nonce from another.
+
 ## Deferred
 
 Liquid, Lightning, and Ark stay out until their interfaces stabilize. Pull in
