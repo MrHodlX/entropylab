@@ -27,9 +27,14 @@ Guidelines for AI coding agents.
   helper for the sink — `hodlT` in HTML template content, `hodlTText` for
   textContent/setAttribute, `hodlTAttr` inside quoted template attributes
   (enforced by `test/i18n-attribute-guard.test.mjs`). After adding or editing
-  user-facing strings, do NOT touch the locale catalogs: missing translations
-  fall back to English per string and the post-merge translation workflow
-  fills them. CI fails only on invalid catalog content
+  user-facing strings, do NOT touch the locale catalogs or their
+  `.sources/<lang>.json` provenance sidecars: missing translations fall back
+  to English per string and the post-merge translation workflow
+  (`.github/workflows/translate.yml`, setup in
+  `docs/Translation_Automation_Setup.md`) fills them and opens one
+  auto-merging PR per language. Locale files change ONLY through that
+  automation — the `translation-gate` CI job rejects any other PR touching
+  `src/locales/`. CI fails only on invalid catalog content
   (`scripts/i18n-validate.mjs`, run via `scripts/i18n-sync.mjs`) or on source
   markup outside the sanitizer table — a new link or formatting form means
   extending `hodlCatalogAllowedTags` first. `npm run i18n:sync` prunes dead

@@ -28,6 +28,7 @@
 // Missing and dead keys are NOT problems here: partial locales are normal by
 // design (per-string English fallback), and dead keys are inert data the
 // translation workflow prunes. scripts/i18n-sync.mjs reports both.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
@@ -124,6 +125,47 @@ export function sourceMarkupProblems(source) {
     }
   }
   return problems;
+}
+
+// sha256 of the English source text a translation was made from — the value
+// recorded in the translation-provenance sidecar (src/locales/.sources/). The
+// English text is the catalog key, so the hash is deterministic: any mismatch
+// between sidecar and key is corruption or a stale provenance claim, never a
+// legitimate state.
+export const hashSource = (source) => createHash("sha256").update(String(source), "utf8").digest("hex");
+
+// Sidecar validation, split by severity:
+//   invalid — malformed hashes and hashes that do not match the English key;
+//     deterministic corruption, fails CI like invalid catalog content;
+//   drift   — catalog keys with no recorded hash and hashes with no catalog
+//     entry; normal between runs, repaired by the translation workflow.
+// The translation-only PR gate and the publish job treat both as failures
+// (a translation PR must leave catalog and sidecar exactly consistent); the
+// sync check fails on `invalid` and only reports `drift`.
+export function sidecarProblems(catalog, sidecar) {
+  const invalid = [];
+  const drift = [];
+  const entries = sidecar && typeof sidecar === "object" ? Object.entries(sidecar) : [];
+  const keys = catalog && typeof catalog === "object" ? Object.keys(catalog) : [];
+  for (const [key, hash] of entries) {
+    if (!keys.includes(key)) {
+      drift.push(`source hash with no catalog entry: ${JSON.stringify(key.slice(0, 70))}`);
+      continue;
+    }
+    if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) {
+      invalid.push(`malformed source hash for ${JSON.stringify(key.slice(0, 70))}`);
+      continue;
+    }
+    if (hash !== hashSource(key)) {
+      invalid.push(`source hash does not match the English key for ${JSON.stringify(key.slice(0, 70))}`);
+    }
+  }
+  for (const key of keys) {
+    if (!entries.some(([sidecarKey]) => sidecarKey === key)) {
+      drift.push(`no source hash for translated key ${JSON.stringify(key.slice(0, 70))}`);
+    }
+  }
+  return { invalid, drift };
 }
 
 // CLI: validate catalog files (used by the translation-only PR gate and by

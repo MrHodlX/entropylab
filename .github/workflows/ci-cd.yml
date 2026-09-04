@@ -469,6 +469,38 @@ jobs:
       - name: Verify site artifact
         run: npm run verify
 
+  # ── Translation gate: locale files may only change through the post-merge
+  # translation automation (issue #286). Any PR whose diff touches
+  # src/locales/ must come from the configured GitHub App, on the
+  # i18n/translate-<lang> branch namespace, changing exactly one catalog and
+  # its provenance sidecar — and both must validate. PRs that touch no locale
+  # files pass trivially. Make this a required check alongside test-ci so
+  # auto-merged translation PRs cannot skip it (see
+  # docs/Translation_Automation_Setup.md).
+
+  translation-gate:
+    name: Gate · translation-only PR scope
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Run the translation-only gate
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE: ${{ github.base_ref }}
+          PR_HEAD: ${{ github.head_ref }}
+          APP_SLUG: ${{ vars.TRANSLATION_APP_SLUG }}
+        run: |
+          git fetch origin "$PR_BASE"
+          FILES=$(git diff --name-only "origin/$PR_BASE"...HEAD | tr '\n' ' ')
+          node scripts/i18n-gate.mjs --author "$PR_AUTHOR" --app-slug "$APP_SLUG" --base "$PR_BASE" --head "$PR_HEAD" --files $FILES
+
   # ── Deploy: gated on a good build and a clean verify ──
 
   deploy:
