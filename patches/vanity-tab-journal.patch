@@ -1,0 +1,46 @@
+--- src/js/app.js
++++ src/js/app.js
+@@ -9981,7 +9981,7 @@
+ }
+ function hodlShowWorkspace(id) {
+   if (id === hodlWorkspace) return;
+-  hodlVanityStop();
++  // Keep the vanity grind running when switching workspace tabs.
+   let preservedTop = window.scrollY, preservedLeft = window.scrollX;
+   if (hodlWorkspace === "calc") hodlCaptureKey();
+   else if (hodlWorkspace === "msig") hodlCaptureMsig();
+@@ -10329,6 +10329,26 @@
+     spHelp.textContent = `Looks like ${sample}. Bech32m only (no 1, b, i, o). Network follows Address network.`;
+   }
+ }
++var hodlVanityJournalLines = [];
++function hodlVanityJournalHits(salt, prefix, kind, network, hits) {
++  if (!hits?.length) return;
++  for (let hit of hits) {
++    let line = `Vanity match · ${kind} · ${network} · prefix ${prefix} · counter ${hit.offset} · ${hit.address} · salt-fingerprint ${String(salt || "").length} chars`;
++    if (hodlVanityJournalLines.includes(line)) continue;
++    hodlVanityJournalLines.push(line);
++    if (typeof hodlJournalLog === "function") hodlJournalLog("vanity-match", line, "vanity");
++  }
++  let box = document.getElementById("vanity-journal") || document.getElementById("vanity-sp-journal");
++  if (!box) {
++    box = document.createElement("pre");
++    box.id = "vanity-journal";
++    box.className = "muted";
++    let host = document.getElementById("vanity-out") || document.getElementById("vanity-sp-out");
++    if (host && host.parentNode) host.parentNode.appendChild(box);
++  }
++  if (box) box.textContent = hodlVanityJournalLines.join("\n");
++}
++
+ function hodlVanityRenderHits(target, hits, kind) {
+   if (!target) return;
+   if (!hits.length) {
+@@ -10384,6 +10404,7 @@
+       else {
+         status.textContent = `Found ${hits.length} match${hits.length === 1 ? "" : "es"}.`;
+         hodlVanityRenderHits(out, hits, kind);
++        hodlVanityJournalHits(salt, rawPrefix, kind, network, hits);
+       }
+     } catch (error) {
+       status.textContent = error.message || String(error);
