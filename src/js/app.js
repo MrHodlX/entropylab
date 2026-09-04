@@ -35,7 +35,7 @@ import { initQrReferences } from "./qr-references.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
 import { VANITY_HARDENED, VANITY_MAX_INDEX, VANITY_METHODS, VANITY_SCRIPTS, VanityGrinder, estimateVanityWork, validateVanityIndexRange, validateVanityMnemonic, validateVanityPassphrase, validateVanityPrefix, validateVanityRange, vanityBenchmark, vanityPathIndexes, vanityPathString } from "./vanity.js";
-import { t as hodlT, hodlInitLocale, hodlFillLocaleSelect, hodlGetLocale } from "./i18n.js";
+import { tHtml as hodlT, t as hodlTText, tAttr as hodlTAttr, hodlInitLocale, hodlFillLocaleSelect, hodlGetLocale } from "./i18n.js";
 import hodlShellHtml from "../shell.html";
 import { hodlKeyModeLabels, hodlNetworkNames, hodlHexFormatLabels, hodlScriptBeginnerTexts, hodlFairnessVerdictLabels } from "./i18n-labels.js";
 import {
@@ -89,10 +89,10 @@ function hodlFormatNote(message) {
     }
     vars = formatted;
   }
-  return hodlT(message.key, vars);
+  return hodlTText(message.key, vars);
 }
 function hodlError(key, vars) {
-  let err = new Error(hodlT(key, vars));
+  let err = new Error(hodlTText(key, vars));
   err.hodlSpec = vars == null ? { key } : { key, vars };
   return err;
 }
@@ -104,7 +104,7 @@ function hodlErrorSpecFrom(error, fallbackKey) {
 }
 function hodlFormatErrorSpec(spec) {
   if (!spec) return "";
-  if (spec.key) return hodlT(spec.key, spec.vars);
+  if (spec.key) return hodlTText(spec.key, spec.vars);
   return spec.raw || "";
 }
 var hodlKeyErrorSpec = null, hodlMsigErrorSpec = null;
@@ -541,7 +541,7 @@ hodlKeyModeSelectEl.setAttribute("aria-labelledby", "key-method-label");
 hodlKeyModes.forEach((mode) => {
   let option = document.createElement("option");
   option.value = mode;
-  option.textContent = hodlT(hodlKeyModeLabels[mode]);
+  option.textContent = hodlTText(hodlKeyModeLabels[mode]);
   option.selected = mode === hodlKeyMode;
   hodlKeyModeSelectEl.appendChild(option);
 });
@@ -725,7 +725,7 @@ function hodlWatchOnlyDescriptorExport(receiveDescriptor, changeDescriptor, addr
   if (multipath) {
     try {
       if (multipath.length > 1e3) throw new Error("Descriptor too long for a static QR.");
-      qr = `<div class="watch-only-qr"><div class="qr qr-descriptor" aria-label="${hodlT("Watch-only wallet descriptor QR code")}">${hodlDescriptorQrSvg(multipath)}</div><p class="muted">${hodlT("Import this output descriptor into Sparrow or another wallet.")}</p></div>`;
+      qr = `<div class="watch-only-qr"><div class="qr qr-descriptor" aria-label="${hodlTAttr("Watch-only wallet descriptor QR code")}">${hodlDescriptorQrSvg(multipath)}</div><p class="muted">${hodlT("Import this output descriptor into Sparrow or another wallet.")}</p></div>`;
     } catch (error) {
       qr = `<p class="muted">${hodlEscapeHtml(error.message || "Descriptor too long for a static QR.")} Copy the text instead, or import the selected branch descriptors separately.</p>`;
     }
@@ -965,8 +965,8 @@ function hodlAddressBranchVirtualConfigs(branches, includeWif, prefix) {
 }
 function hodlAccountAdvancedExports(account, includePrivate = false) {
   if (!account.hasAlternateExport) return "";
-  let privateExport = includePrivate && account.genericPrivate ? hodlPrivateFieldHtml(hodlT("Generic {name} for descriptor compatibility", { name: account.genericPrivateLabel }), account.genericPrivate) : "";
-  let publicExport = !includePrivate && account.genericPublic ? hodlPublicFieldHtml(hodlT("Generic {name} for descriptor compatibility", { name: account.genericPublicLabel }), account.genericPublic) : "";
+  let privateExport = includePrivate && account.genericPrivate ? hodlPrivateFieldHtml("Generic {name} for descriptor compatibility", account.genericPrivate, { name: account.genericPrivateLabel }) : "";
+  let publicExport = !includePrivate && account.genericPublic ? hodlPublicFieldHtml("Generic {name} for descriptor compatibility", account.genericPublic, { name: account.genericPublicLabel }) : "";
   if (!privateExport && !publicExport) return "";
   if (includePrivate) return `<div class="wallet-advanced">${privateExport}</div>`;
   return `<details class="wallet-advanced"><summary>${hodlT("Advanced watch-only export")}</summary>${publicExport}</details>`;
@@ -989,7 +989,7 @@ function hodlImportedCoreRecoveryExport(wallet, account) {
 }
 function hodlRenderMultisigCosignerExport(exports, accountId) {
   let items = Array.isArray(exports) ? exports.filter((candidate) => candidate.accountId === accountId) : [];
-  return items.map((item) => hodlPublicFieldHtml(hodlT("Multisig co-signer {prefix} · {label}", { prefix: item.prefix, label: item.label }), item.value)).join("");
+  return items.map((item) => hodlPublicFieldHtml("Multisig co-signer {prefix} · {label}", item.value, { prefix: item.prefix, label: item.label })).join("");
 }
 function hodlNormalizeAddressCheck(value){
   let text=String(value??"").trim();
@@ -1119,7 +1119,7 @@ function hodlBindAddressMatch() {
       return
     }
     let address = hodlNormalizeAddressCheck(input.value);
-    status.textContent = hodlT("Not in the {n} shown addresses. Checking further indices", { n: shown });
+    status.textContent = hodlTText("Not in the {n} shown addresses. Checking further indices", { n: shown });
     status.className = "hint";
     let beyond = {
       state: "miss",
@@ -1159,10 +1159,10 @@ function hodlAddressVirtualRows(rows, includeWif, start, end) {
   return `${hodlAddressVirtualSpacer(top, columns)}${hodlAddressTableRows(rows.slice(start, end), includeWif, start)}${hodlAddressVirtualSpacer(bottom, columns)}`;
 }
 function hodlAddressTable(rows, label = "Addresses", includeWif = false, tableKey = "addresses") {
-  let safeLabel = hodlEscapeHtml(includeWif ? hodlT("{label} with WIF private keys", { label }) : label), tableClass = includeWif ? "wallet-table-private" : "wallet-table-public", virtual = rows.length > hodlAddressVirtualThreshold;
+  let rawLabel = includeWif ? hodlTText("{label} with WIF private keys", { label }) : label, safeLabel = hodlEscapeHtml(rawLabel), tableClass = includeWif ? "wallet-table-private" : "wallet-table-public", virtual = rows.length > hodlAddressVirtualThreshold;
   let wifHeading = includeWif ? '<th scope="col">WIF</th>' : "", safeKey = hodlEscapeHtml(tableKey), initialEnd = virtual ? Math.min(rows.length, hodlAddressVirtualThreshold) : rows.length;
   let body = virtual ? hodlAddressVirtualRows(rows, includeWif, 0, initialEnd) : hodlAddressTableRows(rows, includeWif);
-  return `<div class="wallet-address-table" data-address-table="${safeKey}"><div class="wallet-table ${tableClass}" role="region" tabindex="0" aria-label="${hodlT("{label} table; scroll continuously for more rows or columns", { label: safeLabel })}"><table aria-rowcount="${rows.length + 1}"><caption class="sr-only">${safeLabel}</caption><thead><tr aria-rowindex="1"><th scope="col">#</th><th scope="col">${hodlT("Path")}</th><th scope="col">${hodlT("Address")}</th>${wifHeading}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+  return `<div class="wallet-address-table" data-address-table="${safeKey}"><div class="wallet-table ${tableClass}" role="region" tabindex="0" aria-label="${hodlTAttr("{label} table; scroll continuously for more rows or columns", { label: rawLabel })}"><table aria-rowcount="${rows.length + 1}"><caption class="sr-only">${safeLabel}</caption><thead><tr aria-rowindex="1"><th scope="col">#</th><th scope="col">${hodlT("Path")}</th><th scope="col">${hodlT("Address")}</th>${wifHeading}</tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
 function hodlBindAddressVirtualization(configs = []) {
   document.querySelectorAll("[data-address-table]").forEach((container) => {
@@ -1252,8 +1252,13 @@ function hodlShowAccount(id) {
   hodlBindAddressMatch();
   hodlBindWalletResultActions();
 }
-function hodlPublicFieldHtml(label, value) {
-  return `<p><span class="muted">${hodlEscapeHtml(label)}</span><br><span class="mono">${hodlEscapeHtml(value ?? "\u2014")}</span></p>`;
+// The field helpers own their labels end to end: pass the English source (and
+// optional placeholder values); the helper translates with the text view and
+// escapes for its HTML slot. That keeps raw translation calls out of template
+// interpolations and keeps the literals extractable by scripts/i18n-sync.mjs.
+function hodlPublicFieldHtml(label, value, vars) {
+  let labelHtml = hodlEscapeHtml(hodlTText(label, vars));
+  return `<p><span class="muted">${labelHtml}</span><br><span class="mono">${hodlEscapeHtml(value ?? "\u2014")}</span></p>`;
 }
 function hodlPrivateValue(value, className = "secret private-field-value") {
   let mask = "************", text = String(value ?? "\u2014");
@@ -1261,8 +1266,9 @@ function hodlPrivateValue(value, className = "secret private-field-value") {
   let bullets = "\u2022".repeat(Math.max(Array.from(text).length, mask.length));
   return `<span class="${className} secret-placeholder"><span class="secret-placeholder-mask" aria-hidden="true">${bullets}</span><span class="secret-placeholder-message" aria-hidden="true">${mask}</span><span class="secret-placeholder-label">${hodlT("Private value hidden")}</span></span>`;
 }
-function hodlPrivateFieldHtml(label, value) {
-  return `<p class="private-field"><span class="muted">${hodlEscapeHtml(label)}</span>${hodlPrivateValue(value)}</p>`;
+function hodlPrivateFieldHtml(label, value, vars) {
+  let labelHtml = hodlEscapeHtml(hodlTText(label, vars));
+  return `<p class="private-field"><span class="muted">${labelHtml}</span>${hodlPrivateValue(value)}</p>`;
 }
 function hodlDisplayDerivationPath(value) {
   return String(value ?? "").replace(/(^|\/)(\d+)[hH](?=\/|$)/g, "$1$2'");
@@ -1305,7 +1311,7 @@ function hodlWalletMessages(wallet, idPrefix) {
   return `<section class="wallet-result-messages" aria-labelledby="${idPrefix}-safety-heading"><h3 id="${idPrefix}-safety-heading">Safety notes</h3><ul>${items}</ul></section>`;
 }
 function hodlSingleWalletData(wallet) {
-  let miniKey = wallet.minikey ? hodlPrivateFieldHtml(hodlT("Mini private key"), wallet.minikey) : "";
+  let miniKey = wallet.minikey ? hodlPrivateFieldHtml("Mini private key", wallet.minikey) : "";
   return `<section class="card wallet-data-card">
     <div class="wallet-data-intro">
       <div class="kicker">${hodlT("Single-key wallet data")}</div>
@@ -1320,9 +1326,9 @@ function hodlSingleWalletData(wallet) {
       </div>
       ${hodlPrivateDataControls("single-private-description", "single")}
       <div class="wallet-data-fields">
-        ${hodlPrivateFieldHtml(hodlT("WIF compressed"), wallet.wifCompressed)}
-        ${hodlPrivateFieldHtml(hodlT("WIF uncompressed"), wallet.wifUncompressed)}
-        ${hodlPrivateFieldHtml(hodlT("Hex private key"), wallet.privHex)}
+        ${hodlPrivateFieldHtml("WIF compressed", wallet.wifCompressed)}
+        ${hodlPrivateFieldHtml("WIF uncompressed", wallet.wifUncompressed)}
+        ${hodlPrivateFieldHtml("Hex private key", wallet.privHex)}
         ${miniKey}
       </div>
     </section>
@@ -1332,16 +1338,16 @@ function hodlSingleWalletData(wallet) {
         <p class="muted">${hodlT("Use these values for verification or watch-only monitoring. They do not reveal the private key.")}</p>
       </div>
       <div class="wallet-data-fields">
-        ${hodlPublicFieldHtml(hodlT("Compressed public key"), wallet.pubkeyCompressed)}
-        ${hodlPublicFieldHtml(hodlT("Uncompressed public key"), wallet.pubkeyUncompressed)}
+        ${hodlPublicFieldHtml("Compressed public key", wallet.pubkeyCompressed)}
+        ${hodlPublicFieldHtml("Uncompressed public key", wallet.pubkeyUncompressed)}
         <h4 class="wallet-data-subtitle">${hodlT("Addresses")}</h4>
-        ${hodlPublicFieldHtml(hodlT("Legacy uncompressed"), wallet.p2pkhUncompressed)}
-        ${hodlPublicFieldHtml(hodlT("Legacy compressed"), wallet.p2pkhCompressed)}
-        ${hodlPublicFieldHtml(hodlT("Nested SegWit"), wallet.p2shP2wpkh)}
-        ${hodlPublicFieldHtml(hodlT("Native SegWit"), wallet.p2wpkh)}
-        ${hodlPublicFieldHtml(hodlT("Taproot"), wallet.p2tr)}
+        ${hodlPublicFieldHtml("Legacy uncompressed", wallet.p2pkhUncompressed)}
+        ${hodlPublicFieldHtml("Legacy compressed", wallet.p2pkhCompressed)}
+        ${hodlPublicFieldHtml("Nested SegWit", wallet.p2shP2wpkh)}
+        ${hodlPublicFieldHtml("Native SegWit", wallet.p2wpkh)}
+        ${hodlPublicFieldHtml("Taproot", wallet.p2tr)}
         <h4 class="wallet-data-subtitle">${hodlT("Native SegWit QR code")}</h4>
-        <div class="qr" aria-label="${hodlT("Native SegWit address QR code")}">${hodlQrSvg(wallet.p2wpkh)}</div>
+        <div class="qr" aria-label="${hodlTAttr("Native SegWit address QR code")}">${hodlQrSvg(wallet.p2wpkh)}</div>
       </div>
     </section>
   </section>`;
@@ -1368,11 +1374,11 @@ function hodlHdWalletData(wallet) {
       ${hodlPrivateDataControls("wallet-private-description")}
       <div class="wallet-data-fields">${privateContent}</div>
     </section>` : "";
-  let fingerprint = wallet.masterFingerprint ? hodlPublicFieldHtml(hodlT("Master fingerprint"), wallet.masterFingerprint) : "";
-  let parentFingerprint = !wallet.masterFingerprint && wallet.parentFingerprint ? hodlPublicFieldHtml(hodlT("Encoded parent fingerprint (not a master fingerprint)"), wallet.parentFingerprint) : "";
-  let nodeFingerprint = !wallet.masterFingerprint && wallet.nodeFingerprint ? hodlPublicFieldHtml(hodlT("Imported key fingerprint (not a master fingerprint)"), wallet.nodeFingerprint) : "";
-  let rootPublic = wallet.rootXpub ? hodlPublicFieldHtml(hodlT("Root {name}", { name: wallet.rootPublicLabel || hodlExtendedKeyVersions[wallet.network].x.pubName }), wallet.rootXpub) : "";
-  let importedPublic = wallet.importedPublicKey ? hodlPublicFieldHtml(hodlT("Imported {name}", { name: wallet.importedPublicLabel || hodlT("extended public key") }), wallet.importedPublicKey) : "";
+  let fingerprint = wallet.masterFingerprint ? hodlPublicFieldHtml("Master fingerprint", wallet.masterFingerprint) : "";
+  let parentFingerprint = !wallet.masterFingerprint && wallet.parentFingerprint ? hodlPublicFieldHtml("Encoded parent fingerprint (not a master fingerprint)", wallet.parentFingerprint) : "";
+  let nodeFingerprint = !wallet.masterFingerprint && wallet.nodeFingerprint ? hodlPublicFieldHtml("Imported key fingerprint (not a master fingerprint)", wallet.nodeFingerprint) : "";
+  let rootPublic = wallet.rootXpub ? hodlPublicFieldHtml("Root {name}", wallet.rootXpub, { name: wallet.rootPublicLabel || hodlExtendedKeyVersions[wallet.network].x.pubName }) : "";
+  let importedPublic = wallet.importedPublicKey ? hodlPublicFieldHtml("Imported {name}", wallet.importedPublicKey, { name: wallet.importedPublicLabel || hodlTText("extended public key") }) : "";
   return `<section class="card wallet-data-card">
     <div class="wallet-data-intro">
       <div class="kicker">${hodlT("Wallet data")}</div>
@@ -1768,10 +1774,10 @@ function hodlReadAddressWindow(prefix = "", mark = true) {
   return { start, range, end: start + range - 1 };
 }
 function hodlFormatAddressEstimate(milliseconds) {
-  if (!Number.isFinite(milliseconds) || milliseconds < 100) return hodlT("under 0.1 seconds");
-  if (milliseconds < 10000) return hodlT("about {n} seconds", { n: (milliseconds / 1000).toFixed(1) });
-  if (milliseconds < 60000) return hodlT("about {n} seconds", { n: Math.round(milliseconds / 1000) });
-  return hodlT("about {n} minutes", { n: Math.ceil(milliseconds / 60000) });
+  if (!Number.isFinite(milliseconds) || milliseconds < 100) return hodlTText("under 0.1 seconds");
+  if (milliseconds < 10000) return hodlTText("about {n} seconds", { n: (milliseconds / 1000).toFixed(1) });
+  if (milliseconds < 60000) return hodlTText("about {n} seconds", { n: Math.round(milliseconds / 1000) });
+  return hodlTText("about {n} minutes", { n: Math.ceil(milliseconds / 60000) });
 }
 function hodlUpdateAddressEstimate(prefix = "") {
   let estimate = document.getElementById(`${prefix}address-estimate`), help = document.getElementById(`${prefix}address-range-help`), startHelp = document.getElementById(`${prefix}address-start-help`), branchHelp = document.getElementById(`${prefix}branch-range-help`);
@@ -1832,19 +1838,19 @@ function hodlSetDerivationButtonState(kind, state) {
         button.style.width = `${width}px`;
       }
     }
-    button.textContent = hodlT("Stop");
+    button.textContent = hodlTText("Stop");
     button.disabled = false;
     button.setAttribute("aria-disabled", "false");
-    button.setAttribute("aria-label", kind === "msig" ? hodlT("Stop deriving multisig") : hodlT("Stop deriving key"));
+    button.setAttribute("aria-label", kind === "msig" ? hodlTText("Stop deriving multisig") : hodlTText("Stop deriving key"));
     button.dataset.derivationState = "running";
   } else if (state === "stopping") {
-    button.textContent = hodlT("Stopping…");
+    button.textContent = hodlTText("Stopping…");
     button.disabled = true;
     button.setAttribute("aria-disabled", "true");
-    button.setAttribute("aria-label", kind === "msig" ? hodlT("Stopping multisig derivation") : hodlT("Stopping key derivation"));
+    button.setAttribute("aria-label", kind === "msig" ? hodlTText("Stopping multisig derivation") : hodlTText("Stopping key derivation"));
     button.dataset.derivationState = "stopping";
   } else {
-    button.textContent = kind === "msig" ? hodlT("Derive Multisig") : hodlT("Derive Key");
+    button.textContent = kind === "msig" ? hodlTText("Derive Multisig") : hodlTText("Derive Key");
     button.removeAttribute("aria-label");
     delete button.dataset.derivationState;
     delete button.dataset.derivationWidth;
@@ -1908,7 +1914,7 @@ function hodlCreateDerivationTracker(progress, control) {
       completed = total;
       render(100);
       progress?.classList.add("is-complete");
-      progress?.setAttribute("aria-valuetext", hodlT("Done"));
+      progress?.setAttribute("aria-valuetext", hodlTText("Done"));
       let label = progress?.querySelector(".derive-progress-label");
       if (label) label.innerHTML = `${hodlCopiedIconMarkup()}<span>${hodlT("Done")}</span>`;
     }
@@ -2164,7 +2170,7 @@ function hodlSinglesigImportStatus(value, network) {
     if (depth !== 0 && depth !== 3) return { ok: false, message: `Depth ${depth} extended key \xB7 use a root private key or depth-3 account key` };
     if (depth === 3 && !parsed.isPrivate && (hardening.branch || hardening.address)) return { ok: false, message: `Account extended public keys cannot derive hardened ${hardening.branch ? "address branches" : "address indexes"} \xB7 turn off the corresponding Harden option` };
     let definition = depth === 3 ? hodlImportedScriptDefinition(parsed) : null, detail = definition ? ` \xB7 ${hodlScriptUiLabel(definition)} ${definition.bip}` : "", mismatch = hodlSinglesigScriptMismatch(parsed, hodlSelectedScriptType());
-    return { ok: true, warning: Boolean(mismatch), message: mismatch ? `\u26A0\uFE0F ${hodlFormatNote(mismatch)}` : hodlT(parsed.isPrivate ? "{prefix} private key detected · {network}{detail} · ready to derive" : "{prefix} watch-only key detected · {network}{detail} · ready to derive", { prefix: parsed.prefix, network, detail }) };
+    return { ok: true, warning: Boolean(mismatch), message: mismatch ? `\u26A0\uFE0F ${hodlFormatNote(mismatch)}` : hodlTText(parsed.isPrivate ? "{prefix} private key detected · {network}{detail} · ready to derive" : "{prefix} watch-only key detected · {network}{detail} · ready to derive", { prefix: parsed.prefix, network, detail }) };
   } catch (error) {
     return { ok: false, message: error.message || "Invalid extended key" };
   }
@@ -2214,9 +2220,9 @@ function hodlDPlusFinalDescription(words = hodlTargetWordCount) {
 function hodlDPlusFinalHelp(words = hodlTargetWordCount) {
   let steps = hodlDPlusFinalSteps(words), labels = steps.map((step) => step === "coin" ? hodlT("coin flip") : hodlDPlusStepLabel(step));
   let coin = steps.includes("coin") ? hodlT(" The final D8 is interpreted as a coin flip: 1–4 is Heads, 5–8 is Tails. Or flip a real coin!") : "";
-  if (steps.length === 1) return hodlT("One final {die} roll selects the checksum word.", { die: labels[0] });
-  if (labels[0] === labels[1]) return hodlT("Two final {die} rolls select the checksum word.", { die: labels[0] });
-  return hodlT("One final {a} roll and one final {b} roll select the checksum word.{coin}", { a: labels[0], b: labels[1], coin });
+  if (steps.length === 1) return hodlTText("One final {die} roll selects the checksum word.", { die: labels[0] });
+  if (labels[0] === labels[1]) return hodlTText("Two final {die} rolls select the checksum word.", { die: labels[0] });
+  return hodlTText("One final {a} roll and one final {b} roll select the checksum word.{coin}", { a: labels[0], b: labels[1], coin });
 }
 function hodlDPlusStepChecksumLabel(step) {
   return step === "coin" ? hodlT("the final coin flip") : hodlT("the final {die} checksum roll", { die: hodlDPlusStepLabel(step) });
@@ -2486,8 +2492,8 @@ function hodlDiceFairnessVerdict(cdf, enough) {
   return { id: "biased", tone: "danger" };
 }
 function hodlDiceFairnessFaceLabel(label) {
-  if (label === "Heads") return hodlT("Heads");
-  if (label === "Tails") return hodlT("Tails");
+  if (label === "Heads") return hodlTText("Heads");
+  if (label === "Tails") return hodlTText("Tails");
   return String(label ?? "");
 }
 function hodlDiceFairnessAssess(rolls, labels, title) {
@@ -2557,10 +2563,10 @@ function hodlDiceFairnessTone(reports) {
 }
 function hodlDiceFairnessNote(report) {
   if (!report.n) return "";
-  let title = report.title === "Coin" ? hodlT("Coin") : report.title;
-  if (!report.enough) return hodlT("{n} of {minimum} minimum {title} rolls for Pearson’s χ² test · {remaining} more needed.", { n: report.n, minimum: report.minimum, title, remaining: report.remaining });
-  let robust = report.minimum * 2, quality = report.n >= robust ? hodlT("Enough rolls to reasonably assess fairness.") : hodlT("Minimum reached. {n} more would make the estimate more robust.", { n: robust - report.n });
-  return hodlT("A fair {title} would score χ² below {chi} in {percent}% of tests. {quality}", { title, chi: hodlFormatFairnessNumber(report.chi), percent: hodlFormatFairnessNumber(report.cdf * 100), quality });
+  let title = report.title === "Coin" ? hodlTText("Coin") : report.title;
+  if (!report.enough) return hodlTText("{n} of {minimum} minimum {title} rolls for Pearson’s χ² test · {remaining} more needed.", { n: report.n, minimum: report.minimum, title, remaining: report.remaining });
+  let robust = report.minimum * 2, quality = report.n >= robust ? hodlTText("Enough rolls to reasonably assess fairness.") : hodlTText("Minimum reached. {n} more would make the estimate more robust.", { n: robust - report.n });
+  return hodlTText("A fair {title} would score χ² below {chi} in {percent}% of tests. {quality}", { title, chi: hodlFormatFairnessNumber(report.chi), percent: hodlFormatFairnessNumber(report.cdf * 100), quality });
 }
 function hodlDiceFairnessMarkup(reports) {
   return (reports || []).filter((report) => report.n > 0).map((report) => {
@@ -2569,7 +2575,7 @@ function hodlDiceFairnessMarkup(reports) {
       let hot = report.enough && report.expected > 0 && Math.abs(face.count - report.expected) >= 2 * Math.sqrt(report.expected);
       return `<div class="dice-fairness-face${hot ? " is-hot" : ""}"><span class="dice-fairness-label">${hodlEscapeHtml(hodlDiceFairnessFaceLabel(face.label))}</span><span class="dice-fairness-track"><span class="dice-fairness-bar" style="width:${(face.count / peak * 100).toFixed(1)}%"></span>${report.expected > 0 ? `<span class="dice-fairness-expected" style="left:${(report.expected / peak * 100).toFixed(1)}%"></span>` : ""}</span><span class="dice-fairness-count">${face.count}</span></div>`;
     }).join("");
-    return `<section class="dice-fairness-test" data-tone="${report.verdict.tone}"><div class="dice-fairness-head"><strong>${hodlEscapeHtml(hodlT(hodlFairnessVerdictLabels[report.verdict.id] || ""))}</strong><span>${hodlEscapeHtml(hodlT(report.n === 1 ? "χ² {chi} · {df} df · {n} roll" : "χ² {chi} · {df} df · {n} rolls", { chi: hodlFormatFairnessNumber(report.chi), df: report.df, n: report.n }))}</span></div><p class="dice-fairness-note">${hodlEscapeHtml(hodlDiceFairnessNote(report))}</p><div class="dice-fairness-faces" data-sides="${report.sides}">${faces}</div></section>`;
+    return `<section class="dice-fairness-test" data-tone="${report.verdict.tone}"><div class="dice-fairness-head"><strong>${hodlEscapeHtml(hodlTText(hodlFairnessVerdictLabels[report.verdict.id] || ""))}</strong><span>${hodlEscapeHtml(hodlTText(report.n === 1 ? "χ² {chi} · {df} df · {n} roll" : "χ² {chi} · {df} df · {n} rolls", { chi: hodlFormatFairnessNumber(report.chi), df: report.df, n: report.n }))}</span></div><p class="dice-fairness-note">${hodlEscapeHtml(hodlDiceFairnessNote(report))}</p><div class="dice-fairness-faces" data-sides="${report.sides}">${faces}</div></section>`;
   }).join("");
 }
 function hodlDiceFairnessIsOpen() {
@@ -2584,7 +2590,7 @@ function hodlSetDiceFairnessOpen(open) {
   if (state) state.showDiceFairness = expanded;
   if (toggle) {
     toggle.setAttribute("aria-expanded", String(expanded));
-    toggle.setAttribute("aria-label", expanded ? hodlT("Hide die distribution / fairness analysis") : hodlT("Show die distribution / fairness analysis"));
+    toggle.setAttribute("aria-label", expanded ? hodlTText("Hide die distribution / fairness analysis") : hodlTText("Show die distribution / fairness analysis"));
   }
   if (glyph) glyph.textContent = expanded ? "\u25BE" : "\u25B8";
   let input = document.getElementById("dice");
@@ -2598,7 +2604,7 @@ function hodlRenderDiceFairness(value, method, targetWords = hodlTargetWordCount
   panel.hidden = !open;
   panel.dataset.tone = open ? hodlDiceFairnessTone(reports) : "muted";
   panel.innerHTML = open ? (markup ? `${markup}<p class="dice-fairness-caveat">${hodlT("Pearson’s χ² goodness-of-fit. A lucky streak can look biased, and a biased die can look fair until more rolls arrive. This check does not block derivation.")}</p>` : `<p class="dice-fairness-note">${hodlT("Enter rolls to run Pearson’s χ² test.")}</p>`) : "";
-  panel.setAttribute("aria-label", hodlT("Die Distribution / Fairness Analysis"));
+  panel.setAttribute("aria-label", hodlTText("Die Distribution / Fairness Analysis"));
 }
 function hodlDiceControlValue(button) {
   return button.dataset.d || "";
@@ -3215,10 +3221,10 @@ function hodlDirectCardSetLabel(max) {
   return `A\u2013${max}`;
 }
 function hodlDirectCardStepStatus(parsed) {
-  if (parsed.complete) return hodlT("All {n} rank draws entered · checksum-valid {words}-word seed ready to derive", { n: parsed.steps.length, words: parsed.config.words });
+  if (parsed.complete) return hodlTText("All {n} rank draws entered · checksum-valid {words}-word seed ready to derive", { n: parsed.steps.length, words: parsed.config.words });
   let position = Math.min(parsed.entries.length, parsed.steps.length - 1), max = parsed.steps[position], partialDraws = parsed.config.partialWords * 4;
-  if (position < partialDraws) return hodlT(position ? "Word {word} of {words} · draw {draw} of 4 from {set} after shuffling" : "Word {word} of {words} · draw {draw} of 4 from {set}", { word: Math.floor(position / 4) + 1, words: parsed.config.words, draw: position % 4 + 1, set: hodlDirectCardSetLabel(max) });
-  return hodlT("Final word · draw {draw} of {need} from {set} after shuffling", { draw: position - partialDraws + 1, need: hodlDirectCardFinalRadices(parsed.config.words).length, set: hodlDirectCardSetLabel(max) });
+  if (position < partialDraws) return hodlTText(position ? "Word {word} of {words} · draw {draw} of 4 from {set} after shuffling" : "Word {word} of {words} · draw {draw} of 4 from {set}", { word: Math.floor(position / 4) + 1, words: parsed.config.words, draw: position % 4 + 1, set: hodlDirectCardSetLabel(max) });
+  return hodlTText("Final word · draw {draw} of {need} from {set} after shuffling", { draw: position - partialDraws + 1, need: hodlDirectCardFinalRadices(parsed.config.words).length, set: hodlDirectCardSetLabel(max) });
 }
 function hodlDirectCardInstruction(parsed) {
   if (parsed.complete) return "";
@@ -3319,14 +3325,14 @@ function hodlUpdateCards() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
     button.disabled = exhausted || incompatible || locked;
-    button.title = exhausted ? hodlT("Every card in this suit has already been dealt in this shuffle.") : incompatible ? hodlT("The {rank} of this suit has already been dealt.", { rank: hodlCardRank === "T" ? "10" : hodlCardRank }) : locked ? hodlT("Finish the selected card using the rank row.") : active ? hodlT("Suit selected. Click again to clear it, or choose an available rank.") : hodlT("Select this suit first.");
+    button.title = exhausted ? hodlTText("Every card in this suit has already been dealt in this shuffle.") : incompatible ? hodlTText("The {rank} of this suit has already been dealt.", { rank: hodlCardRank === "T" ? "10" : hodlCardRank }) : locked ? hodlTText("Finish the selected card using the rank row.") : active ? hodlTText("Suit selected. Click again to clear it, or choose an available rank.") : hodlTText("Select this suit first.");
   });
   document.querySelectorAll("[data-card-rank]").forEach((button) => {
     let rank = button.getAttribute("data-card-rank"), active = rank === hodlCardRank, exhausted = !selection.availableRanks.includes(rank), incompatible = Boolean(hodlCardSuit) && !selection.compatibleRanks.includes(rank), locked = Boolean(hodlCardRank) && !active;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
     button.disabled = exhausted || incompatible || locked;
-    button.title = exhausted ? hodlT("Every {rank} has already been dealt in this shuffle.", { rank: rank === "T" ? "10" : rank }) : incompatible ? hodlT("The {rank} of the selected suit has already been dealt.", { rank: rank === "T" ? "10" : rank }) : locked ? hodlT("Finish the selected card using the suit row.") : active ? hodlT("Rank selected. Click again to clear it, or choose an available suit.") : hodlT("Select this rank first.");
+    button.title = exhausted ? hodlTText("Every {rank} has already been dealt in this shuffle.", { rank: rank === "T" ? "10" : rank }) : incompatible ? hodlTText("The {rank} of the selected suit has already been dealt.", { rank: rank === "T" ? "10" : rank }) : locked ? hodlTText("Finish the selected card using the suit row.") : active ? hodlTText("Rank selected. Click again to clear it, or choose an available suit.") : hodlTText("Select this rank first.");
   });
   let undo = document.getElementById("card-undo");
   if (undo) undo.disabled = !parsed.cards.length && !String(input.value || "").trim();
@@ -3506,19 +3512,19 @@ function hodlRenderPassphraseInputState(input, enabled = hodlPassphraseBip39Enab
     status.hidden = !enabled;
     if (enabled) {
       if (invalid) {
-        status.textContent = hodlT(analysis.invalidRanges.length === 1 ? "{n} passphrase inconsistency highlighted · use complete lowercase English BIP39 words separated by single spaces" : "{n} passphrase inconsistencies highlighted · use complete lowercase English BIP39 words separated by single spaces", { n: analysis.invalidRanges.length });
+        status.textContent = hodlTText(analysis.invalidRanges.length === 1 ? "{n} passphrase inconsistency highlighted · use complete lowercase English BIP39 words separated by single spaces" : "{n} passphrase inconsistencies highlighted · use complete lowercase English BIP39 words separated by single spaces", { n: analysis.invalidRanges.length });
         status.className = "muted passphrase-bip39-status err";
       } else if (analysis.incomplete) {
-        status.textContent = hodlT(analysis.completeWords === 1 ? "{n} complete BIP39 word · finish the current word" : "{n} complete BIP39 words · finish the current word", { n: analysis.completeWords });
+        status.textContent = hodlTText(analysis.completeWords === 1 ? "{n} complete BIP39 word · finish the current word" : "{n} complete BIP39 words · finish the current word", { n: analysis.completeWords });
         status.className = "muted passphrase-bip39-status";
       } else if (analysis.trailingSeparator) {
-        status.textContent = hodlT(analysis.completeWords === 1 ? "{n} complete BIP39 word · start the next word or remove the final space" : "{n} complete BIP39 words · start the next word or remove the final space", { n: analysis.completeWords });
+        status.textContent = hodlTText(analysis.completeWords === 1 ? "{n} complete BIP39 word · start the next word or remove the final space" : "{n} complete BIP39 words · start the next word or remove the final space", { n: analysis.completeWords });
         status.className = "muted passphrase-bip39-status";
       } else if (input.value) {
-        status.textContent = hodlT(analysis.completeWords === 1 ? "{n} lowercase BIP39 passphrase word entered" : "{n} lowercase BIP39 passphrase words entered", { n: analysis.completeWords });
+        status.textContent = hodlTText(analysis.completeWords === 1 ? "{n} lowercase BIP39 passphrase word entered" : "{n} lowercase BIP39 passphrase words entered", { n: analysis.completeWords });
         status.className = "muted passphrase-bip39-status ok";
       } else {
-        status.textContent = hodlT("Use complete lowercase English BIP39 words separated by single spaces.");
+        status.textContent = hodlTText("Use complete lowercase English BIP39 words separated by single spaces.");
         status.className = "muted passphrase-bip39-status";
       }
     }
@@ -3773,9 +3779,9 @@ function hodlNormalizePrivateKeyKind(kind, value = "") {
   return "wif";
 }
 function hodlPrivateKeyPlaceholder(kind, network = "mainnet") {
-  if (kind === "hex-key") return hodlT("64 hexadecimal characters");
-  if (kind === "minikey") return hodlT("S… (22 or 30 Base58 characters)");
-  if (kind === "brain") return hodlT("Text to hash");
+  if (kind === "hex-key") return hodlTText("64 hexadecimal characters");
+  if (kind === "minikey") return hodlTText("S… (22 or 30 Base58 characters)");
+  if (kind === "brain") return hodlTText("Text to hash");
   return network === "testnet" ? hodlT("9… / c…") : hodlT("5… / K… / L…");
 }
 function hodlBrainWalletText(value, trim = hodlBrainWalletTrimEnabled()) {
@@ -3847,17 +3853,17 @@ function hodlSyncBrainOutput() {
   let hex = document.getElementById("brain-lab-hex");
   if (!hex || !brain || output !== "hd") return;
   if (!acked) {
-    hex.textContent = hodlT("Acknowledge the lab warning, then enter text. {derive} is still required.", { derive: hodlT("Derive Key") });
+    hex.textContent = hodlTText("Acknowledge the lab warning, then enter text. {derive} is still required.", { derive: hodlTText("Derive Key") });
     hex.className = "muted";
     return;
   }
   if (!input.value.length) {
-    hex.textContent = hodlT("SHA-256 hex appears here. 24 words appear only after {derive}.", { derive: hodlT("Derive Key") });
+    hex.textContent = hodlTText("SHA-256 hex appears here. 24 words appear only after {derive}.", { derive: hodlTText("Derive Key") });
     hex.className = "muted";
     return;
   }
   let entropy = hodlBrainLabEntropy(hodlBrainWalletText(input.value));
-  hex.textContent = entropy.ok ? hodlT("SHA-256 {hex} · 24 words appear only after {derive}.", { hex: entropy.hex, derive: hodlT("Derive Key") }) : hodlFormatNote(entropy.error);
+  hex.textContent = entropy.ok ? hodlTText("SHA-256 {hex} · 24 words appear only after {derive}.", { hex: entropy.hex, derive: hodlTText("Derive Key") }) : hodlFormatNote(entropy.error);
   hex.className = "muted" + (entropy.ok ? " ok" : " err");
 }
 function hodlUpdatePrivateKeyInputPresentation() {
@@ -4779,11 +4785,11 @@ function hodlSeedCopyRowMarkup(leading = "") {
 function hodlShowSeedPhraseCopied(button) {
   if (!button) return;
   let note = button.closest(".seed-word-copy-row")?.querySelector(".seed-phrase-copied");
-  if (note) note.textContent = hodlT("Copied");
+  if (note) note.textContent = hodlTText("Copied");
   button.classList.add("is-copied");
   button.innerHTML = hodlCopiedIconMarkup();
-  button.setAttribute("aria-label", button.dataset.copiedLabel || hodlT("Seed phrase copied"));
-  button.title = hodlT("Copied");
+  button.setAttribute("aria-label", button.dataset.copiedLabel || hodlTText("Seed phrase copied"));
+  button.title = hodlTText("Copied");
   clearTimeout(button.hodlCopiedTimer);
   button.hodlCopiedTimer = setTimeout(() => {
     if (!button.isConnected) return;
@@ -4791,8 +4797,8 @@ function hodlShowSeedPhraseCopied(button) {
     button.classList.remove("is-copied");
     button.innerHTML = hodlClipboardIconMarkup();
     let copyLabel = button.dataset.copyLabel || hodlT("Copy seed phrase");
-    button.setAttribute("aria-label", phrase ? copyLabel : hodlT("Seed phrase unavailable"));
-    button.title = phrase ? copyLabel : hodlT("Seed phrase unavailable");
+    button.setAttribute("aria-label", phrase ? copyLabel : hodlTText("Seed phrase unavailable"));
+    button.title = phrase ? copyLabel : hodlTText("Seed phrase unavailable");
     if (note) note.textContent = "";
   }, 1600);
 }
@@ -4844,8 +4850,8 @@ function hodlRenderDiceWordGrid(container, words, targetWords = hodlTargetWordCo
     copy.disabled = !phrase;
     copy.dataset.phrase = phrase;
     if (!copy.classList.contains("is-copied")) {
-      copy.setAttribute("aria-label", phrase ? hodlT("Copy seed phrase") : hodlT("Seed phrase unavailable"));
-      copy.title = phrase ? hodlT("Copy seed phrase") : hodlT("Seed phrase unavailable");
+      copy.setAttribute("aria-label", phrase ? hodlTText("Copy seed phrase") : hodlTText("Seed phrase unavailable"));
+      copy.title = phrase ? hodlTText("Copy seed phrase") : hodlTText("Seed phrase unavailable");
     }
     if (!copy.hodlCopyBound) {
       copy.onclick = () => hodlCopySeedPhraseButton(copy);
@@ -4872,9 +4878,9 @@ function hodlUpdateEntropyInput(input, format, targetWords = hodlTargetWordCount
     button.disabled = Boolean(finalRestricted);
     button.hidden = Boolean(coinPhase && !binary);
     button.classList.toggle("coin-button", coinPhase && binary);
-    button.textContent = coinPhase && binary ? digit === "0" ? hodlT("Heads (0)") : hodlT("Tails (1)") : digit;
-    button.setAttribute("aria-label", coinPhase && binary ? digit === "0" ? hodlT("Enter Heads as binary 0") : hodlT("Enter Tails as binary 1") : hodlT("Enter {shortLabel} {character}", { shortLabel: hodlT(definition.shortLabel), character: digit }));
-    button.title = finalRestricted ? coinPhase ? hodlT("The remaining {n} entropy bit(s) must use 0 or 1.", { n: definition.remainderBits }) : hodlT("The final character must be one of {chars}.", { chars: [...definition.finalCharacters].join(", ") }) : "";
+    button.textContent = coinPhase && binary ? digit === "0" ? hodlTText("Heads (0)") : hodlTText("Tails (1)") : digit;
+    button.setAttribute("aria-label", coinPhase && binary ? digit === "0" ? hodlTText("Enter Heads as binary 0") : hodlTText("Enter Tails as binary 1") : hodlTText("Enter {shortLabel} {character}", { shortLabel: hodlTText(definition.shortLabel), character: digit }));
+    button.title = finalRestricted ? coinPhase ? hodlTText("The remaining {n} entropy bit(s) must use 0 or 1.", { n: definition.remainderBits }) : hodlTText("The final character must be one of {chars}.", { chars: [...definition.finalCharacters].join(", ") }) : "";
   });
   return analysis;
 }
@@ -4891,12 +4897,12 @@ function hodlRenderLastWordPicker(container, candidates, selected, onPick, setti
   }
   let targetWords = Number(settings.targetWords) || hodlTargetWordCount, label = document.createElement("label"), select = document.createElement("select"), placeholderValue = "__entropylab_placeholder__";
   label.className = "field last-word-field";
-  label.textContent = hodlT("Valid final word ({n} choices)", { n: candidates.length });
-  select.setAttribute("aria-label", hodlT("Valid final word for {n}-word seed", { n: targetWords }));
+  label.textContent = hodlTText("Valid final word ({n} choices)", { n: candidates.length });
+  select.setAttribute("aria-label", hodlTText("Valid final word for {n}-word seed", { n: targetWords }));
   if (!selected) {
     let placeholder = document.createElement("option");
     placeholder.value = placeholderValue;
-    placeholder.textContent = settings.placeholder || hodlT("Choose a confirmed final word");
+    placeholder.textContent = settings.placeholder || hodlTText("Choose a confirmed final word");
     placeholder.disabled = true;
     placeholder.selected = true;
     placeholder.dataset.customSelectPlaceholder = "true";
@@ -4934,10 +4940,10 @@ function hodlUpdateSeedLengthControl() {
     if (format.remainderBits) extra = format.binaryRemainder
       ? hodlT(" Enter {fullDigits} complete {shortLabel} characters followed by {n} coin flip(s), using Heads (0) or Tails (1).", { fullDigits: format.fullDigits, shortLabel: format.shortLabel, n: format.remainderBits })
       : hodlT(" The final character contributes {n} bit(s) and must be one of {chars}.", { n: format.remainderBits, chars: [...format.finalCharacters].join(", ") });
-    help.textContent = hodlT("{words} words require exactly {digits} {unit}.", { words: config.words, digits: format.digits, unit: format.unit }) + extra;
+    help.textContent = hodlTText("{words} words require exactly {digits} {unit}.", { words: config.words, digits: format.digits, unit: format.unit }) + extra;
     return;
   }
-  help.textContent = hodlKeyMode === "seed" ? hodlSeedMethod === "numbers" ? hodlT("Enter exactly {words} BIP39 word numbers using {range}.", { words: config.words, range: hodlT(hodlSeedZeroIndexed ? "0 through 2047" : "1 through 2048") }) : hodlT("Enter exactly {words} BIP39 words. Extended keys ignore this selection.", { words: config.words }) : hodlKeyMode === "cards" ? hodlCardMethod === "direct" ? hodlT("{words} words use {partial} complete 11-bit rank selections plus {final} final rank draw(s).", { words: config.words, partial: config.partialWords, final: hodlDirectCardFinalRadices(config.words).length }) : config.words === 24 ? hodlT("24 words need 256 bits. One deck is about 225.6 bits, so deal 52 unique cards, shuffle again, then deal 6 more.") : hodlT("{words} words need {bits} bits. Deal {first} unique cards from one shuffled deck.", { words: config.words, bits: config.bits, first: hodlCardNeeded(config.words).first }) : hodlT("{words} words use {bits} bits of BIP39 entropy.", { words: config.words, bits: config.bits });
+  help.textContent = hodlKeyMode === "seed" ? hodlSeedMethod === "numbers" ? hodlTText("Enter exactly {words} BIP39 word numbers using {range}.", { words: config.words, range: hodlTText(hodlSeedZeroIndexed ? "0 through 2047" : "1 through 2048") }) : hodlTText("Enter exactly {words} BIP39 words. Extended keys ignore this selection.", { words: config.words }) : hodlKeyMode === "cards" ? hodlCardMethod === "direct" ? hodlTText("{words} words use {partial} complete 11-bit rank selections plus {final} final rank draw(s).", { words: config.words, partial: config.partialWords, final: hodlDirectCardFinalRadices(config.words).length }) : config.words === 24 ? hodlTText("24 words need 256 bits. One deck is about 225.6 bits, so deal 52 unique cards, shuffle again, then deal 6 more.") : hodlTText("{words} words need {bits} bits. Deal {first} unique cards from one shuffled deck.", { words: config.words, bits: config.bits, first: hodlCardNeeded(config.words).first }) : hodlTText("{words} words use {bits} bits of BIP39 entropy.", { words: config.words, bits: config.bits });
 }
 function hodlInvalidateActiveKeyOutput() {
   hodlWalletResult = null;
@@ -5270,20 +5276,20 @@ function hodlRenderKeyForm() {
         let parsed = hodlRenderSeedNumberInputState(input, config.words, hodlSeedZeroIndexed), meta = hodlElement("#seed-number-meta"), entered = parsed.entries.length, progress = hodlT("{entered} of {words} BIP39 word numbers entered", { entered, words: config.words }), remaining = Math.max(0, config.words - entered);
         hodlRenderDiceWordGrid(document.getElementById("seed-number-words"), parsed.wordSlots, config.words, false);
         if (parsed.extraEntries.length) {
-          meta.textContent = hodlT("{entered} entered · {words} required · {n} extra highlighted · remove to continue", { entered, words: config.words, n: parsed.extraEntries.length });
+          meta.textContent = hodlTText("{entered} entered · {words} required · {n} extra highlighted · remove to continue", { entered, words: config.words, n: parsed.extraEntries.length });
           meta.className = "muted err";
         } else if (parsed.invalidEntries.length) {
           let invalid = parsed.invalidEntries[0];
-          meta.textContent = hodlT("{progress} · Word {n} number “{token}” is outside {min}–{max} · correct to continue", { progress, n: invalid.position + 1, token: invalid.token, min: parsed.minimum, max: parsed.maximum });
+          meta.textContent = hodlTText("{progress} · Word {n} number “{token}” is outside {min}–{max} · correct to continue", { progress, n: invalid.position + 1, token: invalid.token, min: parsed.minimum, max: parsed.maximum });
           meta.className = "muted err";
         } else if (parsed.checksumInvalid) {
-          meta.textContent = hodlT("{progress} · BIP39 checksum invalid · final word number highlighted", { progress });
+          meta.textContent = hodlTText("{progress} · BIP39 checksum invalid · final word number highlighted", { progress });
           meta.className = "muted err";
         } else if (parsed.complete) {
-          meta.textContent = hodlT("{progress} · checksum valid · ready to derive", { progress });
+          meta.textContent = hodlTText("{progress} · checksum valid · ready to derive", { progress });
           meta.className = "muted ok";
         } else {
-          meta.textContent = hodlT("{progress} · {remaining} remaining · valid range {min}–{max}", { progress, remaining, min: parsed.minimum, max: parsed.maximum });
+          meta.textContent = hodlTText("{progress} · {remaining} remaining · valid range {min}–{max}", { progress, remaining, min: parsed.minimum, max: parsed.maximum });
           meta.className = "muted";
         }
         hodlUpdateSeedNumberPad(input, parsed);
@@ -5299,8 +5305,8 @@ function hodlRenderKeyForm() {
           state.seedZeroIndexed = hodlSeedZeroIndexed;
           state.fields.seedNumbers = input.value;
         }
-        document.getElementById("seed-number-help").textContent = hodlT("Enter one {range} number for each word, separated by spaces. The corresponding BIP39 words appear below.", { range: hodlT(hodlSeedZeroIndexed ? "0 through 2047" : "1 through 2048") });
-        input.placeholder = hodlT(hodlSeedZeroIndexed ? "0 1 2 …" : "1 2 3 …");
+        document.getElementById("seed-number-help").textContent = hodlTText("Enter one {range} number for each word, separated by spaces. The corresponding BIP39 words appear below.", { range: hodlTText(hodlSeedZeroIndexed ? "0 through 2047" : "1 through 2048") });
+        input.placeholder = hodlTText(hodlSeedZeroIndexed ? "0 1 2 …" : "1 2 3 …");
         hodlUpdateSeedLengthControl();
         update();
       };
@@ -5333,44 +5339,44 @@ function hodlRenderKeyForm() {
       }
       let finalContext = analysis.finalContext, validation = hodlValidateTargetMnemonic(value, config.words), entered = analysis.tokens.length, progress = hodlSeedCountStatus(entered, config.words), remaining = Math.max(0, config.words - entered);
       if (finalContext) {
-        hodlRenderLastWordPicker(picker, finalContext.candidates, finalContext.selected, (word) => hodlReplaceSeedFinalWord(input, finalContext, word), { forceSelect: true, resettable: true, targetWords: config.words, placeholder: hodlT("Choose {article} {n}th word", { article: hodlT(config.words === 18 ? "an" : "a"), n: config.words }) });
+        hodlRenderLastWordPicker(picker, finalContext.candidates, finalContext.selected, (word) => hodlReplaceSeedFinalWord(input, finalContext, word), { forceSelect: true, resettable: true, targetWords: config.words, placeholder: hodlTText("Choose {article} {n}th word", { article: hodlTText(config.words === 18 ? "an" : "a"), n: config.words }) });
         if (!finalContext.finalToken) {
-          meta.textContent = hodlT("{progress} · choose the final checksum word · {n} valid choices", { progress, n: finalContext.candidates.length });
+          meta.textContent = hodlTText("{progress} · choose the final checksum word · {n} valid choices", { progress, n: finalContext.candidates.length });
           meta.className = "muted ok";
           return;
         }
         if (validation.ok) {
-          meta.textContent = hodlT("{progress} · checksum valid · ready to derive", { progress });
+          meta.textContent = hodlTText("{progress} · checksum valid · ready to derive", { progress });
           meta.className = "muted ok";
           return;
         }
         if (!finalContext.matchingCandidates.length) {
-          meta.textContent = hodlT("{progress} · No valid checksum word starts with \"{prefix}\".", { progress, prefix: finalContext.prefix });
+          meta.textContent = hodlTText("{progress} · No valid checksum word starts with \"{prefix}\".", { progress, prefix: finalContext.prefix });
           meta.className = "muted err";
           return;
         }
-        meta.textContent = hodlT("{progress} · {n} valid checksum word(s) start with \"{prefix}\".", { progress, n: finalContext.matchingCandidates.length, prefix: finalContext.prefix });
+        meta.textContent = hodlTText("{progress} · {n} valid checksum word(s) start with \"{prefix}\".", { progress, n: finalContext.matchingCandidates.length, prefix: finalContext.prefix });
         meta.className = "muted";
         return;
       }
       picker.innerHTML = "";
       let invalidWord = analysis.invalidWords[0];
       if (analysis.excessCount) {
-        meta.textContent = hodlT("{entered} entered · {words} required BIP39 words · {n} extra highlighted · remove to continue", { entered, words: config.words, n: analysis.excessCount });
+        meta.textContent = hodlTText("{entered} entered · {words} required BIP39 words · {n} extra highlighted · remove to continue", { entered, words: config.words, n: analysis.excessCount });
         meta.className = "muted err";
         return;
       }
       if (invalidWord) {
-        meta.textContent = hodlT("{progress} · Word {n} (“{word}”) is not on the BIP39 English list · correct to continue", { progress, n: invalidWord.index + 1, word: invalidWord.word });
+        meta.textContent = hodlTText("{progress} · Word {n} (“{word}”) is not on the BIP39 English list · correct to continue", { progress, n: invalidWord.index + 1, word: invalidWord.word });
         meta.className = "muted err";
         return;
       }
       if (validation.ok) {
-        meta.textContent = hodlT("{progress} · checksum valid · ready to derive", { progress });
+        meta.textContent = hodlTText("{progress} · checksum valid · ready to derive", { progress });
         meta.className = "muted ok";
         return;
       }
-      meta.textContent = hodlT("{progress} · {remaining} remaining", { progress, remaining });
+      meta.textContent = hodlTText("{progress} · {remaining} remaining", { progress, remaining });
       meta.className = "muted";
     };
     let toggle = document.getElementById("seed-autocomplete");
@@ -5523,7 +5529,7 @@ function hodlUpdateDice() {
   let rolls = inputState.acceptedRolls, words = hodlDicePreviewWords(input.value, hodlDiceMethod, config.words);
   let missing = Math.max(0, config.hashRolls - rolls.length), provisional = rolls.length > 0 && missing > 0, extra = Math.max(0, rolls.length - config.hashRolls), methodLabel = hodlDiceMethod === "coleman" ? hodlT("Hashed rolls / Dice [1-6]") : hodlT("Hashed rolls / Base 10 [0-9]");
   hodlRenderDiceWordGrid(wordsBox, words, config.words, provisional);
-  hodlElement("#dice-meta").textContent = (!rolls.length ? hodlT("0 of {n} recommended rolls · 0.0 bits estimated · {method}", { n: config.hashRolls, method: methodLabel }) : missing ? hodlT("{have} of {n} recommended rolls · {bits} bits estimated · seed available for testing · {missing} more recommended", { have: rolls.length, n: config.hashRolls, bits: hodlDiceEntropyBits(rolls.length).toFixed(1), missing }) : hodlT("{have} roll(s) · {bits} bits estimated · ready to derive", { have: rolls.length, bits: hodlDiceEntropyBits(rolls.length).toFixed(1) }) + (extra ? hodlT(" · all {n} extra roll(s) included", { n: extra }) : "")) + invalidStatus;
+  hodlElement("#dice-meta").textContent = (!rolls.length ? hodlTText("0 of {n} recommended rolls · 0.0 bits estimated · {method}", { n: config.hashRolls, method: methodLabel }) : missing ? hodlTText("{have} of {n} recommended rolls · {bits} bits estimated · seed available for testing · {missing} more recommended", { have: rolls.length, n: config.hashRolls, bits: hodlDiceEntropyBits(rolls.length).toFixed(1), missing }) : hodlTText("{have} roll(s) · {bits} bits estimated · ready to derive", { have: rolls.length, bits: hodlDiceEntropyBits(rolls.length).toFixed(1) }) + (extra ? hodlTText(" · all {n} extra roll(s) included", { n: extra }) : "")) + invalidStatus;
   hodlRenderDiceFairness(input.value, hodlDiceMethod, config.words);
   hodlQueueMasterFingerprintPreview();
 }
@@ -5807,7 +5813,7 @@ function hodlSyncDeriveButton() {
     hodlSetDerivationButtonState("key", "idle");
     button.disabled = true;
     button.setAttribute("aria-disabled", "true");
-    button.title = hodlT("A derivation is already running.");
+    button.title = hodlTText("A derivation is already running.");
     return;
   }
   hodlSetDerivationButtonState("key", "idle");
@@ -6630,7 +6636,7 @@ function hodlSyncMsigDeriveButton() {
     hodlSetDerivationButtonState("msig", "idle");
     button.disabled = true;
     button.setAttribute("aria-disabled", "true");
-    button.title = hodlT("A derivation is already running.");
+    button.title = hodlTText("A derivation is already running.");
     return;
   }
   hodlSetDerivationButtonState("msig", "idle");
@@ -6712,7 +6718,7 @@ function hodlUpdateMsigAccount() {
     hodlSyncDerivationPrime(field);
     field.placeholder = "Not applicable";
     field.dataset.state = "not-applicable";
-    if (help) help.textContent = hodlT("BIP45 purpose keys do not contain an account number.");
+    if (help) help.textContent = hodlTText("BIP45 purpose keys do not contain an account number.");
     if (warning) {
       warning.textContent = "";
       warning.hidden = true;
@@ -6763,7 +6769,7 @@ function hodlInvalidateMsig() {
 function hodlUpdateMsigHint() {
   let n = Number(document.getElementById("msig-n").value || 3), m = document.getElementById("msig-m").value || "2", hint = document.getElementById("msig-hint");
   if (hint) {
-    hint.textContent = n === 1 ? hodlT("Spending will need this key. Receiving needs none of the private keys.") : hodlT("Spending will need {m} of these {n} keys. Receiving needs none of the private keys.", { m, n });
+    hint.textContent = n === 1 ? hodlTText("Spending will need this key. Receiving needs none of the private keys.") : hodlTText("Spending will need {m} of these {n} keys. Receiving needs none of the private keys.", { m, n });
     hint.className = "hint ok";
   }
 }
@@ -6965,12 +6971,12 @@ function hodlReindexMsigKeys() {
       pos = row.querySelector(".msig-key-position"),
       lab = row.querySelector("label.field");
     if (ta) ta.id = "msig-x-" + index;
-    if (pos) pos.textContent = hodlT("Position {n}", { n: index + 1 });
-    row.querySelector(".msig-session-keys")?.setAttribute("aria-label", hodlT("Key Station keys for co-signer {n}", { n: index + 1 }));
-    row.querySelector(".msig-key-reuse-path")?.setAttribute("aria-label", hodlT("Derivation path for co-signer {n}", { n: index + 1 }));
+    if (pos) pos.textContent = hodlTText("Position {n}", { n: index + 1 });
+    row.querySelector(".msig-session-keys")?.setAttribute("aria-label", hodlTText("Key Station keys for co-signer {n}", { n: index + 1 }));
+    row.querySelector(".msig-key-reuse-path")?.setAttribute("aria-label", hodlTText("Derivation path for co-signer {n}", { n: index + 1 }));
     if (lab) {
       let title = lab.childNodes[0];
-      if (title && title.nodeType === 3) title.textContent = hodlT("Co-signer {n} multisig extended public key", { n: index + 1 })
+      if (title && title.nodeType === 3) title.textContent = hodlTText("Co-signer {n} multisig extended public key", { n: index + 1 })
     }
   });
   hodlSyncMsigKeyMoveButtons();
@@ -7243,26 +7249,26 @@ function hodlFillKeys(values) {
       head.className = "msig-key-row-head";
       let pos = document.createElement("span");
       pos.className = "msig-key-position";
-      pos.textContent = hodlT("Position {n}", { n: i + 1 });
+      pos.textContent = hodlTText("Position {n}", { n: i + 1 });
       let moves = document.createElement("div");
       moves.className = "msig-key-move";
       let up = document.createElement("button");
       up.type = "button";
       up.className = "btn secondary msig-key-move-btn";
       up.dataset.msigMove = "-1";
-      up.textContent = hodlT("Move up");
+      up.textContent = hodlTText("Move up");
       let down = document.createElement("button");
       down.type = "button";
       down.className = "btn secondary msig-key-move-btn";
       down.dataset.msigMove = "1";
-      down.textContent = hodlT("Move down");
+      down.textContent = hodlTText("Move down");
       moves.append(up, down);
       head.append(pos, moves);
       row.appendChild(head)
     }
     let lab = document.createElement("label");
     lab.className = "field";
-    lab.textContent = hodlT("Co-signer {n} multisig extended public key", { n: i + 1 });
+    lab.textContent = hodlTText("Co-signer {n} multisig extended public key", { n: i + 1 });
     let ta = document.createElement("textarea");
     ta.id = "msig-x-" + i;
     ta.autocomplete = "off";
@@ -7774,13 +7780,13 @@ function hodlShowMsig() {
 }
 var hodlPsbtPriv = null, hodlPsbtHd = null, hodlPsbtSource = "", hodlPsbtSessionSpec = { key: "No session key. Inspect-only mode." }, hodlPsbtLast = null, hodlPsbtErrorSpec = null;
 function hodlPsbtSessionText() {
-  return hodlT(hodlPsbtSessionSpec.key, hodlPsbtSessionSpec.vars);
+  return hodlTText(hodlPsbtSessionSpec.key, hodlPsbtSessionSpec.vars);
 }
 function hodlSetPsbtError(spec) {
   hodlPsbtErrorSpec = spec || null;
   let error = document.getElementById("psbt-error");
   if (!error) return;
-  error.textContent = !spec ? "" : spec.key ? hodlT(spec.key, spec.vars) : spec.raw || "";
+  error.textContent = !spec ? "" : spec.key ? hodlTText(spec.key, spec.vars) : spec.raw || "";
 }
 function hodlRefreshPsbtLocale() {
   let session = document.getElementById("psbt-session");
@@ -8294,7 +8300,7 @@ function hodlUseActiveKeyForPsbt() {
   let state = hodlKeys[hodlActiveKey];
   if (!state || !state.result) {
     hodlPsbtErrorSpec = { key: "Generate an active key first, then return to PSBT / Nonce." };
-    throw new Error(hodlT("Generate an active key first, then return to PSBT / Nonce."));
+    throw new Error(hodlTText("Generate an active key first, then return to PSBT / Nonce."));
   }
   let result = state.result;
   hodlPsbtWipeMem();
@@ -8308,14 +8314,14 @@ function hodlUseActiveKeyForPsbt() {
   } else if (result.kind === "hd" && result.rootXprv) hodlPsbtHd = hodlHDKey.fromExtendedKey(hodlParseExtendedKey(result.rootXprv).xkey);
   else if (result.kind === "hd" && result.importedPrivateKey) {
     hodlPsbtErrorSpec = { key: "The active key is an account-level extended private key. PSBT session signing needs origin-aware relative paths, which this version does not infer. Use the original seed or root xprv/tprv instead." };
-    throw new Error(hodlT("The active key is an account-level extended private key. PSBT session signing needs origin-aware relative paths, which this version does not infer. Use the original seed or root xprv/tprv instead."));
+    throw new Error(hodlTText("The active key is an account-level extended private key. PSBT session signing needs origin-aware relative paths, which this version does not infer. Use the original seed or root xprv/tprv instead."));
   }
   else if (result.kind === "single" && result.privHex) {
     hodlPsbtPriv = hodlHex.decode(result.privHex);
     hodlAssertPrivateKey(hodlPsbtPriv);
   } else {
     hodlPsbtErrorSpec = { key: "The active key has no private material available for a session check." };
-    throw new Error(hodlT("The active key has no private material available for a session check."));
+    throw new Error(hodlTText("The active key has no private material available for a session check."));
   }
   hodlPsbtSource = "active";
   hodlPsbtSessionSpec = state.name ? { key: "Session key from {name}. Kept in page memory only.", vars: { name: state.name } } : { key: "Session key from the active key. Kept in page memory only." };
@@ -13171,7 +13177,7 @@ async function hodlVanityApplyMatch(index) {
     return;
   }
   if (hodlActiveDerivation) {
-    if (error) error.textContent = "A derivation is already running on the Keys tab — wait for it to finish.";
+    if (error) error.textContent = hodlTText("A derivation is already running on the Keys tab — wait for it to finish.");
     return;
   }
   hodlVanityApplying = true;
@@ -13310,13 +13316,13 @@ function hodlInitWorkspace() {
     let fullLabel = document.createElement("span"), shortLabel = document.createElement("span");
     fullLabel.className = "workspace-tab-full";
     shortLabel.className = "workspace-tab-short";
-    fullLabel.textContent = hodlT(label);
-    shortLabel.textContent = hodlT(short);
+    fullLabel.textContent = hodlTText(label);
+    shortLabel.textContent = hodlTText(short);
     button.append(fullLabel, shortLabel);
     // The short form is display:none at wide widths and the full one is hidden
     // at narrow ones, and hidden text is not in the accessibility tree — so the
     // name is stated outright rather than left to whichever span is showing.
-    button.setAttribute("aria-label", hodlT(label));
+    button.setAttribute("aria-label", hodlTText(label));
     button.onclick = () => hodlShowWorkspace(id);
     button.onkeydown = (event) => hodlWorkspaceTabKeydown(event, index);
     strip.appendChild(button);
@@ -13441,7 +13447,7 @@ function hodlApplyTheme(mode) {
   let toggle = document.getElementById("theme-toggle");
   if (toggle) {
     toggle.dataset.themeMode = mode;
-    toggle.setAttribute("aria-label", hodlT(light ? "Theme: light. Switch to dark" : "Theme: dark. Switch to light"));
+    toggle.setAttribute("aria-label", hodlTText(light ? "Theme: light. Switch to dark" : "Theme: dark. Switch to light"));
   }
   let meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = light ? "#ffffff" : "#000000";
@@ -13525,10 +13531,10 @@ function hodlInitNetworkPicker() {
   let options = [...menu.querySelectorAll("[data-network]")];
   let render = () => {
     let key = ["mainnet", "testnet", "signet", "regtest"].includes(hodlNetworkChoice) ? hodlNetworkChoice : "mainnet";
-    let name = hodlT(hodlNetworkNames[key]);
+    let name = hodlTText(hodlNetworkNames[key]);
     root.dataset.network = hodlNetworkChoice;
     label.textContent = name;
-    button.setAttribute("aria-label", hodlT("Bitcoin network: {network}. Change the network the tools derive and check for", { network: name }));
+    button.setAttribute("aria-label", hodlTText("Bitcoin network: {network}. Change the network the tools derive and check for", { network: name }));
     options.forEach((option) => option.setAttribute("aria-checked", String(option.dataset.network === hodlNetworkChoice)));
   };
   let close = () => {
@@ -13723,12 +13729,12 @@ function hodlApplyLocale() {
     let entry = hodlWorkspaceTabs.find(([id]) => id === button.dataset.workspace);
     if (!entry) return;
     let [, label, short] = entry;
-    if (button.firstChild) button.firstChild.textContent = hodlT(label);
-    if (button.lastChild) button.lastChild.textContent = hodlT(short);
-    button.setAttribute("aria-label", hodlT(label));
+    if (button.firstChild) button.firstChild.textContent = hodlTText(label);
+    if (button.lastChild) button.lastChild.textContent = hodlTText(short);
+    button.setAttribute("aria-label", hodlTText(label));
   });
   [...hodlKeyModeSelectEl.options].forEach((option) => {
-    option.textContent = hodlT(hodlKeyModeLabels[option.value]);
+    option.textContent = hodlTText(hodlKeyModeLabels[option.value]);
   });
   hodlKeyModeSelectEl.dispatchEvent(new Event("entropylab:sync-select"));
   if (hodlNetworkPickerRender) hodlNetworkPickerRender();

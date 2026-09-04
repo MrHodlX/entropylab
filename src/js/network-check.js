@@ -16,7 +16,7 @@
   const setStatus = (online) => {
     const tag = document.getElementById(TAG_ID);
     if (!tag) return;
-    const t = globalThis.hodlT;
+    const t = globalThis.hodlTText;
     tag.dataset.state = online ? "online" : "offline";
     tag.textContent = t ? t(online ? "Online" : "Offline") : (online ? "Online" : "Offline");
     tag.setAttribute("aria-label", t ? t(online ? "Network status: online" : "Network status: offline") : (online ? "Network status: online" : "Network status: offline"));

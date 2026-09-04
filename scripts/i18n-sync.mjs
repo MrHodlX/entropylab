@@ -1,17 +1,23 @@
 // EntropyLab i18n sync: extracts every user-facing English source string and
-// keeps the locale catalogs in both-directions sync with it.
+// checks the locale catalogs against it.
 //
-//   node scripts/i18n-sync.mjs           check only (CI): any missing
-//                                        translation or dead catalog entry
-//                                        fails the build
-//   node scripts/i18n-sync.mjs --write   prune dead entries and append new
-//                                        sources as empty strings (English
-//                                        fallback until translated)
+//   node scripts/i18n-sync.mjs           check (CI): invalid catalog content
+//                                        (see scripts/i18n-validate.mjs) or
+//                                        source markup outside the sanitizer
+//                                        table fails the build; missing
+//                                        translations and dead entries are
+//                                        reported, never failed — they are
+//                                        normal between a UI change and the
+//                                        next automated translation run
+//   node scripts/i18n-sync.mjs --write   prune dead entries (new sources are
+//                                        left missing on purpose: the
+//                                        translation workflow fills them)
 //
 // Source strings come from exactly three places:
-//   1. t("…") / hodlT(…) / hodlError(…) / hodlNote(…) literals in src/js —
-//      the English text is the catalog key (bare t( only in the standalone
-//      pre-boot scripts, where it aliases globalThis.hodlT);
+//   1. t("…") / hodlT(…) / hodlTText(…) / hodlTAttr(…) / hodlError(…) /
+//      hodlNote(…) literals in src/js — the English text is the catalog key
+//      (bare t( only in the standalone pre-boot scripts, where it aliases
+//      globalThis.hodlT/hodlTText);
 //   2. every string exported from src/js/i18n-labels.js (the enum-indexed
 //      label families);
 //   3. text nodes, aria-label/placeholder/title attributes, and
@@ -21,6 +27,7 @@
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { catalogProblems, sourceMarkupProblems } from "./i18n-validate.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const write = process.argv.includes("--write");
@@ -56,8 +63,13 @@ const callSites = () => {
   for (const name of files) {
     const src = readFileSync(join(root, "src/js", name), "utf8");
     // Bare t() is an i18n alias only in the two standalone pre-boot scripts;
-    // everywhere else it is an ordinary local variable.
-    const fns = name === "wallet-export.js" || name === "network-check.js" ? ["hodlT", "hodlError", "hodlNote", "t"] : ["hodlT", "hodlError", "hodlNote"];
+    // everywhere else it is an ordinary local variable. app.js imports the
+    // three sink-specific translators under the hodlT/hodlTText/hodlTAttr
+    // names; the longest names come first so the alternation cannot match a
+    // prefix. The field helpers take the English label as their first
+    // argument and translate it internally, so their literals are sources too.
+    const translating = ["hodlPublicFieldHtml", "hodlPrivateFieldHtml", "hodlTText", "hodlTAttr", "hodlT", "hodlError", "hodlNote"];
+    const fns = name === "wallet-export.js" || name === "network-check.js" ? [...translating, "t"] : translating;
     const pattern = new RegExp(`(?:^|[^\\w$.])(?:${fns.join("|")})\\(`, "gm");
     for (const match of src.matchAll(pattern)) {
       for (const text of firstArgLiterals(src, match.index + match[0].length)) {
@@ -216,28 +228,37 @@ for (const name of readdirSync(join(root, "src/locales"))) {
   if (name.endsWith(".json")) locales[name] = JSON.parse(readFileSync(join(root, "src/locales", name), "utf8"));
 }
 
-let problems = 0;
+// The markup tripwire: extracted sources are trusted code, but every markup
+// form they carry must exist in the sanitizer table, or translations of the
+// string would render as escaped text. A feature PR that adds a link or a new
+// formatting form fails here until hodlCatalogAllowedTags grows.
+const sourceProblems = [...sources].flatMap((source) => sourceMarkupProblems(source));
+for (const problem of sourceProblems.slice(0, 20)) console.log(`INVALID source: ${problem}`);
+if (sourceProblems.length > 20) console.log(`…and ${sourceProblems.length - 20} more invalid sources`);
+
+let invalid = 0;
 for (const [name, catalog] of Object.entries(locales)) {
+  const problems = catalogProblems(catalog);
+  invalid += problems.length;
+  for (const problem of problems.slice(0, 20)) console.log(`${name}: INVALID ${problem}`);
+  if (problems.length > 20) console.log(`${name}: …and ${problems.length - 20} more invalid entries`);
+
   const missing = [...sources].filter((source) => typeof catalog[source] !== "string" || !catalog[source]);
   const dead = Object.keys(catalog).filter((key) => !sources.has(key));
   if (missing.length || dead.length) {
-    problems += missing.length + dead.length;
-    console.log(`${name}: ${missing.length} missing, ${dead.length} dead`);
-    if (!write) {
-      for (const source of missing.slice(0, 20)) console.log(`  missing: ${JSON.stringify(source.slice(0, 90))}`);
-      for (const key of dead.slice(0, 20)) console.log(`  dead:    ${JSON.stringify(key.slice(0, 90))}`);
-      if (missing.length > 20 || dead.length > 20) console.log("  …");
-    }
+    console.log(`${name}: ${missing.length} missing, ${dead.length} dead (report only — English fallback until the translation workflow runs)`);
+    for (const source of missing.slice(0, 20)) console.log(`  missing: ${JSON.stringify(source.slice(0, 90))}`);
+    for (const key of dead.slice(0, 20)) console.log(`  dead:    ${JSON.stringify(key.slice(0, 90))}`);
+    if (missing.length > 20 || dead.length > 20) console.log("  …");
   } else {
     console.log(`${name}: in sync (${sources.size} sources)`);
   }
   if (write) {
     const next = {};
     for (const [key, value] of Object.entries(catalog)) if (sources.has(key)) next[key] = value;
-    for (const source of [...sources].sort()) if (!(source in next)) next[source] = "";
     writeFileSync(join(root, "src/locales", name), JSON.stringify(next, null, 2) + "\n");
   }
 }
 console.log(`extracted ${sources.size} source strings`);
-if (write) console.log("catalogs rewritten: dead pruned, new sources appended empty");
-process.exit(problems && !write ? 1 : 0);
+if (write) console.log("catalogs rewritten: dead entries pruned");
+process.exit(invalid + sourceProblems.length ? 1 : 0);
