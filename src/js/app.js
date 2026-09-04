@@ -739,6 +739,13 @@ hodlRootEl.innerHTML = `
         <div id="vanity-out" aria-live="polite"></div>
         <p class="muted">Found passphrases remain in this page only and are never intentionally stored or sent. Memory clearing is best-effort because browsers may retain internal copies; close the page before reconnecting the computer.</p>
       </section>
+      <aside class="vanity-floating-status" id="vanity-floating-status" hidden aria-live="polite">
+        <div class="vanity-floating-status-head"><strong>Vanity grinding progress</strong><button class="vanity-floating-close" id="vanity-floating-close" type="button" aria-label="Close">×</button></div>
+        <p class="muted vanity-floating-stats" id="vanity-floating-status-text"></p>
+        <p class="muted vanity-floating-matches" id="vanity-floating-matches"></p>
+        <div class="derive-progress" id="vanity-floating-progress" role="progressbar" aria-label="Vanity grinding progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete"><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
+        <div class="vanity-floating-actions"><button class="btn secondary" id="vanity-floating-stop" type="button">Stop</button></div>
+      </aside>
       <div class="tool-intro" id="bip85-tool-intro" hidden>
         <div class="kicker">One seed. Many children.</div>
         <h2>Derive BIP-85 child entropy</h2>
@@ -11817,6 +11824,7 @@ function hodlShowWorkspace(id) {
   else if (hodlWorkspace === "msig") hodlCaptureMsig();
 
   hodlWorkspace = id;
+  hodlVanitySyncFloatingStatus();
   [...hodlElement("#workspace-tabs").querySelectorAll("[data-workspace]")].forEach((button) => {
     let active = button.dataset.workspace === id;
     button.classList.toggle("active", active);
@@ -13474,7 +13482,7 @@ function hodlSyncWorkspaceOverflow() {
 // or an account index of a wallet the user already holds, and Update key
 // writes it back to that key through the same Edit input → Derive path the
 // Keys tab uses by hand.
-var hodlVanityGrinder = null, hodlVanityMatches = [], hodlVanityFound = 0, hodlVanityRunning = false, hodlVanityReveal = false, hodlVanityDisplayLimit = 100, hodlVanitySource = "", hodlVanityRun = null, hodlVanityApplying = false, hodlVanityStopFirst = false, hodlVanityBench = null, hodlVanityBenchPending = false, hodlVanityLiveRate = 0;
+var hodlVanityGrinder = null, hodlVanityMatches = [], hodlVanityFound = 0, hodlVanityRunning = false, hodlVanityReveal = false, hodlVanityDisplayLimit = 100, hodlVanitySource = "", hodlVanityRun = null, hodlVanityApplying = false, hodlVanityStopFirst = false, hodlVanityBench = null, hodlVanityBenchPending = false, hodlVanityLiveRate = 0, hodlVanityProgressDone = 0n, hodlVanityProgressTotal = 0n, hodlVanityProgressRate = 0, hodlVanityFloatingDismissed = false;
 // Only derived HD-root keys are listed — the same set the BIP-85 and Silent
 // Payments pickers offer. The Key Station lab tab is a work surface, not a
 // key, so it never appears as a chip.
@@ -13533,6 +13541,30 @@ function hodlVanitySyncScriptNote() {
         : `${meta.label} prefix, starts with “${meta.prefix}”. Live-filtered to base58 characters; each free character multiplies the work by ~58.`;
   }
   if (input) input.placeholder = `${meta.prefix}…`;
+}
+function hodlVanityResetPrefix() {
+  let input = document.getElementById("vanity-prefix"), fixed = hodlVanityScript().prefix;
+  if (!input) return;
+  input.value = fixed;
+  input.setSelectionRange(fixed.length, fixed.length);
+}
+function hodlVanityNormalizePrefixInput(input) {
+  let meta = hodlVanityScript(), fixed = meta.prefix, raw = input.value, start = input.selectionStart ?? raw.length, end = input.selectionEnd ?? start;
+  let suffix = raw.startsWith(fixed) ? raw.slice(fixed.length) : fixed.startsWith(raw) ? "" : raw;
+  let clean = hodlFilterVanityPrefix(fixed + suffix, meta).slice(fixed.length);
+  let before = raw.slice(0, start), after = raw.slice(0, end);
+  let cleanBefore = hodlFilterVanityPrefix(fixed + (before.startsWith(fixed) ? before.slice(fixed.length) : fixed.startsWith(before) ? "" : before), meta).slice(fixed.length);
+  let cleanAfter = hodlFilterVanityPrefix(fixed + (after.startsWith(fixed) ? after.slice(fixed.length) : fixed.startsWith(after) ? "" : after), meta).slice(fixed.length);
+  input.value = fixed + clean;
+  input.setSelectionRange(fixed.length + cleanBefore.length, fixed.length + cleanAfter.length, input.selectionDirection || "none");
+}
+function hodlVanityProtectPrefix(event) {
+  let input = event.currentTarget, fixedLength = hodlVanityScript().prefix.length, start = input.selectionStart ?? 0;
+  if (start >= fixedLength || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key.length === 1 || event.key === "Backspace" || event.key === "Delete") {
+    event.preventDefault();
+    input.setSelectionRange(fixedLength, fixedLength);
+  }
 }
 // The source panel names the selected key and shows its passphrase exactly as
 // entered on the Keys tab: the passphrase grind extends that text, the
@@ -13844,10 +13876,33 @@ function hodlVanitySyncControls() {
     wipe.setAttribute("aria-disabled", String(!dirty));
   }
   if (progress) progress.hidden = !hodlVanityRunning;
+  hodlVanitySyncFloatingStatus();
 }
 function hodlVanitySetStatus(text) {
   let status = document.getElementById("vanity-status");
   if (status) status.textContent = text;
+  hodlVanitySyncFloatingStatus();
+}
+function hodlVanitySyncFloatingProgress() {
+  let progress = document.getElementById("vanity-floating-progress");
+  if (!progress) return;
+  let percent = hodlVanityProgressTotal > 0n ? Number((hodlVanityProgressDone * 10000n) / hodlVanityProgressTotal) / 100 : 0;
+  progress.setAttribute("aria-valuenow", String(Math.floor(percent)));
+  progress.setAttribute("aria-valuetext", `${percent.toFixed(1)}% complete`);
+  let fill = progress.querySelector(".derive-progress-bar"), label = progress.querySelector(".derive-progress-label");
+  if (fill) fill.style.width = `${percent}%`;
+  if (label) label.textContent = `${percent.toFixed(1)}%`;
+  progress.classList.toggle("is-complete", !hodlVanityRunning && hodlVanityProgressTotal > 0n && hodlVanityProgressDone >= hodlVanityProgressTotal);
+}
+function hodlVanitySyncFloatingStatus() {
+  let panel = document.getElementById("vanity-floating-status");
+  if (!panel) return;
+  let text = document.getElementById("vanity-floating-status-text"), matches = document.getElementById("vanity-floating-matches");
+  if (text) text.textContent = hodlVanityProgressTotal > 0n ? `${hodlVanityFormatCount(hodlVanityProgressDone)} / ${hodlVanityFormatCount(hodlVanityProgressTotal)} candidates${hodlVanityRunning && hodlVanityProgressRate > 0 ? ` · ${hodlVanityFormatCount(Math.round(hodlVanityProgressRate))}/s` : ""}` : "";
+  if (matches) matches.textContent = `${hodlVanityFound} match${hodlVanityFound === 1 ? "" : "es"}`;
+  hodlVanitySyncFloatingProgress();
+  let hasRun = hodlVanityRunning || Boolean(hodlVanityRun && hodlVanityProgressTotal > 0n);
+  panel.hidden = hodlWorkspace === "vanity" || !hasRun || hodlVanityFloatingDismissed;
 }
 function hodlVanityStop() {
   if (hodlVanityGrinder && hodlVanityRunning) hodlVanityGrinder.stop();
@@ -13865,6 +13920,10 @@ function hodlVanityClearResults(status = "Idle. No range has been ground this se
   hodlVanityFound = 0;
   hodlVanityReveal = false;
   hodlVanityRun = null;
+  hodlVanityProgressDone = 0n;
+  hodlVanityProgressTotal = 0n;
+  hodlVanityProgressRate = 0;
+  hodlVanityFloatingDismissed = false;
   hodlRenderVanityOut();
   hodlVanitySetStatus(status);
   hodlVanitySyncControls();
@@ -13875,6 +13934,7 @@ function hodlVanityScriptChanged() {
   if (input) hodlApplyFilteredInput(input, (value) => hodlFilterVanityPrefix(value));
   hodlVanityClearResults();
   hodlVanitySyncScriptNote();
+  hodlVanityResetPrefix();
   hodlVanityEstimate();
 }
 function hodlVanityMethodChanged() {
@@ -13894,6 +13954,10 @@ function hodlRunVanity() {
   }
   hodlVanityMatches = [];
   hodlVanityFound = 0;
+  hodlVanityFloatingDismissed = false;
+  hodlVanityProgressDone = 0n;
+  hodlVanityProgressTotal = BigInt(inputs.count);
+  hodlVanityProgressRate = 0;
   // The run's key, method, and passphrase are fixed at start; snapshot them
   // so the results (and Update key) cannot drift if the form changes mid-grind.
   hodlVanityRun = { method: inputs.method, script: inputs.script, sourceId: inputs.sourceId, sourceLabel: inputs.sourceLabel, passphrase: inputs.passphrase, accountHardened: inputs.accountHardened, pathText: vanityPathString([...inputs.pathPrefix, ...inputs.path]) };
@@ -13904,6 +13968,9 @@ function hodlRunVanity() {
   let progressBar = document.getElementById("vanity-progress");
   hodlVanityGrinder = new VanityGrinder({
     onProgress: ({ done, total, rate }) => {
+      hodlVanityProgressDone = done;
+      hodlVanityProgressTotal = total;
+      hodlVanityProgressRate = rate;
       let percent = total > 0n ? Number((done * 10000n) / total) / 100 : 0;
       if (progressBar) {
         progressBar.setAttribute("aria-valuenow", String(Math.floor(percent)));
@@ -13913,6 +13980,7 @@ function hodlRunVanity() {
         if (label) label.textContent = `${percent.toFixed(1)}%`;
       }
       hodlVanitySetStatus(`${hodlVanityFormatCount(done)} / ${hodlVanityFormatCount(total)} candidates · ${hodlVanityFormatCount(Math.round(rate))}/s · ${hodlVanityFound} match${hodlVanityFound === 1 ? "" : "es"}`);
+      hodlVanitySyncFloatingProgress();
       // The live rate is the best estimate while the grind runs.
       if (rate > 0 && Math.abs(rate - hodlVanityLiveRate) / rate > 0.05) {
         hodlVanityLiveRate = rate;
@@ -13928,8 +13996,10 @@ function hodlRunVanity() {
       if (hodlVanityStopFirst && hodlVanityRunning) hodlVanityStop();
     },
     onDone: ({ done, stopped }) => {
+      hodlVanityProgressDone = BigInt(done);
       hodlVanityRunning = false;
       hodlVanityLiveRate = 0;
+      hodlVanityProgressRate = 0;
       // The next run resumes where this range ended; the start field is the
       // durable record of what has been ground.
       let nextStart = inputs.start + done;
@@ -14023,12 +14093,19 @@ function hodlInitVanity() {
   if (workersField && navigator.hardwareConcurrency) workersField.value = String(Math.max(1, Math.min(64, navigator.hardwareConcurrency)));
   go.onclick = hodlRunVanity;
   document.getElementById("vanity-stop").onclick = hodlVanityStop;
+  document.getElementById("vanity-floating-stop").onclick = hodlVanityStop;
+  document.getElementById("vanity-floating-close").onclick = () => {
+    hodlVanityFloatingDismissed = true;
+    hodlVanitySyncFloatingStatus();
+  };
   document.getElementById("vanity-first").onclick = hodlVanityToggleStopFirst;
   document.getElementById("vanity-wipe").onclick = () => hodlVanityClearResults();
   workersField?.addEventListener("input", hodlVanityEstimate);
   let prefix = document.getElementById("vanity-prefix");
+  hodlVanityResetPrefix();
+  prefix.addEventListener("keydown", hodlVanityProtectPrefix);
   prefix.addEventListener("input", () => {
-    hodlApplyFilteredInput(prefix, (value) => hodlFilterVanityPrefix(value));
+    hodlVanityNormalizePrefixInput(prefix);
     hodlVanityEstimate();
   });
   document.getElementById("vanity-script")?.addEventListener("change", hodlVanityScriptChanged);
