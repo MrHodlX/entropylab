@@ -297,6 +297,13 @@ words, pick one of the checksum words.</span></span>
         <div id="vanity-out" aria-live="polite"></div>
         <p class="muted">Found passphrases remain in this page only and are never intentionally stored or sent. Memory clearing is best-effort because browsers may retain internal copies; close the page before reconnecting the computer.</p>
       </section>
+      <aside class="vanity-floating-status" id="vanity-floating-status" hidden aria-live="polite">
+        <div class="vanity-floating-status-head"><strong>Vanity grinding progress</strong><button class="vanity-floating-close" id="vanity-floating-close" type="button" aria-label="Close">×</button></div>
+        <p class="muted vanity-floating-stats" id="vanity-floating-status-text"></p>
+        <p class="muted vanity-floating-matches" id="vanity-floating-matches"></p>
+        <div class="derive-progress" id="vanity-floating-progress" role="progressbar" aria-label="Vanity grinding progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete"><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
+        <div class="vanity-floating-actions"><button class="btn secondary" id="vanity-floating-stop" type="button">Stop</button></div>
+      </aside>
       <div class="tool-intro" id="bip85-tool-intro" hidden>
         <div class="kicker">One seed. Many children.</div>
         <h2>Derive BIP-85 child entropy</h2>

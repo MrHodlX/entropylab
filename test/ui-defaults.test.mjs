@@ -2201,6 +2201,17 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
   // The tab rides the same show/hide plumbing as every other tool.
   // Leaving the tab does not cancel the grind.
   assert.match(appSource, /getElementById\("vanity-card"\)\.hidden = id !== "vanity"/);
+  assert.match(appSource, /function hodlVanityResetPrefix\(\) \{[\s\S]*?input\.value = fixed;[\s\S]*?input\.setSelectionRange\(fixed\.length, fixed\.length\);/);
+  assert.match(appSource, /function hodlVanityNormalizePrefixInput\(input\) \{[\s\S]*?let suffix = raw\.startsWith\(fixed\) \? raw\.slice\(fixed\.length\) : fixed\.startsWith\(raw\) \? "" : raw;/);
+  assert.match(appSource, /function hodlVanityProtectPrefix\(event\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?input\.setSelectionRange\(fixedLength, fixedLength\);/);
+  assert.match(appSource, /prefix\.addEventListener\("keydown", hodlVanityProtectPrefix\);/);
+  for (const markup of [template, appSource]) {
+    assert.match(markup, /<aside class="vanity-floating-status" id="vanity-floating-status" hidden aria-live="polite">[\s\S]*id="vanity-floating-close"[\s\S]*id="vanity-floating-status-text"[\s\S]*id="vanity-floating-matches"[\s\S]*id="vanity-floating-progress"[\s\S]*id="vanity-floating-stop"/);
+  }
+  assert.match(appSource, /function hodlVanitySyncFloatingStatus\(\) \{[\s\S]*?panel\.hidden = hodlWorkspace === "vanity" \|\| !hasRun \|\| hodlVanityFloatingDismissed;/);
+  assert.match(appSource, /document\.getElementById\("vanity-floating-stop"\)\.onclick = hodlVanityStop;/);
+  assert.match(appSource, /vanity-floating-close"\)\.onclick = \(\) => \{[\s\S]*?hodlVanityFloatingDismissed = true;/);
+  assert.match(appSource, /hodlVanityProgressDone = BigInt\(done\);[\s\S]*?hodlVanityRunning = false;/);
   assert.match(appSource, /\["bip85", "sp", "msig", "calc", "vanity"\]\.forEach/);
   assert.doesNotMatch(appSource, /else if \(hodlWorkspace === "vanity"\) hodlVanityCancel\(\);/);
   assert.match(appSource, /function hodlInitWorkspace\(\) \{[\s\S]*?hodlInitVanity\(\);/);

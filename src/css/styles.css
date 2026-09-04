@@ -1378,6 +1378,27 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .vanity-apply { min-height: 36px; padding: 4px 12px; font-size: 13px; }
 .vanity-saved { display: inline-flex; align-items: center; gap: 6px; color: var(--ok-bright); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .vanity-saved svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.vanity-floating-status {
+  position: fixed; right: 16px; bottom: 16px; z-index: 60; width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px;
+  background: color-mix(in oklab, var(--surface) 94%, var(--accent)); box-shadow: 0 10px 30px rgb(0 0 0 / 35%);
+}
+.vanity-floating-status[hidden] { display: none !important; }
+.vanity-floating-status-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vanity-floating-status-head strong { min-width: 0; overflow-wrap: anywhere; }
+.vanity-floating-close {
+  flex: 0 0 auto; width: 32px; height: 32px; margin: -6px -8px 0 0; padding: 0;
+  border: 0; border-radius: 6px; background: none; color: var(--fg); font-size: 22px; line-height: 1;
+}
+.vanity-floating-close:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); }
+.vanity-floating-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vanity-floating-status p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.vanity-floating-status .vanity-floating-matches { margin-top: 3px; color: var(--ok-bright); font-weight: 600; }
+.vanity-floating-status .derive-progress { width: 100%; min-width: 0; flex: 0 0 auto; margin-top: 10px; min-height: 34px; padding: 6px 10px; }
+.vanity-floating-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+@media (max-width: 520px) {
+  .vanity-floating-status { right: 12px; bottom: 12px; left: 12px; width: auto; }
+}
 .psbt-kv { font-family: var(--mono); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .psbt-ok { color: var(--ok); }
 .psbt-bad { color: var(--danger); }
