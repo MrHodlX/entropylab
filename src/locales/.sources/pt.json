@@ -887,5 +887,9 @@
   "Printed as the BIP-353 lookup to create on <em>your</em> DNS. This page never resolves it.": "e3f46623f3dc46d60a203a7c802ea31fbc8fc0cbdf4b7bcd731ce7c9dbbc247d",
   "Recipients (one <code>sp1q…</code> / <code>tsp1q…</code> or <code>bitcoin:?sp=</code> URI per line; optional count)": "6972a665f49dc93d43a2c03626705e54ece5a395bf601308dcc52926eae36724",
   "sp1qqgste7k9hx0q… bitcoin:?sp=sp1qqgste7k9hx0q… sp1qqgste7k9hx0q… 2": "1b2301a470f5b6977f518985d49e05b0efa8409960cd672ed1f29ea905977fef",
-  "you@example.com": "53e6cdc30765aade0129f85e5aeb50124b1d3f5bb9a70373be31e4eb328371e0"
+  "you@example.com": "53e6cdc30765aade0129f85e5aeb50124b1d3f5bb9a70373be31e4eb328371e0",
+  "Print single-key card": "ca1f5e64167e056329fdc7159cbb16deecb0fe8d9ca0d25cef1257c998a1be90",
+  "Save single-key card": "3bd6ce11fa6d89de1a06c8986a2a62f205b64792a56337317508cc2138ab95c2",
+  "This page will show a private key.": "b9defcec88bc1cbf2b2ded13cfc74d04d629b834c1392cfdec6dab3d5a35407a",
+  "Cover the private side after printing. Printers keep copies.": "ebafcb6f9aecb238f36c07e5603ffa98c7facba4e37445b7b6f466a0f73480ef"
 }

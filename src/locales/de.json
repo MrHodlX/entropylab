@@ -887,5 +887,9 @@
   "Printed as the BIP-353 lookup to create on <em>your</em> DNS. This page never resolves it.": "Wird als der BIP-353-Lookup ausgegeben, den Sie auf <em>Ihrer</em> DNS anlegen. Diese Seite löst ihn nie auf.",
   "Recipients (one <code>sp1q…</code> / <code>tsp1q…</code> or <code>bitcoin:?sp=</code> URI per line; optional count)": "Empfänger (ein <code>sp1q…</code> / <code>tsp1q…</code> oder eine <code>bitcoin:?sp=</code>-URI pro Zeile; optionale Anzahl)",
   "sp1qqgste7k9hx0q… bitcoin:?sp=sp1qqgste7k9hx0q… sp1qqgste7k9hx0q… 2": "sp1qqgste7k9hx0q… bitcoin:?sp=sp1qqgste7k9hx0q… sp1qqgste7k9hx0q… 2",
-  "you@example.com": "you@example.com"
+  "you@example.com": "you@example.com",
+  "Print single-key card": "Einzelne Schlüsselkarte drucken",
+  "Save single-key card": "Einzelne Schlüsselkarte speichern",
+  "This page will show a private key.": "Diese Seite zeigt einen privaten Schlüssel.",
+  "Cover the private side after printing. Printers keep copies.": "Decken Sie die private Seite nach dem Drucken ab. Drucker behalten Kopien."
 }

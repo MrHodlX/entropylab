@@ -1365,7 +1365,10 @@ function hodlWalletDatControl(includePrivate) {
   return `<label class="wallet-dat-birthday">${hodlT("Wallet birthday")} <select data-wallet-dat-birthday aria-describedby="wallet-dat-birthday-help"><option value="genesis"${hodlWalletDatBirthday === "genesis" ? " selected" : ""}>${hodlT("Recovering keys · scan from genesis")}</option><option value="now"${hodlWalletDatBirthday === "now" ? " selected" : ""}>${hodlT("New keys · created today")}</option></select></label><button class="btn secondary save-wallet-dat" id="download-wallet-dat" type="button" aria-describedby="recovery-sheet-disclosure wallet-dat-birthday-help">${hodlWalletExport.walletDatButtonLabel(withSecrets)}</button><p class="muted wallet-dat-birthday-help" id="wallet-dat-birthday-help">${hodlT("Bitcoin Core only auto-scans history back to the birthday. Choose “New keys” only for entropy created right now; recovering older keys with today's birthday can look empty until you run <code>rescanblockchain 0</code> in Bitcoin Core.")}</p>`;
 }
 function hodlSaveRecoveryControl() {
-  return `<div class="wallet-data-actions no-print"><button class="btn secondary save-recovery-sheet" id="save" type="button">${hodlT("Save watch-only sheet")}</button>${hodlWalletDatControl(false)}</div>`;
+  return `<div class="wallet-data-actions no-print"><button class="btn secondary save-recovery-sheet" id="save" type="button">${hodlT("Save watch-only sheet")}</button>
+    <button class="btn secondary print-single-key-card" id="print-single-key-card" type="button">${hodlT("Print single-key card")}</button>
+    <button class="btn secondary save-single-key-card" id="save-single-key-card" type="button">${hodlT("Save single-key card")}</button>
+    ${hodlWalletDatControl(false)}</div>`;
 }
 function hodlWalletMessages(wallet, idPrefix) {
   let warnings = [...wallet.warnings || []].filter((message) => !wallet.passphraseUsed || hodlNoteKey(message) !== "note.passphraseInUse"), notes = [...wallet.notes || []];
@@ -1569,15 +1572,17 @@ function hodlCurrentSingleKeyCard() {
   return hodlSingleKeyCardFromWallet(hodlWalletResult, hodlSingleKeyCardOptions());
 }
 function hodlBindSingleKeyCardActions() {
-  let card = hodlWalletResult ? hodlCurrentSingleKeyCard() : { eligible: false, reason: "Needs a derived single-signature address and a WIF or mini key." };
+  let card = hodlWalletResult ? hodlCurrentSingleKeyCard() : { eligible: false, reason: "Needs a derived single-signature address." };
   for (let id of ["print-single-key-card", "save-single-key-card"]) {
     let button = document.getElementById(id);
     if (!button) continue;
     let clean = button.cloneNode(true);
     button.replaceWith(clean);
     clean.disabled = !card.eligible;
-    if (card.eligible) clean.removeAttribute("title");
-    else clean.title = card.reason || "Needs a derived single-signature address and a WIF or mini key.";
+    if (card.eligible) {
+      if (card.watchOnly) clean.title = card.reason || "Watch-only: this card has no spend secret. Public face only.";
+      else clean.removeAttribute("title");
+    } else clean.title = card.reason || "Needs a derived single-signature address.";
     clean.addEventListener("click", () => hodlRequestSingleKeyCard(id === "save-single-key-card" ? "save" : "print"));
   }
 }
@@ -1600,15 +1605,12 @@ function hodlConfirmSingleKeyCard(onAccept) {
   let close = () => {
     overlay.hidden = true;
     overlay.classList.remove("is-visible");
-    hodlTearSingleKeyCard();
     last?.focus?.({ preventScroll: true });
   };
   if (cancel) cancel.onclick = close;
   if (accept) accept.onclick = () => {
-    overlay.hidden = true;
-    overlay.classList.remove("is-visible");
+    close();
     onAccept();
-    last?.focus?.({ preventScroll: true });
   };
   overlay.onclick = (event) => {
     if (event.target === overlay) close();
@@ -1620,10 +1622,20 @@ function hodlConfirmSingleKeyCard(onAccept) {
   overlay.classList.add("is-visible");
   accept?.focus({ preventScroll: true });
 }
+async function hodlAttachSingleKeyCardLifeHash(payload) {
+  if (!payload?.fingerprint || typeof hodlLifeHash === "undefined" || typeof hodlLifeHash.fromFingerprint !== "function") return payload;
+  try {
+    let url = await hodlLifeHash.fromFingerprint(payload.fingerprint);
+    return { ...payload, lifehashUrl: url };
+  } catch {
+    return payload;
+  }
+}
 function hodlRequestSingleKeyCard(mode) {
   let payload = hodlCurrentSingleKeyCard();
   if (!payload.eligible) return;
-  let run = () => {
+  let run = async () => {
+    payload = await hodlAttachSingleKeyCardLifeHash(payload);
     if (mode === "save") hodlSaveSingleKeyCard(payload);
     else hodlPrintSingleKeyCard(payload);
   };
@@ -1646,7 +1658,7 @@ function hodlPrintSingleKeyCard(payload) {
 function hodlSaveSingleKeyCard(payload) {
   let html = hodlSingleKeyCardSaveDocument(payload), blob = new Blob([html], { type: "text/html" }), url = URL.createObjectURL(blob), link = document.createElement("a");
   link.href = url;
-  link.download = payload.includePrivate ? `single-key-card-private-${payload.addressTail || "key"}.html` : `single-key-card-${payload.addressTail || "key"}.html`;
+  link.download = payload.includePrivate ? `single-key-card-private-${payload.addressCheck || payload.addressTail || "key"}.html` : `single-key-card-${payload.addressCheck || payload.addressTail || "key"}.html`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }

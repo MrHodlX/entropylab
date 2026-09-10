@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  addressCheck,
   addressTail,
   pinDescriptorIndex,
   formatPrintedAt,
@@ -29,6 +30,7 @@ const WIF_COMPRESSED = "L1aW4aubDFB7yfras2S1eNAhkYp4RkjU1VXxxm5FPFAhkYzR3b5b";
 const WIF_UNCOMPRESSED = "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ";
 const ADDRESS = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
 const MINIKEY = "S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy";
+const MNEMONIC = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
 const printedAt = "2026-09-09T20:00:00-04:00";
 
@@ -47,29 +49,30 @@ const singleWallet = {
 
 const hdWallet = {
   kind: "hd",
-  network: "mainnet",
-  mnemonic: "legal winner thank year wave sausage worth useful legal winner thank yellow",
+  network: "testnet",
+  mnemonic: MNEMONIC,
   masterFingerprint: "d4a0c0ab",
   passphrase: "do-not-print-this-passphrase",
   accounts: [
     {
       def: { id: "bip84", label: "Native SegWit", script: "p2wpkh" },
-      receiveDescriptor: "wpkh([d4a0c0ab/84h/0h/0h]xpub6C6nQwHaWbSfzjtFuEgeSoX4qGnaugQw4aJ1P7N4pYo3sNU5mXtg3uA2cW5K5example/0/*)#checksum",
+      receiveDescriptor: "wpkh([d4a0c0ab/84h/1h/0h]tpub6C6nQwHaWbSfzjtFuEgeSoX4qGnaugQw4aJ1P7N4pYo3sNU5mXtg3uA2cW5K5example/0/*)#checksum",
       addressBranches: [
         {
           branch: 0,
-          publicDescriptor: "wpkh([d4a0c0ab/84h/0h/0h]xpub6C6nQwHaWbSfzjtFuEgeSoX4qGnaugQw4aJ1P7N4pYo3sNU5mXtg3uA2cW5K5example/0/*)#checksum",
-          rows: [{ index: 0, path: "m/84'/0'/0'/0/0", address: ADDRESS, wif: WIF_COMPRESSED }],
+          publicDescriptor: "wpkh([d4a0c0ab/84h/1h/0h]tpub6C6nQwHaWbSfzjtFuEgeSoX4qGnaugQw4aJ1P7N4pYo3sNU5mXtg3uA2cW5K5example/0/*)#checksum",
+          rows: [{ index: 0, path: "m/84'/1'/0'/0/0", address: ADDRESS, wif: WIF_COMPRESSED }],
         },
       ],
     },
   ],
 };
 
-test("addressTail takes the last four characters", () => {
-  assert.equal(addressTail(ADDRESS), "f3t4");
-  assert.equal(addressTail("abc"), "abc");
-  assert.equal(addressTail(""), "");
+test("addressCheck takes the first four characters", () => {
+  assert.equal(addressCheck(ADDRESS), "bc1q");
+  assert.equal(addressTail(ADDRESS), "bc1q");
+  assert.equal(addressCheck("abc"), "abc");
+  assert.equal(addressCheck(""), "");
 });
 
 test("pinDescriptorIndex pins the receive wildcard and drops a stale checksum", () => {
@@ -96,52 +99,76 @@ test("cardQrSvg matches the app's dark-on-white address QR palette", () => {
   assert.notEqual(cardQrSvg(ADDRESS), cardQrSvg(WIF_COMPRESSED));
 });
 
-test("a single-key wallet with a WIF is eligible", () => {
+test("a single-key wallet with a WIF is eligible and does not print the mnemonic", () => {
   const card = cardFromWallet(singleWallet, { scriptId: "bip84", scriptLabel: "Native SegWit", revealPrivate: true, printedAt, version: "0.1.3", commitShort: "247dfab" });
   assert.equal(card.eligible, true);
   assert.equal(card.address, ADDRESS);
-  assert.equal(card.addressTail, "f3t4");
+  assert.equal(card.addressCheck, "bc1q");
   assert.equal(card.wif, WIF_COMPRESSED);
-  assert.equal(card.wifEncoding, "compressed");
   assert.equal(card.includePrivate, true);
-  assert.equal(card.descriptor, "wpkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)");
-  assert.match(card.source, /Calculator, not a generator/);
-  assert.doesNotMatch(card.source, /L1aW4aub|5HueCGU8|legal winner/);
+  const html = cardHtml(card);
+  assert.ok(html.includes(ADDRESS));
+  assert.ok(html.includes(WIF_COMPRESSED));
+  assert.doesNotMatch(html, /legal winner|do-not-print-this-passphrase|xprv|BIP-85/);
+  assert.match(html, /Single key\. Sweep the whole balance/);
+  assert.match(html, /This is not a BIP39 backup/);
 });
 
 test("Taproot cards label the WIF as the BIP86 internal key", () => {
   const card = cardFromWallet(singleWallet, { scriptId: "bip86", scriptLabel: "Taproot", revealPrivate: true, printedAt });
   assert.equal(card.taprootInternalKey, true);
   assert.equal(card.script, "p2tr");
-  assert.match(card.descriptor, /^tr\(/);
   const html = cardHtml(card);
   assert.match(html, /BIP86 internal key/);
 });
 
-test("an HD receive row pins the public descriptor to that index", () => {
-  const card = cardFromWallet(hdWallet, { scriptId: "bip84", scriptLabel: "Native SegWit", revealPrivate: true, printedAt });
+test("an HD receive row prints the address path and fingerprint, never the seed", () => {
+  const card = cardFromWallet(hdWallet, {
+    scriptId: "bip84",
+    scriptLabel: "Native SegWit",
+    revealPrivate: true,
+    printedAt,
+    lifehashUrl: "data:image/png;base64,AAA",
+  });
   assert.equal(card.eligible, true);
-  assert.equal(card.path, "m/84'/0'/0'/0/0");
+  assert.equal(card.path, "m/84'/1'/0'/0/0");
   assert.equal(card.fingerprint, "d4a0c0ab");
-  assert.equal(card.descriptor, "wpkh([d4a0c0ab/84h/0h/0h]xpub6C6nQwHaWbSfzjtFuEgeSoX4qGnaugQw4aJ1P7N4pYo3sNU5mXtg3uA2cW5K5example/0/0)");
-  assert.doesNotMatch(card.descriptor, /#/);
   const html = cardHtml(card);
+  assert.match(html, /m\/84(?:'|&#39;)\/1(?:'|&#39;)\/0(?:'|&#39;)\/0\/0/);
+  assert.match(html, /d4a0c0ab/);
+  assert.match(html, /single-key-card-lifehash/);
+  assert.match(html, /is-testnet/);
+  assert.match(html, />testnet</);
   assert.doesNotMatch(html, /do-not-print-this-passphrase/);
   assert.doesNotMatch(html, /legal winner thank/);
 });
 
-test("watch-only xpub imports and multisig are hidden", () => {
+test("watch-only xpub imports print the public face and never a WIF", () => {
   const watch = cardFromWallet({
     kind: "hd",
-    network: "mainnet",
-    accounts: [{ def: { id: "bip84", script: "p2wpkh" }, receive: [{ index: 0, address: ADDRESS, wif: null }], receiveDescriptor: "wpkh(xpubABC/0/*)#abcd1234" }],
-  }, { scriptId: "bip84" });
-  assert.equal(watch.eligible, false);
-  assert.match(watch.reason, /Watch-only|spend secret/);
+    network: "signet",
+    masterFingerprint: "aabbccdd",
+    accounts: [{ def: { id: "bip84", script: "p2wpkh", label: "Native SegWit" }, receive: [{ index: 0, path: "m/84'/1'/0'/0/0", address: ADDRESS, wif: null }], receiveDescriptor: "wpkh(xpubABC/0/*)#abcd1234" }],
+  }, { scriptId: "bip84", scriptLabel: "Native SegWit", revealPrivate: true, printedAt });
+  assert.equal(watch.eligible, true);
+  assert.equal(watch.watchOnly, true);
+  assert.equal(watch.includePrivate, false);
+  assert.equal(watch.wif, "");
+  const html = cardHtml(watch);
+  assert.ok(html.includes(ADDRESS));
+  assert.doesNotMatch(html, /Fold here/);
+  assert.doesNotMatch(html, /Private key \(WIF\)|Mini private key/);
+  assert.ok(!html.includes(WIF_COMPRESSED));
+  assert.match(html, /is-signet/);
+  assert.match(html, /Watch-only/);
+});
 
-  const msig = cardFromWallet({ kind: "msig", network: "mainnet" }, { scriptId: "bip84" });
-  assert.equal(msig.eligible, false);
-  assert.match(msig.reason, /Multisig/);
+test("multisig, Silent Payments, and missing keys are hidden", () => {
+  assert.equal(cardFromWallet({ kind: "msig", network: "mainnet" }).eligible, false);
+  assert.equal(cardFromWallet({ kind: "sp" }).eligible, false);
+  assert.equal(cardFromWallet(null).eligible, false);
+  const empty = cardFromWallet({ kind: "hd", accounts: [] });
+  assert.equal(empty.eligible, false);
 });
 
 test("the public face never contains the WIF", () => {
@@ -149,31 +176,39 @@ test("the public face never contains the WIF", () => {
   assert.equal(card.includePrivate, false);
   const html = cardHtml(publicOnly(card));
   assert.match(html, /Receive address/);
-  assert.match(html, /Last 4 · f3t4/);
   assert.doesNotMatch(html, /PRIVATE KEY|Private key \(WIF\)|Mini private key/);
   assert.ok(!html.includes(WIF_COMPRESSED));
   assert.ok(!html.includes(WIF_UNCOMPRESSED));
   assert.doesNotMatch(html, /Fold here/);
 });
 
-test("the private face has a huge WIF label, encoding, fold line, and last four", () => {
-  const card = cardFromWallet(singleWallet, { scriptId: "bip84", scriptLabel: "Native SegWit", revealPrivate: true, printedAt, version: "0.1.3", commitShort: "247dfab" });
+test("the private face has the WIF QR, fold line, fingerprint match, and first four", () => {
+  const card = cardFromWallet(hdWallet, {
+    scriptId: "bip84",
+    scriptLabel: "Native SegWit",
+    revealPrivate: true,
+    printedAt,
+    version: "0.1.3",
+    commitShort: "247dfab",
+    lifehashUrl: "data:image/png;base64,AAA",
+  });
   const html = cardHtml(card);
-  assert.match(html, /Private key \(WIF\) — spend/);
-  assert.match(html, /Fold here · cover the private face · last 4 · f3t4/);
-  assert.match(html, /compressed/);
+  assert.match(html, /Private key \(WIF\)/);
+  assert.match(html, /Fold here · cover the private face/);
+  assert.match(html, /First 4 · bc1q/);
   assert.ok(html.includes(WIF_COMPRESSED));
-  assert.ok(html.includes(WIF_UNCOMPRESSED));
-  assert.match(html, /Anyone who sees this WIF can spend this address/);
+  assert.ok(!html.includes(WIF_UNCOMPRESSED), "uncompressed sibling WIF stays off the card");
+  assert.match(html, /This is not a BIP39 backup/);
   assert.match(html, /EntropyLab v0\.1\.3 · 247dfab · printed 2026-09-09T20:00:00-04:00/);
   assert.match(html, /Calculator, not a generator/);
   assert.equal((html.match(/<svg/g) || []).length, 2);
+  assert.equal((html.match(/single-key-card-lifehash/g) || []).length, 2);
 });
 
 test("a minikey is the spend secret when present", () => {
   const card = cardFromWallet({ ...singleWallet, minikey: MINIKEY }, { scriptId: "bip84", revealPrivate: true, printedAt });
-  assert.equal(card.wif, MINIKEY);
-  assert.match(cardHtml(card), /Mini private key — spend/);
+  assert.equal(card.minikey, MINIKEY);
+  assert.match(cardHtml(card), /Mini private key/);
   assert.ok(cardHtml(card).includes(MINIKEY));
 });
 
@@ -188,7 +223,7 @@ test("the saved document inlines print CSS and does not phone home", () => {
 });
 
 test("the module does not invent entropy", () => {
-  assert.doesNotMatch(moduleSource, /getRandomValues|Math\.random/);
+  assert.doesNotMatch(moduleSource, /getRandomValues|Math\.random|crypto\.getRandomValues/);
   assert.match(moduleSource, /Calculator, not a generator/);
 });
 
@@ -200,7 +235,11 @@ test("Key Station wires Print and Save next to the recovery sheet, with no Paper
   assert.match(appSource, /id="save-single-key-card"/);
   assert.match(appSource, /afterprint/);
   assert.match(appSource, /hodlTearSingleKeyCard/);
+  assert.match(appSource, /hodlLifeHash\.fromFingerprint/);
+  assert.match(appSource, /hodlSaveRecoveryControl[\s\S]*print-single-key-card/);
   assert.match(shell, /id="single-key-card-confirm"/);
+  assert.match(shell, /This page will show a private key\./);
+  assert.match(shell, /Cover the private side after printing\. Printers keep copies\./);
   assert.match(shell, /id="single-key-card-print"/);
   assert.doesNotMatch(shell, /Paper Wallet/);
   assert.doesNotMatch(appSource, /Paper Wallet/);
@@ -209,6 +248,12 @@ test("Key Station wires Print and Save next to the recovery sheet, with no Paper
   assert.match(css, /print-single-key-card/);
   assert.match(css, /save-single-key-card/);
   assert.match(css, /html\.printing-single-key-card/);
+});
+
+test("buttons stay disabled with no key", () => {
+  const card = cardFromWallet(null);
+  assert.equal(card.eligible, false);
+  assert.match(appSource, /clean\.disabled = !card\.eligible/);
 });
 
 test("package.json lists this suite in test:ci", () => {

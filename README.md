@@ -208,8 +208,8 @@ Official website: [entropylab.online](https://entropylab.online)
 - Produces recovery information that can be saved or printed for offline use.
   A derived Key Station key can also print or save a **single-key card**: one
   receive address and that child's WIF, as a calculator export of the key
-  already on screen. It is not a generator and not a Paper Wallet tab. The
-  card is hidden for multisig, Silent Payments, and watch-only xpub imports.
+  already on screen. It is not a generator and not a Paper Wallet tab. Watch-only
+  xpub imports print the public face only. Hidden for multisig and Silent Payments.
 - Exports a Bitcoin Core `wallet.dat` (SQLite descriptor wallet) with every
   derived output descriptor already imported — receive and change for each
   script type, active and ready for address generation. The default download
