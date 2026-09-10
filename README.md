@@ -206,6 +206,10 @@ Official website: [entropylab.online](https://entropylab.online)
   exclude the site in Safari's page menu, or open the saved HTML in Firefox
   on an air-gapped computer. There is no JavaScript secp256k1 fallback.
 - Produces recovery information that can be saved or printed for offline use.
+  A derived Key Station key can also print or save a **single-key card**: one
+  receive address and that child's WIF, as a calculator export of the key
+  already on screen. It is not a generator and not a Paper Wallet tab. The
+  card is hidden for multisig, Silent Payments, and watch-only xpub imports.
 - Exports a Bitcoin Core `wallet.dat` (SQLite descriptor wallet) with every
   derived output descriptor already imported — receive and change for each
   script type, active and ready for address generation. The default download

@@ -1782,7 +1782,7 @@ test("Journal gates its four tools behind the encrypted notebook", () => {
   assert.match(appSource, /notesText\.addEventListener\("mousemove", \(\) => hodlJournalRevealCopyButton\(notesCopy\)\)/);
   assert.match(appSource, /hodlJournalFormatNotebook\(field\.value\)[\s\S]*?button\.dataset\.phrase = phrase/);
   assert.match(appSource, /hodlCopySeedPhraseButton\(notesCopy\);[\s\S]*?hodlJournalRevealCopyButton\(notesCopy, 1900\)/);
-  assert.match(css, /\.btn:is\(\.download-html, \.save-recovery-sheet, \.save-wallet-dat, \.journal-download-action\) \{[^}]*var\(--ok\)/s);
+  assert.match(css, /\.btn:is\(\.download-html, \.save-recovery-sheet, \.save-wallet-dat, \.print-single-key-card, \.save-single-key-card, \.journal-download-action\) \{[^}]*var\(--ok\)/s);
   assert.match(css, /\.header-button, \.journal-file-button \{ min-height: 40px; font-size: 14px; \}/);
   assert.match(css, /\.download-controls > a, \.journal-file-button \{ display: inline-flex; align-items: center; gap: 6px; text-decoration: none; \}/);
   assert.match(css, /\.journal-file-button \.control-label \{ display: inline; \}/);

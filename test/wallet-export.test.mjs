@@ -452,7 +452,7 @@ test("template, build script, and app wiring ship the export", () => {
   assert.match(build, /JS_WALLET_EXPORT/);
   // The button renders next to #save in the wallet-data-actions row, and its
   // label follows the material that exists, not the reveal flag alone (#366).
-  assert.match(app, /id="save"[^>]*>\$\{downloadLabel\}<\/button>\s*\$\{hodlWalletDatControl\(privateSheet\)\}/);
+  assert.match(app, /id="save"[^>]*>\$\{downloadLabel\}<\/button>[\s\S]*\$\{hodlWalletDatControl\(privateSheet\)\}/);
   assert.match(app, /hodlSaveRecoveryControl\s*\(\s*\)\s*\{\s*return\s*`<div class="wallet-data-actions no-print">[^`]*\$\{hodlWalletDatControl\(\s*(?:false|!1)\s*\)\}/);
   assert.match(app, /id="download-wallet-dat"[^>]*>\$\{hodlWalletExport\.walletDatButtonLabel\(withSecrets\)\}/);
   assert.match(app, /hodlWalletExport\.hasDescriptors\(hodlWalletResult\)/);

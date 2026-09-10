@@ -46,6 +46,13 @@ import { wordlist as bip39English } from "./bip39-english.js";
 import { initPsbtEditor } from "./psbt-editor.js";
 import { hodlTapKeySigs, hodlTapScriptSigs, hodlTapSighashProblems } from "./psbt-schnorr.js";
 import { initQrReferences } from "./qr-references.js";
+import {
+  cardFromWallet as hodlSingleKeyCardFromWallet,
+  cardHtml as hodlSingleKeyCardHtml,
+  cardSaveDocument as hodlSingleKeyCardSaveDocument,
+  cardPageStyles as hodlSingleKeyCardPageStyles,
+  publicOnly as hodlSingleKeyCardPublicOnly,
+} from "./single-key-card.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
 import { VANITY_HARDENED, VANITY_MAX_INDEX, VANITY_METHODS, VANITY_SCRIPTS, VanityGrinder, estimateVanityWork, validateVanityIndexRange, validateVanityMnemonic, validateVanityPassphrase, validateVanityPrefix, validateVanityRange, vanityBenchmark, vanityPathIndexes, vanityPathString } from "./vanity.js";
@@ -1301,6 +1308,7 @@ function hodlShowAccount(id) {
   hodlBindAddressVirtualization(hodlAddressBranchVirtualConfigs(branches, hasPrivate, "hd"));
   hodlBindAddressMatch();
   hodlBindWalletResultActions();
+  hodlBindSingleKeyCardActions();
 }
 // The field helpers own their labels end to end: pass the English source (and
 // optional placeholder values); the helper translates with the text view and
@@ -1336,6 +1344,8 @@ function hodlPrivateDataControls(descriptionId, scope = "wallet") {
       <span>${hodlT("Show private recovery material")} <span class="reveal-private-toggle-note">${hodlT("(air-gap only)")}</span></span>
     </label>
     <button class="btn secondary save-recovery-sheet" id="save" type="button" aria-describedby="recovery-sheet-disclosure">${downloadLabel}</button>
+    <button class="btn secondary print-single-key-card" id="print-single-key-card" type="button">${hodlT("Print single-key card")}</button>
+    <button class="btn secondary save-single-key-card" id="save-single-key-card" type="button">${hodlT("Save single-key card")}</button>
     ${hodlWalletDatControl(privateSheet)}
     <p class="recovery-download-disclosure" id="recovery-sheet-disclosure"><strong>${privateSheet ? hodlT("Private export:") : hodlT("Watch-only export:")}</strong> ${disclosure}</p>
   </div>`;
@@ -1542,6 +1552,103 @@ function hodlFocusWalletResult() {
 function hodlRefreshKeyResult() {
   hodlRenderKeyResult();
   hodlBindWalletResultActions();
+  hodlBindSingleKeyCardActions();
+}
+function hodlSingleKeyCardOptions() {
+  let definition = hodlScriptDefinition(hodlSelectedScriptType());
+  return {
+    scriptId: definition.id,
+    scriptLabel: definition.label,
+    revealPrivate: hodlRevealPrivate,
+    version: "{{VERSION}}",
+    commitShort: "{{COMMIT_SHORT}}",
+    logoHtml: document.querySelector(".site-logo")?.innerHTML || "",
+  };
+}
+function hodlCurrentSingleKeyCard() {
+  return hodlSingleKeyCardFromWallet(hodlWalletResult, hodlSingleKeyCardOptions());
+}
+function hodlBindSingleKeyCardActions() {
+  let card = hodlWalletResult ? hodlCurrentSingleKeyCard() : { eligible: false, reason: "Needs a derived single-signature address and a WIF or mini key." };
+  for (let id of ["print-single-key-card", "save-single-key-card"]) {
+    let button = document.getElementById(id);
+    if (!button) continue;
+    let clean = button.cloneNode(true);
+    button.replaceWith(clean);
+    clean.disabled = !card.eligible;
+    if (card.eligible) clean.removeAttribute("title");
+    else clean.title = card.reason || "Needs a derived single-signature address and a WIF or mini key.";
+    clean.addEventListener("click", () => hodlRequestSingleKeyCard(id === "save-single-key-card" ? "save" : "print"));
+  }
+}
+function hodlTearSingleKeyCard() {
+  let root = document.getElementById("single-key-card-print");
+  if (root) {
+    root.innerHTML = "";
+    root.hidden = true;
+  }
+  document.documentElement.classList.remove("printing-single-key-card");
+  window.removeEventListener("afterprint", hodlTearSingleKeyCard);
+}
+function hodlConfirmSingleKeyCard(onAccept) {
+  let overlay = document.getElementById("single-key-card-confirm");
+  if (!overlay) {
+    onAccept();
+    return;
+  }
+  let accept = document.getElementById("single-key-card-confirm-accept"), cancel = document.getElementById("single-key-card-confirm-cancel"), last = document.activeElement;
+  let close = () => {
+    overlay.hidden = true;
+    overlay.classList.remove("is-visible");
+    hodlTearSingleKeyCard();
+    last?.focus?.({ preventScroll: true });
+  };
+  if (cancel) cancel.onclick = close;
+  if (accept) accept.onclick = () => {
+    overlay.hidden = true;
+    overlay.classList.remove("is-visible");
+    onAccept();
+    last?.focus?.({ preventScroll: true });
+  };
+  overlay.onclick = (event) => {
+    if (event.target === overlay) close();
+  };
+  overlay.onkeydown = (event) => {
+    if (event.key === "Escape") close();
+  };
+  overlay.hidden = false;
+  overlay.classList.add("is-visible");
+  accept?.focus({ preventScroll: true });
+}
+function hodlRequestSingleKeyCard(mode) {
+  let payload = hodlCurrentSingleKeyCard();
+  if (!payload.eligible) return;
+  let run = () => {
+    if (mode === "save") hodlSaveSingleKeyCard(payload);
+    else hodlPrintSingleKeyCard(payload);
+  };
+  if (payload.includePrivate && (payload.wif || payload.minikey)) hodlConfirmSingleKeyCard(run);
+  else {
+    payload = hodlSingleKeyCardPublicOnly(payload);
+    run();
+  }
+}
+function hodlPrintSingleKeyCard(payload) {
+  let root = document.getElementById("single-key-card-print");
+  if (!root) return;
+  hodlTearSingleKeyCard();
+  root.innerHTML = `<style>${hodlSingleKeyCardPageStyles}</style>${hodlSingleKeyCardHtml(payload)}`;
+  root.hidden = false;
+  document.documentElement.classList.add("printing-single-key-card");
+  window.addEventListener("afterprint", hodlTearSingleKeyCard);
+  window.print();
+}
+function hodlSaveSingleKeyCard(payload) {
+  let html = hodlSingleKeyCardSaveDocument(payload), blob = new Blob([html], { type: "text/html" }), url = URL.createObjectURL(blob), link = document.createElement("a");
+  link.href = url;
+  link.download = payload.includePrivate ? `single-key-card-private-${payload.addressTail || "key"}.html` : `single-key-card-${payload.addressTail || "key"}.html`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
 function hodlSheetWarnings(lines, wallet) {
   for (let note of wallet.notes || []) lines.push(`Note: ${hodlFormatNote(note)}`);
@@ -12043,6 +12150,8 @@ function hodlJournalAuditedClick(control) {
   if (mapped) return mapped;
   if (control.id === "save") return [hodlJournalControlTool(control), "download", "recovery-sheet"];
   if (control.id === "download-wallet-dat") return [hodlJournalControlTool(control), "download", "wallet-dat"];
+  if (control.id === "print-single-key-card") return [hodlJournalControlTool(control), "print", "single-key-card"];
+  if (control.id === "save-single-key-card") return [hodlJournalControlTool(control), "download", "single-key-card"];
   if (control.matches('a[download="entropylab.html"]')) return ["app", "download", "application"];
   if (control.matches("[data-copy-seed-phrase]")) return ["calc", "copy", "seed-phrase"];
   if (control.matches("[data-sp-mode]")) return ["sp", "mode", control.dataset.spMode];
