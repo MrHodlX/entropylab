@@ -95,7 +95,7 @@ test("bodies are the msig receive and change descriptors with origins kept", () 
 
 test("the JSON never contains xprv-family keys, a mnemonic, or a seed", () => {
   const json = buildImportDescriptorsJson({ receiveDescriptor: receive, changeDescriptor: change });
-  assert.doesNotMatch(json, /xprv|tprv|yprv|zprv|vprv|uprv/i);
+  assert.doesNotMatch(json, /[xyztuvYZUV]prv/);
   assert.doesNotMatch(json, /abandon/);
   assert.doesNotMatch(json, /mnemonic|passphrase|seed phrase/i);
 });
@@ -142,6 +142,20 @@ test("an extended private key is refused", () => {
     () => buildImportDescriptorsJson({ receiveDescriptor: descriptor, changeDescriptor: change }),
     /extended private key/,
   );
+});
+
+test("capital SLIP-132 multisig private keys are refused", () => {
+  // Yprv, Zprv (mainnet), Uprv, Vprv (testnet) — the private counterparts of
+  // the capital public prefixes this module rewrites.
+  for (const version of [0x0295b005, 0x02aa7a99, 0x024285b5, 0x02575048]) {
+    const raw = b58checkDecode(nodeA.privateExtendedKey);
+    raw[0] = version >>> 24 & 255; raw[1] = version >>> 16 & 255; raw[2] = version >>> 8 & 255; raw[3] = version & 255;
+    const key = b58checkEncode(raw);
+    assert.match(key, /^[YZUV]prv/);
+    const body = `wsh(sortedmulti(1,${key}/0/*))`;
+    const descriptor = `${body}#${descriptorChecksum(body)}`;
+    assert.throws(() => buildImportDescriptorsJson({ receiveDescriptor: descriptor }), /extended private key/);
+  }
 });
 
 test("mismatched receive/change keys are refused", () => {

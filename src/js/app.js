@@ -1578,12 +1578,12 @@ function hodlCopyMsigCoreImportDescriptors() {
   }
   if (!json) return;
   let button = document.getElementById("msig-copy-importdescriptors");
-  let label = hodlT("Copy Core importdescriptors");
+  let label = hodlTText("Copy Core importdescriptors");
   let done = () => {
     json = "";
     if (!button) return;
     button.classList.add("is-copied");
-    button.textContent = hodlT("Copied");
+    button.textContent = hodlTText("Copied");
     clearTimeout(button.hodlCopiedTimer);
     button.hodlCopiedTimer = setTimeout(() => {
       if (!button.isConnected) return;

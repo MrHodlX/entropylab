@@ -6,7 +6,8 @@
 
 export const CORE_IMPORT_RANGE_END = 1000;
 
-const PRIVATE_KEY = /\b(?:xprv|tprv|yprv|uprv|zprv|vprv)[1-9A-HJ-NP-Za-km-z]{90,}/;
+// Every SLIP-132 private family, capital multisig prefixes included.
+const PRIVATE_KEY = /\b(?:[xyztuv]prv|[YZUV]prv)[1-9A-HJ-NP-Za-km-z]{90,}/;
 const EXTENDED_PUB = /((?:xpub|tpub|ypub|upub|zpub|vpub|Ypub|Zpub|Upub|Vpub)[1-9A-HJ-NP-Za-km-z]{90,})/g;
 const SLIP_PUB = /^(?:ypub|upub|zpub|vpub|Ypub|Zpub|Upub|Vpub)/;
 const CORE_PUB = /^(?:xpub|tpub)/;
