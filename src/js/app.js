@@ -59,6 +59,10 @@ import {
   policySheetHtml,
   policySheetText,
 } from "./msig-policy-sheet.js";
+import {
+  bip388PolicyFilename,
+  buildBip388PolicyText,
+} from "./bip388-policy.js";
 import { initQrReferences } from "./qr-references.js";
 import { addressQrButtonHtml as hodlAddressQrButton, initAddressQr as hodlInitAddressQr } from "./address-qr.js";
 import { NONCE_HISTORY_MAX_TEXT, compareNonceHistory, mergeNonceHistory, nonceHistoryRecord, parseNonceHistory, serializeNonceHistory } from "./nonce-history.js";
@@ -1633,7 +1637,9 @@ function hodlMsigCoreImportDescriptorsMarkup() {
     <button class="btn secondary green save-wallet-dat" id="msig-download-wallet-dat" type="button">${hodlT("Download watch-only wallet.dat")}</button>
     <button class="btn secondary" id="msig-copy-importdescriptors" type="button">${hodlT("Copy Core importdescriptors")}</button>
     <button class="btn secondary green" id="msig-save-importdescriptors" type="button">${hodlT("Save Core watch-only JSON")}</button>
-    <p class="muted wallet-dat-birthday-help" id="msig-core-importdescriptors-help">${hodlT("Watch-only Bitcoin Core wallet.dat — put it in a wallets folder and loadwallet. No private keys. JSON is for bitcoin-cli importdescriptors. First getnewaddress must match receive index 0 here.")}</p>
+    <button class="btn secondary" id="msig-copy-bip388" type="button">${hodlT("Copy BIP 388 policy")}</button>
+    <button class="btn secondary green" id="msig-save-bip388" type="button">${hodlT("Save BIP 388 policy")}</button>
+    <p class="muted wallet-dat-birthday-help" id="msig-core-importdescriptors-help">${hodlT("Watch-only Bitcoin Core wallet.dat — put it in a wallets folder and loadwallet. No private keys. JSON is for bitcoin-cli importdescriptors. BIP 388 is the wallet policy Ledger and Specter register. First getnewaddress must match receive index 0 here.")}</p>
   </div>`;
 }
 function hodlCopyMsigCoreImportDescriptors() {
@@ -1694,6 +1700,58 @@ function hodlDownloadMsigCoreImportDescriptors() {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
+function hodlMsigBip388PolicyText() {
+  if (!hodlWalletResult || hodlWalletResult.kind !== "msig") return "";
+  if (!hodlWalletResult.receiveDescriptor) return "";
+  const codec = hodlMsigCoreImportCodec();
+  return buildBip388PolicyText({
+    receiveDescriptor: hodlWalletResult.receiveDescriptor,
+    changeDescriptor: hodlWalletResult.changeDescriptor,
+    decode: codec.decode,
+    encode: codec.encode
+  });
+}
+function hodlCopyMsigBip388Policy() {
+  let text = "";
+  try {
+    text = hodlMsigBip388PolicyText();
+  } catch (error) {
+    hodlSetWorkspaceError("msig", hodlErrorSpecFrom(error));
+    return;
+  }
+  if (!text) return;
+  let done = () => { text = ""; };
+  let fallback = () => {
+    let field = document.createElement("textarea");
+    field.value = text;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.left = "-9999px";
+    document.body.appendChild(field);
+    field.select();
+    try { document.execCommand("copy"); } catch {}
+    field.remove();
+    done();
+  };
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") navigator.clipboard.writeText(text).then(done).catch(fallback);
+  else fallback();
+}
+function hodlDownloadMsigBip388Policy() {
+  let text = "";
+  try {
+    text = hodlMsigBip388PolicyText();
+  } catch (error) {
+    hodlSetWorkspaceError("msig", hodlErrorSpecFrom(error));
+    return;
+  }
+  if (!text) return;
+  let blob = new Blob([text], { type: "text/plain" }), url = URL.createObjectURL(blob), link = document.createElement("a");
+  text = "";
+  link.href = url;
+  link.download = bip388PolicyFilename(hodlWalletResult);
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1e3);
+}
 function hodlBindMsigCoreImportDescriptors() {
   document.querySelectorAll("#msig-out [data-wallet-dat-birthday]").forEach((select) => {
     select.value = hodlWalletDatBirthday;
@@ -1730,6 +1788,18 @@ function hodlBindMsigCoreImportDescriptors() {
     let clean = saveSheet.cloneNode(true);
     saveSheet.replaceWith(clean);
     clean.addEventListener("click", hodlDownloadMsigPolicySheet);
+  }
+  let copyBip388 = document.getElementById("msig-copy-bip388");
+  if (copyBip388) {
+    let clean = copyBip388.cloneNode(true);
+    copyBip388.replaceWith(clean);
+    clean.addEventListener("click", hodlCopyMsigBip388Policy);
+  }
+  let saveBip388 = document.getElementById("msig-save-bip388");
+  if (saveBip388) {
+    let clean = saveBip388.cloneNode(true);
+    saveBip388.replaceWith(clean);
+    clean.addEventListener("click", hodlDownloadMsigBip388Policy);
   }
 }
 function hodlBindWalletResultActions() {

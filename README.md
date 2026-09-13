@@ -264,7 +264,8 @@ the limits of browser-memory cleanup.
   `bitcoin-cli importdescriptors`. A derived multisig also prints and saves a
   one-page watch-only policy sheet (network, `m-of-n`, co-signer fingerprints,
   descriptor checksum, receive address 0) so every signer can verify the
-  policy before funding. Calculator export, not a generator.
+  policy before funding, and a BIP 388 wallet policy (template + xpubs) for
+  wallets that register policies. Calculator export, not a generator.
 - An optional **Sync entropy across methods** checkbox (off by default) keeps
   direct dice, card, number-base, seed-word, and private-key representations in
   sync while input is entered. Each destination waits for enough bits to emit
