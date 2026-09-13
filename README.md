@@ -261,7 +261,10 @@ the limits of browser-memory cleanup.
   SQLite descriptor wallet as Key Station, never with private keys) and the
   `importdescriptors` JSON for a blank `disable_private_keys` wallet. Drop the
   `.dat` in `wallets/<name>/` and `loadwallet`, or feed the JSON to
-  `bitcoin-cli importdescriptors`. Calculator export, not a generator.
+  `bitcoin-cli importdescriptors`. A derived multisig also prints and saves a
+  one-page watch-only policy sheet (network, `m-of-n`, co-signer fingerprints,
+  descriptor checksum, receive address 0) so every signer can verify the
+  policy before funding. Calculator export, not a generator.
 - An optional **Sync entropy across methods** checkbox (off by default) keeps
   direct dice, card, number-base, seed-word, and private-key representations in
   sync while input is entered. Each destination waits for enough bits to emit
