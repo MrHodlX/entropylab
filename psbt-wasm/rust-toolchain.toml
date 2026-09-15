@@ -1,7 +1,7 @@
 # Pinned so `npm run build:wasm` builds with the same Rust locally and in CI.
-# CI rebuilds the artifact from source and runs its test suite (the artifact
-# is committed back after merges; byte identity across machines is not
-# asserted because the C side compiles with the runner's clang).
+# CI rebuilds the artifact from source inside the digest-pinned Dockerfile.wasm
+# image (pinned clang + Rust), builds it twice from scratch, and fails unless
+# both runs are byte-identical; the artifact is committed back after merges.
 [toolchain]
 channel = "1.95.0"
 targets = ["wasm32-unknown-unknown"]

@@ -329,10 +329,12 @@ always pair it with the attestation or reproduce the build from reviewed
 source. For a given Git revision, `npm run build` deterministically assembles
 `entropylab.html` from committed inputs, including the committed WASM modules;
 the revision to check out is stamped in the generated file. Rebuilding those
-modules from their Rust/C sources (`npm run build:wasm`) is separate, and its
-output is not currently asserted to be byte-identical across machines. CI
-still rebuilds the modules from source and runs the WASM binding tests against
-the fresh build (see [Building from source](#building-from-source)).
+modules from their Rust/C sources is separate: they compile inside the
+digest-pinned toolchain image defined by `Dockerfile.wasm` (pinned base
+image, apt snapshot, clang, and Rust), and CI builds them twice from scratch
+and fails unless both runs are byte-identical, so anyone running the same
+image on the same commit gets the same sha256. CI also runs the WASM binding
+tests against the fresh build (see [Building from source](#building-from-source)).
 
 An online version is available at [entropylab.online](https://entropylab.online)
 for convenient access. Do not enter seed phrases, private keys, or other secret
@@ -425,11 +427,12 @@ versions in `entropylab-wasm/Cargo.lock`, toolchain pinned by
 bundled from npm is `uqr` (QR rendering; no cryptography). The compiled
 artifact is committed as `src/js/entropylab-wasm-b64.js`, so building the
 site needs only Node.js. CI
-rebuilds it from the Rust sources, runs its test suite against the fresh
-build, and commits the runner's copy back to `rock` after each merge (the
-same flow as the site artifact; byte identity across machines is not
-asserted, since the C side compiles with the builder's clang, and build-host
-paths are remapped out of the binary).
+rebuilds it from the Rust sources inside the pinned `Dockerfile.wasm`
+toolchain image — twice from scratch, failing unless both runs are
+byte-identical — runs its test suite against the fresh build, and commits
+the runner's copy back to `rock` after each merge (the
+same flow as the site artifact; `SOURCE_DATE_EPOCH` keeps the wall clock out
+of the binary and build-host paths are remapped out of it).
 
 PSBT parsing, typed field decoding, and re-serialization in the PSBT editor
 run on rust-bitcoin 0.32.102 compiled to WebAssembly from the pinned crate in
@@ -446,7 +449,14 @@ npm run build
 
 To modify the Rust bindings (`entropylab-wasm/`, `psbt-wasm/`), Rust (with the
 `wasm32-unknown-unknown` target, installed automatically by rustup) is also
-required; regenerate the committed artifacts with `npm run build:wasm`.
+required; regenerate the committed artifacts with `npm run build:wasm`. For
+byte-identical output, build in the pinned toolchain image instead:
+
+```sh
+docker build -f Dockerfile.wasm -t entropylab-wasm-builder .
+docker run --rm -v "$PWD":/workspace -w /workspace entropylab-wasm-builder npm run build:wasm
+sha256sum src/js/*-wasm-b64.js   # compare against SHA256SUMS.txt
+```
 
 Build output (generated; CI rebuilds it for every run and commits it back to
 `rock` after each merge so the file stays downloadable from the repository):

@@ -45,8 +45,16 @@ material. Its security posture rests on the following model:
   committed Rust sources and runs its test suite against
   the fresh build before any deployment; the artifact job then commits the
   runner's copy back to the repository, the same flow as the site artifact.
-   Cross-machine byte identity is not claimed — the C side compiles with the
-   builder's clang, and build-host paths are remapped out of the binary.
+  The WASM is compiled inside the digest-pinned toolchain image defined by
+  `Dockerfile.wasm` (one base image by digest, apt pinned to a dated
+  snapshot.ubuntu.com snapshot, one pinned clang, the pinned Rust toolchain,
+  `SOURCE_DATE_EPOCH` from the commit timestamp), and CI builds it twice from
+  scratch and fails unless both runs produce the same SHA-256 — byte identity
+  across machines is now enforced for the pinned-image build, and the
+  artifact hashes are published in `SHA256SUMS.txt`. This is not Bitcoin
+  Core's build system and does not claim to be: the pinned base-image digest
+  is itself the trust anchor — a checksum after a pinned image still means
+  you trust that image. Build-host paths are remapped out of the binary.
   iOS/macOS Lockdown Mode disables WebAssembly. Exclude the site in Safari
   or use a host that can compile WASM. There is no JavaScript secp256k1
   fallback; a host that cannot run the module is treated as broken.
