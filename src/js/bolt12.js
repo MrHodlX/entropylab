@@ -19,9 +19,11 @@
 //
 // Blinded paths (offer_paths, invreq_paths, invoice_paths) are walked only
 // far enough to count them and measure their total length — they are NEVER
-// resolved, followed, or contacted. Signatures are not verified either; the
-// result merely reports `signaturePresent` and the UI renders the signature
-// state as "not checked".
+// resolved, followed, or contacted. offer_issuer_id / invoice_node_id are
+// signing keys, not a recoverable payee: a BOLT12 offer that omits paths
+// publishes the issuer pubkey in the clear (a half-assed offer). Signatures
+// are not verified either; the result merely reports `signaturePresent` and
+// the UI renders the signature state as "not checked".
 //
 // Deterministic, offline, decode-only: no network, no entropy, no DOM. The
 // module imports cleanly in Node for the unit tests. Failures throw keyed
@@ -246,3 +248,21 @@ export const bolt12Decode = (text) => {
   }
   return { kind: "bolt12", hrp, fields, unknownOddTypes, signaturePresent };
 };
+
+// Count blinded paths across the three TLV slots. Never opens a hop.
+export const bolt12PathCount = (fields = {}) => {
+  const n = (path) => (path && typeof path.count === "number" ? path.count : 0);
+  return n(fields.paths) + n(fields.invreqPaths) + n(fields.invoicePaths);
+};
+
+// Honesty for the UI: a good offer hides the recipient. issuer_id / node_id
+// are signing keys. "published" means the string put a pubkey in the clear
+// with no blinded path — half-assed BOLT12, still decode it, never call it
+// the destination.
+export const bolt12RecipientVisibility = (fields = {}) => {
+  const pathCount = bolt12PathCount(fields);
+  if (pathCount > 0) return { kind: "blinded", pathCount };
+  if (fields.issuerId || fields.nodeId) return { kind: "published", pathCount: 0 };
+  return { kind: "none", pathCount: 0 };
+};
+

@@ -129,3 +129,44 @@ test("session clear wipes invoice state alongside the other Lightning fields", (
   const lightning = read("src/js/lightning.js");
   assert.match(lightning, /export function hodlLnInvWipeMem\(\)/);
 });
+
+// Spec offer with issuer_id only (bolt12/offers-test.json). No blinded path:
+// the issuer pubkey is in the clear. Must not be labeled as the destination.
+const OFFER_MINIMAL = "lno1zcss9mk8y3wkklfvevcrszlmu23kfrxh49px20665dqwmn4p72pksese";
+const OFFER_ISSUER_ID = "02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619";
+const OFFER_ONE_PATH = "lno1pgx9getnwss8vetrw3hhyucs5ypjgef743p5fzqq9nqxh0ah7y87rzv3ud0eleps9kl2d5348hq2k8qzqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgqpqqqqqqqqqqqqqqqqqqqqqqqqqqqzqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqqzq3zyg3zyg3zyg3vggzamrjghtt05kvkvpcp0a79gmy3nt6jsn98ad2xs8de6sl9qmgvcvs";
+
+test("BOLT12 offer without a blinded path warns that the issuer pubkey is published", () => {
+  const ui = initCard();
+  ui.input.value = OFFER_MINIMAL;
+  ui.decode.onclick();
+  assert.equal(ui.error.textContent, "");
+  assert.ok(ui.out.innerHTML.includes(OFFER_ISSUER_ID), "issuer signing key rendered");
+  assert.ok(ui.out.innerHTML.includes("Issuer signing key (not the destination)"), "issuer is not labeled destination");
+  assert.ok(ui.out.innerHTML.includes("No blinded path"), "published-pubkey warning");
+  assert.ok(ui.out.innerHTML.includes("publishes the issuer pubkey"), "warning names the leak");
+  assert.ok(!/class="label">Node id</.test(ui.out.innerHTML), "no generic Node id label on an offer");
+  assert.ok(ui.out.innerHTML.includes("Signature not checked"), "BOLT12 never greens the signature");
+});
+
+test("BOLT12 offer with a blinded path says the recipient node id is not in the offer", () => {
+  const ui = initCard();
+  ui.input.value = OFFER_ONE_PATH;
+  ui.decode.onclick();
+  assert.equal(ui.error.textContent, "");
+  assert.ok(ui.out.innerHTML.includes("Recipient node id is not in this bolt12 offer"), "blinded-path honesty");
+  assert.ok(ui.out.innerHTML.includes("Blinded paths"), "path count shown");
+  assert.ok(ui.out.innerHTML.includes("never followed"), "paths are not followed");
+  assert.ok(!ui.out.innerHTML.includes("No blinded path"), "no published-pubkey warning when paths exist");
+});
+
+test("BOLT12 UI copy never calls issuer_id the payee or destination", () => {
+  const lightning = read("src/js/lightning.js");
+  assert.match(lightning, /Issuer signing key \(not the destination\)/);
+  assert.match(lightning, /Invoice node id \(signing key, not a route destination\)/);
+  assert.match(lightning, /Recipient node id is not in this/);
+  assert.match(lightning, /publishes the issuer pubkey in the clear/);
+  // The generic "Node id" label is BOLT11-only (recovered from the signature).
+  assert.match(lightning, /Node id \(recovered from the signature\)/);
+  assert.doesNotMatch(lightning, /\["nodeId", "Node id"/);
+});

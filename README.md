@@ -165,8 +165,10 @@ Official website: [entropylab.online](https://entropylab.online)
   unsigned and always shown as "signature not checked". The payment secret
   stays masked until revealed, an invoice for a different chain than the page
   network raises a loud warning, and blinded paths are counted, never
-  followed. Decoding only: the tab never creates invoices, never pays, and
-  talks to nothing.
+  followed. `offer_issuer_id` / `invoice_node_id` are signing keys, never
+  labeled as the payee; an offer with no blinded path is called out because
+  it publishes the issuer pubkey in the clear. Decoding only: the tab never
+  creates invoices, never pays, and talks to nothing.
 - A session **Journal** (last workspace tab) holds an **Entropy
   Journal** notebook, a notepad stamped with this computer's date and time,
   a Key Manager, a live summary of everything derived in this sitting, and a debug log

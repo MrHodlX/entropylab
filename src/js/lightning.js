@@ -25,7 +25,7 @@ import { wordlist as bip39English } from "./bip39-english.js";
 import { hex } from "./coders.js";
 import { t } from "./i18n.js";
 import { bolt11Decode } from "./bolt11.js";
-import { bolt12Decode } from "./bolt12.js";
+import { bolt12Decode, bolt12PathCount, bolt12RecipientVisibility } from "./bolt12.js";
 
 // ── Derivations (DOM-free, unit-tested directly) ────────────────────────────
 
@@ -294,24 +294,43 @@ function hodlLnInvRender() {
   } else {
     const names = { lno: "BOLT12 offer", lnr: "BOLT12 invoice request", lni: "BOLT12 invoice" };
     const fields = d.fields || {};
+    const noun = names[d.hrp] || "BOLT12 data";
+    const pathCount = bolt12PathCount(fields);
+    const visibility = bolt12RecipientVisibility(fields);
+    const offerAmount = () => {
+      if (fields.invoiceAmount != null) return hodlLnInvAmount(fields.invoiceAmount);
+      if (fields.amountMsat != null) return hodlLnInvAmount(fields.amountMsat);
+      if (fields.amount == null) return null;
+      if (fields.currency) return `${fields.amount} ${fields.currency}`;
+      return hodlLnInvAmount(fields.amount);
+    };
+    const amountText = offerAmount();
+    const honesty = visibility.kind === "blinded"
+      ? `<p class="muted">Recipient node id is not in this ${escapeHtml(noun.toLowerCase())} (blinded paths). The issuer signing key is not the destination.</p>`
+      : visibility.kind === "published"
+        ? `<p class="warn">No blinded path. This ${escapeHtml(noun.toLowerCase())} publishes the issuer pubkey in the clear — that is a signing key, not a hidden destination.</p>`
+        : "";
     const fieldRows = [
       ["description", "Description", (v) => v],
-      ["amountMsat", "Amount", (v) => hodlLnInvAmount(v)],
       ["currency", "Currency", (v) => v],
       ["issuer", "Issuer", (v) => v],
-      ["nodeId", "Node id", (v) => v],
+      ["issuerId", "Issuer signing key (not the destination)", (v) => v],
+      ["nodeId", "Invoice node id (signing key, not a route destination)", (v) => v],
+      ["payerId", "Payer id", (v) => v],
       ["payerNote", "Payer note", (v) => v],
       ["paymentHash", "Payment hash", (v) => v],
       ["absoluteExpiry", "Expires", (v) => hodlLnInvIso(Number(v))],
       ["createdAt", "Created", (v) => hodlLnInvIso(Number(v))],
       ["quantityMax", "Maximum quantity", (v) => String(v)],
       ["chains", "Chains", (v) => (Array.isArray(v) ? v.join(" · ") : String(v))],
-      ["pathsCount", "Blinded paths", (v) => `${v} (never followed)`],
     ];
     rows = `
-      <p class="label">${escapeHtml(names[d.hrp] || "BOLT12 data")}</p>
+      <p class="label">${escapeHtml(noun)}</p>
+      ${honesty}
+      ${pathCount ? hodlLnInvRow("Blinded paths", `${pathCount} (counted, never followed)`) : ""}
+      ${amountText ? hodlLnInvRow("Amount", amountText) : ""}
       ${fieldRows.filter(([key]) => fields[key] !== undefined && fields[key] !== null)
-        .map(([key, label, format]) => hodlLnInvRow(label, format(fields[key]))).join("")}
+        .map(([key, label, format]) => hodlLnInvRow(label, format(fields[key]), key === "issuerId" ? "ln-inv-issuer-id" : key === "nodeId" ? "ln-inv-invoice-node-id" : undefined)).join("")}
       ${d.unknownOddTypes && d.unknownOddTypes.length ? hodlLnInvRow("Unknown fields skipped", d.unknownOddTypes.map((type) => `type ${type}`).join(", ")) : ""}`;
   }
   output.innerHTML = `
