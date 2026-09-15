@@ -130,6 +130,8 @@ Official website: [entropylab.online](https://entropylab.online)
   pasted x-only outputs. Prints a BIP-321 `bitcoin:?sp=` URI and the BIP-353
   DNS TXT to paste on a domain you control; paste that URI back on Send.
   This is a calculator: it does not scan the chain or resolve names.
+- BIP-47 v1 payment-code calculator on the Silent Payments tab. Notification
+  address is public. Decode-only for notification txs. Parked post-0.2.0.
 - Grinds vanity addresses for a Key Station key (Vanity tab), picked through
   the same chip picker as BIP-85 and Silent Payments. Two methods: the
   **passphrase grind** extends the key's BIP39 passphrase with base-62

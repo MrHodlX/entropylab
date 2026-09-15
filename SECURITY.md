@@ -83,6 +83,15 @@ material. Its security posture rests on the following model:
   TXT records are printed from the derived code so you can publish them on a
   domain you control; the page never resolves names, never fetches
   silentpayments.net, and ignores Lightning parameters in a URI.
+- The BIP-47 payment-code card (Silent Payments tab, parked post-0.2.0) can
+  reveal the BIP-47 notification private key and receive pair private keys,
+  and accepts a pasted designated-input private key for blinding; all three
+  are masked behind reveal toggles or wiped after use. Its notification
+  address is public and reused by design: anyone paying it, and anyone
+  watching the chain, can see it. Its BigInt scalar arithmetic (shared-secret
+  tweaks and `(b_i + s) mod n`) cannot be erased the way byte buffers are —
+  immutable BigInts and point wrappers remain until garbage collection, the
+  same best-effort limit as BIP-352.
 - Inscription envelope detection is a parser of witness/tap-leaf scripts. It
   does not render inscription media, assign sat numbers, or contact an indexer.
 - PSBT analysis is explicitly bounded. EntropyLab does not independently fetch
