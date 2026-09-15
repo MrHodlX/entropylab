@@ -201,6 +201,33 @@ test("the release build attests the wallet artifact and ships a checksum manifes
   assert.match(read("README.md"), /ipfs block put --cid-codec=raw --allow-big-block/);
 });
 
+test("OpenTimestamps stamps the tested HTML off the Pages/test critical path", () => {
+  const workflow = read(".github/workflows/ci-cd.yml");
+  const timestamp = workflowJob(workflow, "timestamp");
+  assert.ok(timestamp, "timestamp job is missing");
+  assert.match(timestamp, /ots stamp entropylab\.html/, "must stamp the candidate HTML");
+  assert.match(timestamp, /opentimestamps-client==0\.7\.2/, "pin the OTS client");
+  assert.match(timestamp, /sha256sum -c -/, "must verify the candidate digest before stamping");
+  assert.ok(jobNeeds(timestamp).includes("build"), "timestamp needs build (digest)");
+  assert.ok(jobNeeds(timestamp).includes("artifact"), "timestamp runs after the HTML commit");
+  assert.ok(!jobNeeds(workflowJob(workflow, "artifact")).includes("timestamp"), "calendars must not block the HTML commit");
+  assert.ok(!jobNeeds(workflowJob(workflow, "deploy")).includes("timestamp"), "calendars must not block Pages");
+  assert.doesNotMatch(timestamp, /npm run build/, "timestamp must not rebuild the wallet HTML");
+  const upgrade = read(".github/workflows/ots-upgrade.yml");
+  assert.match(upgrade, /ots upgrade entropylab\.html\.ots/);
+  assert.match(upgrade, /opentimestamps-client==0\.7\.2/);
+  assert.doesNotMatch(upgrade, /npm run build/);
+  assert.doesNotMatch(upgrade, /SHA256SUMS\.txt/);
+  assert.match(upgrade, /uses: actions\/checkout@[0-9a-f]{40}/, "upgrade workflow pins checkout");
+  assert.match(read("README.md"), /ots verify entropylab\.html/);
+  assert.match(read("README.md"), /pending/);
+  assert.match(read("llms.txt"), /entropylab\.html\.ots/);
+  assert.match(read("SECURITY.md"), /OpenTimestamps/);
+  for (const path of ["src/js/app.js", "src/js/online.js", "src/shell.html"]) {
+    assert.doesNotMatch(read(path), /opentimestamps|\.ots\b/i, `${path} must not talk to OTS calendars`);
+  }
+});
+
 test("repository links follow the Team Ooga Booga ownership", () => {
   for (const path of ["README.md", "CONTRIBUTING.md", "SECURITY.md", "llms.txt", "src/index.html", "src/shell.html", "src/js/app.js"]) {
     assert.doesNotMatch(read(path), /github\.com\/(?:w-s-bitcoin|Team-Ooga-Booga)\/entropylab/, `${path} still links through a former owner`);
@@ -230,6 +257,7 @@ const candidateConsumers = {
   "test-invariants": "npm run test:invariants",
   verify: "npm run verify",
   artifact: "git add -f entropylab.html",
+  timestamp: "ots stamp entropylab.html",
 };
 
 function wasmArtifactFlowProblems(workflow) {
@@ -338,7 +366,7 @@ test("every gate and publication path consumes the single tested candidate (issu
   assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/);
   // Each job that reads the compiled artifact downloads that object and
   // verifies its digest instead of rebuilding it.
-  for (const job of ["test-ci", "test-browser", "test-browser-check", "test-invariants", "verify", "artifact"]) {
+  for (const job of ["test-ci", "test-browser", "test-browser-check", "test-invariants", "verify", "artifact", "timestamp"]) {
     const section = workflowJob(workflow, job);
     assert.ok(section, `${job} job is missing`);
     assert.match(section, /actions\/download-artifact@[0-9a-f]{40}/, `${job} must download the tested candidate`);

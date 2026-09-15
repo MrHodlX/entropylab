@@ -1,0 +1,53 @@
+# Upgrade a pending OpenTimestamps proof to a Bitcoin attestation.
+# Does not rebuild entropylab.html, does not change checksums or CID,
+# does not block Pages. A pending .ots is not a timestamp; this job is what
+# makes it one. Calendars only — no Bitcoin node required to upgrade.
+
+name: OpenTimestamps upgrade
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ots-upgrade
+  cancel-in-progress: false
+
+jobs:
+  upgrade:
+    name: Upgrade · complete pending OpenTimestamps proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: rock
+      - name: Install OpenTimestamps client
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ots"
+          "$RUNNER_TEMP/ots/bin/pip" install --disable-pip-version-check "opentimestamps-client==0.7.2"
+      - name: Upgrade the committed proof
+        run: |
+          set -euo pipefail
+          if [ ! -f entropylab.html.ots ]; then
+            echo "No entropylab.html.ots yet; stamp job has not run."
+            exit 0
+          fi
+          OTS="$RUNNER_TEMP/ots/bin/ots"
+          # ots upgrade entropylab.html.ots — completes a pending calendar receipt.
+          "$OTS" upgrade entropylab.html.ots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add entropylab.html.ots
+          if git diff --cached --quiet; then
+            echo "Proof unchanged (still pending, or already complete)."
+            exit 0
+          fi
+          git commit -m "Upgrade OpenTimestamps proof for entropylab.html [skip ci]"
+          git push

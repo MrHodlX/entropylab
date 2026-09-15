@@ -125,6 +125,12 @@ material. Its security posture rests on the following model:
   `fetch`. Retrieving the file by CID is an online-machine step; verify
   `SHA256SUMS.txt` before moving the HTML onto an air-gapped computer. Do not
   publish seeds, xprvs, or other private material to IPFS.
+- After each merge to `rock`, CI submits the tested `entropylab.html` digest
+  to OpenTimestamps calendars and commits `entropylab.html.ots`. A pending
+  proof is a calendar receipt, not a Bitcoin timestamp; a scheduled job
+  upgrades it once a calendar has a block attestation. Verify upgraded
+  proofs with `ots verify` against a local Bitcoin Core node. The calculator
+  never stamps, upgrades, or fetches calendars.
 - The session Journal (notepad, session snapshot, session log) lives only in
   this page's memory. It is never written to `localStorage`, IndexedDB, or the
   network. Closing or hiding the page discards it with the other secret

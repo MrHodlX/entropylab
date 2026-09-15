@@ -325,14 +325,29 @@ file is still self-contained and never registers the hosted service worker.
 
 Every merge to `rock` publishes a `SHA256SUMS.txt` checksum manifest for
 `entropylab.html` (committed next to it in this repository), a matching
-`CID.txt` (CIDv1 raw sha2-256 of those same bytes), and a
+`CID.txt` (CIDv1 raw sha2-256 of those same bytes), a
 [GitHub artifact attestation](https://github.com/OogaBoogaX/entropylab/attestations)
-for the exact bytes built by CI. After downloading, verify both:
+for the exact bytes built by CI, and an OpenTimestamps proof
+(`entropylab.html.ots`) of that same digest. After downloading, verify:
 
 ```sh
 sha256sum -c SHA256SUMS.txt
 gh attestation verify entropylab.html -R OogaBoogaX/entropylab
 ```
+
+The checksum detects accidental corruption. The attestation (Sigstore) says
+this repository's CI built those bytes. OpenTimestamps says the digest
+existed as of a Bitcoin block, independently of GitHub. A newly committed
+`.ots` is a *pending* calendar receipt, not a timestamp — do not call it
+stamped until `ots info entropylab.html.ots` shows a Bitcoin attestation.
+Then, on a machine with Bitcoin Core (a pruned node is fine):
+
+```sh
+ots verify entropylab.html
+```
+
+EntropyLab itself never stamps, upgrades, or verifies `.ots` files and never
+talks to a calendar. The HTML stays air-gappable.
 
 The CID is a self-describing name for the SHA-256, not a second hash. The
 calculator never talks to IPFS. To store or fetch the file on a **local**

@@ -462,6 +462,59 @@ jobs:
           git commit -m "Rebuild site artifact [skip ci]"
           git push
 
+  # ── Timestamp: OpenTimestamps the tested HTML after it is committed ──────
+  # Calendars are online; this job must not block tests, the HTML commit, or
+  # Pages. It stamps the exact candidate digest (issue #93), never a rebuild.
+  # A pending .ots is not a Bitcoin timestamp — ots-upgrade.yml completes it.
+
+  timestamp:
+    name: Timestamp · OpenTimestamps the tested HTML
+    if: github.ref == 'refs/heads/rock' && github.event_name == 'push'
+    needs: [build, artifact]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Artifact may have just pushed a new HTML commit. Stamp on top of
+          # current rock, never replay github.sha over that commit.
+          ref: rock
+      - name: Download the tested candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: entropylab-candidate
+      - name: Verify the candidate digest
+        run: echo "${{ needs.build.outputs.sha256 }}  entropylab.html" | sha256sum -c -
+      - name: Install OpenTimestamps client
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ots"
+          "$RUNNER_TEMP/ots/bin/pip" install --disable-pip-version-check "opentimestamps-client==0.7.2"
+      - name: Stamp the tested HTML
+        run: |
+          set -euo pipefail
+          OTS="$RUNNER_TEMP/ots/bin/ots"
+          ACTUAL=$(sha256sum entropylab.html | cut -d' ' -f1)
+          if [ -f entropylab.html.ots ]; then
+            EXISTING=$("$OTS" info entropylab.html.ots 2>/dev/null | sed -n 's/^File sha256 hash: //p' | head -1 || true)
+            if [ "$EXISTING" = "$ACTUAL" ]; then
+              echo "Proof already covers $ACTUAL; not re-stamping. Upgrade workflow completes pending attestations."
+              exit 0
+            fi
+          fi
+          # ots stamp entropylab.html — pending calendar receipt, not a Bitcoin timestamp.
+          "$OTS" stamp entropylab.html
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add entropylab.html.ots
+          if git diff --cached --quiet; then
+            echo "No OpenTimestamps proof to commit."
+            exit 0
+          fi
+          git commit -m "OpenTimestamps pending proof for entropylab.html [skip ci]"
+          git push
+
   # ── Verify: independent check of the generated site artifact ──
 
   verify:
