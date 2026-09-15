@@ -185,7 +185,7 @@ test("the WASM boot chain has a failure path that kills the page", () => {
 test("the release build attests the wallet artifact and ships a checksum manifest (issue #58)", () => {
   const workflow = read(".github/workflows/ci-cd.yml");
   const build = workflow.match(/^  build:\n(?:.|\n)*?(?=^  [a-z-]+:)/m)?.[0] ?? "";
-  assert.match(build, /sha256sum entropylab\.html > SHA256SUMS\.txt/, "build must generate SHA256SUMS.txt");
+  assert.match(build, /sha256sum entropylab\.html src\/js\/entropylab-wasm-b64\.js src\/js\/psbt-wasm-b64\.js src\/js\/vanity-wasm-b64\.js > SHA256SUMS\.txt/, "build must generate SHA256SUMS.txt covering the wallet HTML and the WASM artifacts");
   assert.match(build, /node scripts\/cid\.mjs entropylab\.html > CID\.txt/, "build must generate CID.txt from the same HTML");
   assert.match(build, /actions\/attest-build-provenance@[0-9a-f]{40}/, "build must attest entropylab.html");
   assert.match(build, /subject-path: entropylab\.html/, "the attestation subject is the wallet HTML");
@@ -244,7 +244,8 @@ test("third-party actions are immutable and deployment is test-gated", () => {
 });
 
 // The build-wasm gate only guards the crate if (a) the job rebuilds the
-// bindings before testing them, (b) the test step lives in the build-wasm job
+// bindings from the Rust sources inside the pinned Dockerfile.wasm image
+// before testing them, (b) the test step lives in the build-wasm job
 // itself, and (c) every suite that exercises the WASM boundary runs against
 // that fresh build. Returns the list of ways the gate is broken, so the same
 // check can be exercised against doctored workflows below.
@@ -252,8 +253,8 @@ function wasmGateProblems(workflow) {
   const problems = [];
   const job = workflow.match(/^  build-wasm:\n([\s\S]*?)(?=^  \w)/m);
   if (!job) return ["the build-wasm job is missing"];
-  const buildAt = job[1].search(/^\s*run: npm run build:wasm$/m);
-  const testAt = job[1].search(/^\s*run: node --test /m);
+  const buildAt = job[1].search(/^\s*run: docker run [^\n]* npm run build:wasm$/m);
+  const testAt = job[1].search(/^\s*run: docker run [^\n]* node --test /m);
   if (buildAt === -1) problems.push("the build-wasm job never rebuilds the bindings from the Rust sources");
   if (testAt === -1) {
     problems.push("the build-wasm job runs no test suites against the fresh build");
@@ -262,7 +263,7 @@ function wasmGateProblems(workflow) {
   if (buildAt !== -1 && buildAt > testAt) {
     problems.push("build-wasm tests run before the rebuild, so they exercise the committed artifact instead");
   }
-  const step = job[1].match(/^\s*run: node --test ([^\n]+)$/m)[1];
+  const step = job[1].match(/^\s*run: docker run [^\n]* node --test ([^\n]+)$/m)[1];
   for (const suite of readdirSync(join(root, "test")).filter((name) => name.endsWith("-wasm.test.mjs"))) {
     if (!step.includes(`test/${suite}`)) problems.push(`build-wasm must run test/${suite} against the fresh build`);
   }
@@ -281,7 +282,7 @@ test("the WASM gate check detects its own failure modes", () => {
     "dropping a WASM suite from the gate must be detected",
   );
   const reordered = workflow.replace(
-    /(\s*run: )(npm run build:wasm)\n(\s*- name: [^\n]+\n\s*run: )(node --test [^\n]+)/,
+    /(\s*run: )(docker run [^\n]* npm run build:wasm)\n([\s\S]*?\s*- name: [^\n]+\n\s*run: )(docker run [^\n]* node --test [^\n]+)/,
     "$1$4\n$3$2"
   );
   assert.notEqual(reordered, workflow, "fixture: the build and test steps must be reorderable");
@@ -289,7 +290,7 @@ test("the WASM gate check detects its own failure modes", () => {
     wasmGateProblems(reordered).some((problem) => problem.includes("before the rebuild")),
     "testing before rebuilding must be detected",
   );
-  const noTest = workflow.replace(/^\s*- name: Test the freshly built bindings\n\s*run: node --test [^\n]+\n/m, "");
+  const noTest = workflow.replace(/^\s*- name: Test the freshly built bindings\n\s*run: docker run [^\n]* node --test [^\n]+\n/m, "");
   assert.notEqual(noTest, workflow, "fixture: the fresh-build test step must exist");
   assert.ok(
     wasmGateProblems(noTest).some((problem) => problem.includes("no test suites")),
