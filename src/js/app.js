@@ -47,6 +47,7 @@ import { initPsbtEditor, psbtBytesFromUpload } from "./psbt-editor.js";
 // The Lightning node key tool (its own workspace tab): aezeed deciphering
 // and the LND/LDK node identity derivations live in lightning.js/aezeed.js.
 import { hodlInitLn, hodlLnWipeMem } from "./lightning.js";
+import { hodlInitBip47, hodlBip47Wipe } from "./bip47-ui.js";
 import { hodlTapKeySigs, hodlTapScriptSigs, hodlTapSighashProblems } from "./psbt-schnorr.js";
 import { initQrReferences } from "./qr-references.js";
 import { addressQrButtonHtml as hodlAddressQrButton, initAddressQr as hodlInitAddressQr } from "./address-qr.js";
@@ -9436,6 +9437,7 @@ function hodlSpWipeKeys() {
     try { hodlSpKeys.spendPriv && hodlSpKeys.spendPriv.fill(0); } catch {}
   }
   hodlSpKeys = null;
+  hodlBip47Wipe();
   if (hodlSpHd) {
     try { hodlSpHd.wipePrivateData(); } catch {}
   }
@@ -11932,6 +11934,7 @@ function hodlShowWorkspace(id) {
   document.getElementById("msig-card").hidden = true;
   document.getElementById("bip85-card").hidden = id !== "bip85";
   document.getElementById("sp-card").hidden = id !== "sp";
+  document.getElementById("bip47-card").hidden = id !== "sp";
   document.getElementById("vanity-card").hidden = id !== "vanity";
   document.getElementById("ln-card").hidden = id !== "ln";
   // The context block sits outside its tool's card, so it is shown and hidden
@@ -14435,6 +14438,24 @@ function hodlInitWorkspace() {
   hodlInitVanity();
   hodlInitSp();
   hodlInitLn({ journalLog: hodlJournalLog });
+  hodlInitBip47({
+    ensureHd: hodlSpEnsureHd,
+    getHd: () => hodlSpHd,
+    coinType: hodlSpCoinType,
+    network: hodlSpNetwork,
+    // The designated-input key: the existing private-key input parsing.
+    parsePrivateKey: (text) => {
+      let trimmed = String(text || "").trim();
+      let hexCandidate = trimmed.replace(/^0x/i, "").replace(/\s/g, "");
+      if (/^[0-9a-fA-F]{64}$/.test(hexCandidate)) {
+        let bytes = hodlHex.decode(hexCandidate);
+        hodlAssertPrivateKey(bytes);
+        return bytes;
+      }
+      return hodlDecodeWif(trimmed).priv;
+    },
+    journalLog: hodlJournalLog,
+  });
 }
 var hodlKeyClearSyncQueued = false, hodlMsigClearSyncQueued = false, hodlDeriveSyncQueued = false;
 function hodlQueueKeyClearButtonSync() {
