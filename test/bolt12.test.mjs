@@ -12,7 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { toWords } from "../src/js/bech32.js";
 import { hex } from "../src/js/coders.js";
-import { bolt12Decode } from "../src/js/bolt12.js";
+import { bolt12Decode, bolt12PathCount, bolt12RecipientVisibility } from "../src/js/bolt12.js";
 
 // ── spec strings (verbatim) ─────────────────────────────────────────────────
 
@@ -109,6 +109,16 @@ test("decodes currency, chains, expiry, issuer, quantity, and features", () => {
 test("counts blinded paths and measures them without following them", () => {
   assert.deepEqual(bolt12Decode(OFFER_ONE_PATH).fields.paths, { count: 1, totalBytes: 161 });
   assert.deepEqual(bolt12Decode(OFFER_TWO_PATHS).fields.paths, { count: 2, totalBytes: 298 });
+});
+
+test("recipient visibility: issuer id is a signing key, not a destination", () => {
+  const published = bolt12Decode(OFFER_MINIMAL);
+  assert.equal(bolt12PathCount(published.fields), 0);
+  assert.deepEqual(bolt12RecipientVisibility(published.fields), { kind: "published", pathCount: 0 });
+  const blinded = bolt12Decode(OFFER_ONE_PATH);
+  assert.equal(bolt12PathCount(blinded.fields), 1);
+  assert.deepEqual(bolt12RecipientVisibility(blinded.fields), { kind: "blinded", pathCount: 1 });
+  assert.deepEqual(bolt12RecipientVisibility({}), { kind: "none", pathCount: 0 });
 });
 
 test("collects unknown odd types and decodes around them", () => {
