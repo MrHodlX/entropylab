@@ -6,12 +6,15 @@
 //
 // The generated modules are committed so that `npm run build` keeps working
 // with Node alone. CI rebuilds them from the Rust sources (pinned by each
-// crate's rust-toolchain.toml and Cargo.lock) and runs the WASM test suites
-// against the fresh build, so a stale committed copy cannot survive; the
-// artifact job commits the runner's copy back after each merge. Byte identity
-// across machines is not asserted: the secp256k1 C side compiles with the
-// builder's clang. Build-host paths are remapped below so the binaries do not
-// carry the builder's home directory.
+// crate's rust-toolchain.toml and Cargo.lock) inside the digest-pinned
+// toolchain image defined by Dockerfile.wasm (pinned base image, apt
+// snapshot, clang, and Rust — issue #449), builds them twice from scratch,
+// and fails unless both runs are byte-identical; it then runs the WASM test
+// suites against the fresh build, so a stale committed copy cannot survive.
+// The artifact job commits the pinned image's copy back after each merge.
+// SOURCE_DATE_EPOCH below keeps the wall clock out of the binaries, and
+// build-host paths are remapped so they do not carry the builder's home
+// directory.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -19,6 +22,20 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+
+// Keep the wall clock out of the binaries: clang and rustc honor
+// SOURCE_DATE_EPOCH (reproducible-builds.org), so default it to the current
+// commit's timestamp — two builds of the same commit always agree, on any
+// machine, without stamping in when the build happened.
+if (!process.env.SOURCE_DATE_EPOCH) {
+  let stamp;
+  try {
+    stamp = execFileSync("git", ["log", "-1", "--format=%ct"], { cwd: root, encoding: "utf8" }).trim();
+  } catch {
+    throw new Error("SOURCE_DATE_EPOCH is unset and the commit timestamp is unreadable (not a git checkout?) — set SOURCE_DATE_EPOCH explicitly");
+  }
+  process.env.SOURCE_DATE_EPOCH = stamp;
+}
 
 // Without a remap, rustc bakes the builder's absolute paths (e.g.
 // /home/<user>/.cargo/...) into panicking code of registry sources, which

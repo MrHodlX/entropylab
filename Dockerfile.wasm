@@ -1,0 +1,89 @@
+# EntropyLab WASM builder — the pinned toolchain that compiles the crypto
+# WASM artifacts (src/js/entropylab-wasm-b64.js, src/js/psbt-wasm-b64.js,
+# src/js/vanity-wasm-b64.js) so the bytes stop moving between machines
+# (issue #449).
+#
+# Everything that can move is pinned here:
+#   * base image   ubuntu:24.04 by manifest-list digest
+#   * apt          a dated snapshot.ubuntu.com snapshot, so package bytes
+#                  cannot float with the archive
+#   * clang        exact package versions (clang compiles libsecp256k1's C)
+#   * Rust         1.95.0 + wasm32-unknown-unknown, matching the crates'
+#                  rust-toolchain.toml
+#   * Node         v22.23.2, the same pin as the dev image (Dockerfile)
+# scripts/build-wasm.mjs additionally sets SOURCE_DATE_EPOCH from the commit
+# timestamp, so the wall clock never enters the binaries.
+#
+# This image stops the compiler from moving; it is NOT Bitcoin Core's Guix
+# build system and claims no equivalence with it. The pinned base-image
+# digest is the trust anchor: byte-identical output still means you trust
+# this image.
+#
+# Reproduce the release bytes (from the repository root):
+#   docker build -f Dockerfile.wasm -t entropylab-wasm-builder .
+#   docker run --rm -v "$PWD":/workspace -w /workspace entropylab-wasm-builder npm run build:wasm
+#   sha256sum src/js/*-wasm-b64.js
+# and compare against the WASM entries in SHA256SUMS.txt.
+#
+# Updating the pins (deliberately, never as a drive-by):
+#   * Base image — resolve the current ubuntu:24.04 manifest-list digest from
+#     the Docker Hub registry API and replace the sha256 in FROM:
+#       TOKEN=$(curl -fsS "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/ubuntu:pull" | jq -r .token)
+#       curl -fsSI -H "Authorization: Bearer $TOKEN" \
+#         -H "Accept: application/vnd.oci.image.index.v1+json" \
+#         https://registry-1.docker.io/v2/library/ubuntu/manifests/24.04 \
+#         | grep -i docker-content-digest
+#   * apt snapshot — pick a timestamp that serves dists/noble,
+#     dists/noble-updates, and dists/noble-security from
+#     https://snapshot.ubuntu.com/ubuntu/ and replace APT_SNAPSHOT below.
+#   * clang — read the exact Version fields from that snapshot's Packages
+#     indices (the `clang` metapackage in noble universe, `clang-18` in
+#     noble-updates universe) and pin both on the apt-get install line.
+# test/wasm-toolchain-pin.test.mjs guards every one of these pins.
+
+FROM ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
+
+ARG NODE_VERSION=v22.23.2
+# Dated apt snapshot (2026-09-14T00:00:00Z); serves noble, noble-updates, and
+# noble-security for Ubuntu 24.04.
+ARG APT_SNAPSHOT=20260914T000000Z
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+# The base image ships no CA bundle and snapshot.ubuntu.com only serves
+# HTTPS, so ca-certificates alone comes from the live archive first. It
+# authenticates the transport only — apt verifies every package against the
+# Ubuntu archive keyring either way — and nothing installed in this step is
+# a build input. Everything compiled into the WASM comes from the pinned
+# snapshot below.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin apt to the dated snapshot so package bytes cannot float.
+RUN printf 'Types: deb\nURIs: https://snapshot.ubuntu.com/ubuntu/%s\nSuites: noble noble-updates noble-security\nComponents: main universe restricted multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' "$APT_SNAPSHOT" \
+      > /etc/apt/sources.list.d/ubuntu.sources
+
+# clang 1:18.0-59~exp2 (metapackage, noble universe) + clang-18
+# 1:18.1.3-1ubuntu1 (noble-updates universe), as served by the snapshot.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl git xz-utils build-essential \
+      clang=1:18.0-59~exp2 clang-18=1:18.1.3-1ubuntu1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && clang --version
+
+# Pinned Node.js (same version as the dev image).
+RUN curl -fsSLO "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz" \
+    && tar -xJf "node-${NODE_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 \
+    && rm "node-${NODE_VERSION}-linux-x64.tar.xz" \
+    && node --version && npm --version
+
+# The exact Rust 1.95.0 toolchain + wasm32 target, matching each crate's
+# rust-toolchain.toml.
+RUN curl -fsS https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.95.0 \
+    && rustup target add wasm32-unknown-unknown --toolchain 1.95.0 \
+    && rustc --version
+
+WORKDIR /workspace
