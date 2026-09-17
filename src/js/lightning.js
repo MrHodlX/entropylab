@@ -244,7 +244,17 @@ const hodlLnInvAmount = (msat) => {
   return `${whole}${frac ? "." + frac : ""} BTC (${ms.toString()} msat)`;
 };
 
-const hodlLnInvIso = (timestamp) => new Date(timestamp * 1000).toISOString().replace(".000Z", " UTC");
+// The timestamp comes from untrusted input (a BOLT11 `timestamp`, or a BOLT12
+// tu64 expiry/creation), so it can be far outside the range Date can
+// represent. Guard it here so an out-of-range value fails with a translatable
+// key instead of letting toISOString() throw a raw RangeError at the caller.
+const hodlLnInvIso = (timestamp) => {
+  const ms = timestamp * 1000;
+  if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) {
+    throw { key: "This {what} field is out of range.", vars: { what: "date" } };
+  }
+  return new Date(ms).toISOString().replace(".000Z", " UTC");
+};
 
 const hodlLnInvRow = (label, value, copyId) => `
       <p class="label">${escapeHtml(label)}</p>

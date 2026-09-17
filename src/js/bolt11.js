@@ -196,7 +196,13 @@ const parseTags = (words) => {
         out.paymentHash = hex.encode(wordsToBytes(data, 32, "payment hash"));
         break;
       case TAG_DESCRIPTION:
-        out.description = new TextDecoder("utf-8", { fatal: true }).decode(wordsToBytesTrimmed(data));
+        // A description is untrusted text; invalid UTF-8 is a keyed failure
+        // like every other malformed field, never a raw TypeError.
+        try {
+          out.description = new TextDecoder("utf-8", { fatal: true }).decode(wordsToBytesTrimmed(data));
+        } catch {
+          fail("The {what} field is not valid UTF-8.", { what: "description" });
+        }
         break;
       case TAG_DESCRIPTION_HASH:
         out.descriptionHash = hex.encode(wordsToBytes(data, 32, "description hash"));

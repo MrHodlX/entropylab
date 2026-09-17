@@ -21,7 +21,8 @@
 // far enough to count them and measure their total length — they are NEVER
 // resolved, followed, or contacted. offer_issuer_id / invoice_node_id are
 // signing keys, not a recoverable payee: a BOLT12 offer that omits paths
-// publishes the issuer pubkey in the clear (a half-assed offer). Signatures
+// publishes the issuer pubkey in the clear (an offer that skips blinding).
+// Signatures
 // are not verified either; the result merely reports `signaturePresent` and
 // the UI renders the signature state as "not checked".
 //

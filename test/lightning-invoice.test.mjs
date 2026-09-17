@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { toWords } from "../src/js/bech32.js";
+import { hex } from "../src/js/coders.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -54,6 +56,17 @@ const initCard = (network = "mainnet") => {
     decode: document.getElementById("ln-inv-decode"),
     clear: document.getElementById("ln-inv-clear"),
   };
+};
+
+// Minimal checksum-free BOLT12 encoder for one-off TLV offers, so a hostile
+// field value can be driven through the real render path.
+const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+const bigsizeBytes = (n) =>
+  n < 0xfd ? [n] : n <= 0xffff ? [0xfd, (n >> 8) & 0xff, n & 0xff] : [0xfe, (n >>> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+const tlvOffer = (type, valueHex) => {
+  const value = hex.decode(valueHex);
+  const bytes = new Uint8Array([...bigsizeBytes(type), ...bigsizeBytes(value.length), ...value]);
+  return "lno1" + toWords(bytes).map((w) => BECH32_CHARSET[w]).join("");
 };
 
 test("decode renders payment hash, recovered node id, and signature state — secret hidden", () => {
@@ -158,6 +171,17 @@ test("BOLT12 offer with a blinded path says the recipient node id is not in the 
   assert.ok(ui.out.innerHTML.includes("Blinded paths"), "path count shown");
   assert.ok(ui.out.innerHTML.includes("never followed"), "paths are not followed");
   assert.ok(!ui.out.innerHTML.includes("No blinded path"), "no published-pubkey warning when paths exist");
+});
+
+test("BOLT12 offer with an out-of-range expiry fails with a translatable key, not a raw RangeError", () => {
+  const ui = initCard();
+  // offer_absolute_expiry is a tu64, so a hostile offer can put a value far
+  // outside the range a JS Date can represent (~1.8e19 ns is past the limit).
+  ui.input.value = tlvOffer(14, "ffffffffffffffff");
+  ui.decode.onclick();
+  assert.equal(ui.out.innerHTML, "", "no partial result rendered");
+  assert.ok(ui.error.textContent.length > 0, "an error is shown");
+  assert.doesNotMatch(ui.error.textContent, /RangeError|Invalid time value/, "no raw JS error message leaks to the user");
 });
 
 test("BOLT12 UI copy never calls issuer_id the payee or destination", () => {

@@ -161,3 +161,63 @@ test("rejects: unknown even tag (unknown odd tags are skipped instead)", () => {
   // Sanity: the untouched invoice still decodes.
   assert.equal(bolt11Decode(METADATA).signatureValid, true);
 });
+
+// A description is untrusted text: invalid UTF-8 must surface as a keyed,
+// translatable failure, not a raw TypeError from TextDecoder. The tag is
+// replaced with a single 0xC0 byte, whose lone continuation-byte form is
+// invalid under `fatal: true`; the signature is then invalidated, but
+// parseTags runs first, so the UTF-8 rejection is what the reader reports.
+const TAG_DESCRIPTION = 13;
+
+// 8-bit bytes -> 5-bit words, padding to the word boundary exactly as the
+// invoice encoding does.
+const b2w = (bytes) => {
+  const out = [];
+  let acc = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    acc = (acc << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out.push((acc >>> bits) & 31);
+    }
+  }
+  if (bits > 0) out.push((acc << (5 - bits)) & 31);
+  return out;
+};
+
+const splitWordCount = (n) => [Math.floor(n / 32), n % 32];
+
+const replaceTagPayload = (invoice, tagType, payloadBytes) => {
+  const sep = invoice.lastIndexOf("1");
+  const hrp = invoice.slice(0, sep);
+  const words = [...invoice.slice(sep + 1, -6)].map((c) => CHARSET.indexOf(c));
+  const payloadWords = b2w(payloadBytes);
+  const out = words.slice(0, 7); // timestamp
+  let i = 7;
+  while (i < words.length) {
+    const length = words[i + 1] * 32 + words[i + 2];
+    if (words[i] === tagType) {
+      out.push(tagType, ...splitWordCount(payloadWords.length), ...payloadWords);
+    } else {
+      out.push(...words.slice(i, i + 3 + length));
+    }
+    i += 3 + length;
+  }
+  const chk = polymod([...hrpExpand(hrp), ...out, 0, 0, 0, 0, 0, 0]) ^ 1;
+  const checksum = [25, 20, 15, 10, 5, 0].map((shift) => (chk >> shift) & 31);
+  return hrp + "1" + [...out, ...checksum].map((w) => CHARSET[w]).join("");
+};
+
+test("rejects: a description that is not valid UTF-8 (keyed, not a raw TypeError)", () => {
+  const invoice = replaceTagPayload(COFFEE, TAG_DESCRIPTION, [0xc0]);
+  assert.throws(
+    () => bolt11Decode(invoice),
+    (e) => {
+      assert.equal(e.key, "The {what} field is not valid UTF-8.");
+      assert.deepEqual(e.vars, { what: "description" });
+      return true;
+    }
+  );
+});
