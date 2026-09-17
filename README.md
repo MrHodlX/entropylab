@@ -346,6 +346,24 @@ sha256sum -c SHA256SUMS.txt
 gh attestation verify entropylab.html -R OogaBoogaX/entropylab
 ```
 
+The build is also **reproducible**: `entropylab.html` rebuilds byte-for-byte
+from the source commit stamped in its footer, so "CI built these bytes from
+that source" can be checked instead of trusted. Docker is the only
+prerequisite — the pinned development image is the canonical build
+environment (fixed Node, Rust, and clang):
+
+```sh
+git checkout <stamped-commit>   # the commit shown in the file's footer
+docker compose run --rm dev bash -c "npm ci --ignore-scripts && npm run build"
+sha256sum entropylab.html       # compare with SHA256SUMS.txt
+```
+
+This rebuilds the HTML from source using the committed WASM modules as fixed
+inputs. Rebuilding those modules themselves byte-for-byte (`npm run
+build:wasm`) additionally depends on the C compiler, which is what the pinned
+image fixes; CI proves the WASM build is at least path-independent on every
+pull request.
+
 The CID is a self-describing name for the SHA-256, not a second hash. The
 calculator never talks to IPFS. To store or fetch the file on a **local**
 node without GitHub or `entropylab.online` DNS:

@@ -23,7 +23,11 @@
 #   FIREFOX_BINARY, CHROME_BINARY (or CHROMIUM_BINARY), EDGE_BINARY
 #   (EDGE_BINARY selects a local Edge install; the image ships none)
 
-FROM ubuntu:24.04
+# The base rootfs is pinned by digest so the canonical build environment only
+# changes by deliberate PR; bump the digest (and NODE/FIREFOX below) together.
+# Note apt packages still resolve at image-build time — full image
+# reproducibility would need snapshot pinning, which this does not attempt.
+FROM ubuntu:24.04@sha256:69cecf4bbf72d2d44a9eef1b71fb98c7fb973d78af11399deccef19beb008ad9
 
 ARG NODE_VERSION=v22.23.2
 ARG FIREFOX_VERSION=140.14.0esr

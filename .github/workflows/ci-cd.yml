@@ -34,9 +34,12 @@ concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: false
 
-# One version for every job so setup stays in a single place.
+# One version for every job so setup stays in a single place. Pinned exactly
+# (not "22") so the CI toolchain is a fixed input to the reproducible build;
+# must equal ARG NODE_VERSION in the Dockerfile (test/toolchain-pin.test.mjs
+# enforces the pair).
 env:
-  NODE_VERSION: "22"
+  NODE_VERSION: "22.23.2"
 
 jobs:
   # ── Build: compile src/ once — every gate and every publication path ─────
@@ -486,6 +489,78 @@ jobs:
         run: echo "${{ needs.build.outputs.sha256 }}  entropylab.html" | sha256sum -c -
       - name: Verify site artifact
         run: npm run verify
+
+  # ── Reproduce: prove the build is byte-for-byte reproducible ─────────────
+  # The build script claims the artifact is reproducible from the sources at
+  # a commit; this job makes that an enforced property rather than an
+  # aspiration. The same commit is built on the runner and inside the pinned
+  # dev image and the digests must match, and the WASM modules are built
+  # twice inside the image from different staging paths and must match too.
+  # A fresh in-image WASM build differing from the committed artifacts is a
+  # warning for now — those were last produced by a runner clang, not the
+  # image's; it becomes a hard gate once the artifact job builds inside the
+  # image (follow-up). Standalone on purpose: nothing `needs` it yet, so a
+  # flaky image mirror can never block a merge — make it a required check to
+  # gate.
+
+  reproduce:
+    name: Reproduce · byte-identical builds across environments
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build on the runner
+        run: |
+          npm run build
+          sha256sum entropylab.html service-worker.js | tee runner.sums
+      - name: Double-build check on the runner
+        run: npm run reproduce
+      - uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+      - name: Build the pinned dev image
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        with:
+          context: .
+          load: true
+          tags: entropylab-dev:local
+          cache-from: type=gha,scope=reproduce
+          cache-to: type=gha,mode=max,scope=reproduce
+      # The container runs as root so it can write the runner-owned checkout;
+      # safe.directory lets git stamp the commit inside the mounted repo.
+      - name: Build inside the image and require identical digests
+        run: |
+          docker run --rm --user root -v "$GITHUB_WORKSPACE:/workspace" -w /workspace entropylab-dev:local \
+            bash -c 'set -euo pipefail
+              git config --global --add safe.directory /workspace
+              npm ci --ignore-scripts --no-audit --no-fund
+              npm run build
+              sha256sum entropylab.html service-worker.js | tee image.sums'
+          diff runner.sums image.sums
+      # scripts/build-wasm.mjs needs no node_modules (node + cargo only), so
+      # the second staging path is a bare clone. Both sums files list the same
+      # relative paths, so a plain diff compares the digests.
+      - name: Build the WASM modules twice in the image and require identity
+        run: |
+          docker run --rm --user root -v "$GITHUB_WORKSPACE:/workspace" -w /workspace entropylab-dev:local \
+            bash -c 'set -euo pipefail
+              git config --global --add safe.directory "*"
+              npm run build:wasm
+              sha256sum src/js/entropylab-wasm-b64.js src/js/psbt-wasm-b64.js src/js/vanity-wasm-b64.js | tee /tmp/wasm-first.sums
+              git clone -q /workspace /tmp/second
+              cd /tmp/second
+              node scripts/build-wasm.mjs
+              sha256sum src/js/entropylab-wasm-b64.js src/js/psbt-wasm-b64.js src/js/vanity-wasm-b64.js | tee /tmp/wasm-second.sums
+              diff /tmp/wasm-first.sums /tmp/wasm-second.sums
+              cd /workspace
+              if ! git diff --exit-code -- src/js/entropylab-wasm-b64.js src/js/psbt-wasm-b64.js src/js/vanity-wasm-b64.js > /tmp/wasm-drift.diff; then
+                echo "::warning file=scripts/build-wasm.mjs::Fresh in-image WASM build differs from the committed artifacts (those were produced by a runner clang); drift summary follows in the log."
+                head -20 /tmp/wasm-drift.diff
+              fi'
 
   # ── Translation gate: locale files may only change through the post-merge
   # translation automation (issue #286). Any PR whose diff touches

@@ -14,6 +14,11 @@ Guidelines for AI coding agents.
   includes `entropylab.html` and the `src/js/*-wasm-b64.js` modules
   (regenerate them with `npm run build:wasm`; it needs Rust, toolchain pinned
   by each crate's `rust-toolchain.toml`).
+- Reproducibility is a tested property: `npm run reproduce` builds the tree
+  twice from different staging paths and requires byte-identical output, and
+  the `reproduce` CI job additionally requires the runner and the pinned dev
+  image to agree on the digest (the image is the canonical build
+  environment).
 - The page body lives once in `src/shell.html`: the build injects it into
   `index.html`, and `app.js` assigns it at boot. Edit markup there, never in
   two places.

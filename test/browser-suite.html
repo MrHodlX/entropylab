@@ -716,6 +716,105 @@
     input(cards, "");
   });
 
+  await test("deriving below the recommended entropy asks for confirmation first", async () => {
+    await chooseMode("Dice rolls");
+    const dice = await until(() => document.getElementById("dice"), "dice input");
+    input(dice, "123456");
+    const go = await until(() => !document.getElementById("go").disabled && document.getElementById("go"), "Derive Key to enable for six rolls");
+    const overlay = () => document.getElementById("low-entropy-overlay");
+    const tab = (shiftKey = false) => document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true }));
+    const before = document.getElementById("out").innerHTML;
+    go.click();
+    const dialog = await until(() => {
+      const node = overlay();
+      return node && !node.hidden ? node.querySelector("#low-entropy-dialog") : null;
+    }, "low-entropy confirmation to appear");
+    equal(dialog.getAttribute("role"), "dialog", "The confirmation is not a dialog");
+    equal(dialog.getAttribute("aria-modal"), "true", "The confirmation is not modal");
+    equal(dialog.getAttribute("aria-labelledby"), "low-entropy-title", "The confirmation is not labelled");
+    const message = dialog.querySelector("#low-entropy-message").textContent;
+    assert(message.trim(), "The confirmation message is empty");
+    assert(dialog.querySelector("#low-entropy-detail").textContent.trim(), "The confirmation detail is empty");
+    const dismiss = dialog.querySelector("#low-entropy-dismiss");
+    assert(dismiss && dismiss.type === "checkbox" && !dismiss.checked, "The Don't-show-again checkbox did not start unchecked");
+    assert(dialog.querySelector("#low-entropy-dismiss-label").textContent.trim(), "The dismissal label is empty");
+    const more = dialog.querySelector("#low-entropy-more"), proceed = dialog.querySelector("#low-entropy-proceed");
+    equal(document.activeElement, more, "The safe choice did not take the initial focus");
+    // Focus containment: Tab and Shift+Tab cycle within the dialog and never
+    // reach the background behind it.
+    tab();
+    equal(document.activeElement, proceed, "Tab did not move focus to I Understand, Proceed");
+    tab();
+    equal(document.activeElement, dismiss, "Tab did not move focus to the session checkbox");
+    tab();
+    equal(document.activeElement, more, "Tab did not wrap back to Add More Entropy");
+    tab(true);
+    equal(document.activeElement, dismiss, "Shift+Tab did not move focus back to the checkbox");
+    tab(true);
+    equal(document.activeElement, proceed, "Shift+Tab did not wrap to the last control");
+    // Add More Entropy cancels: the overlay closes, nothing derives, and the
+    // entered rolls stay put so the user can keep going.
+    more.click();
+    assert(overlay().hidden, "Add More Entropy did not dismiss the confirmation");
+    equal(document.getElementById("out").innerHTML, before, "Cancelling still derived a key");
+    equal(dice.value, "123456", "Cancelling discarded the entered rolls");
+    // Escape cancels the same way.
+    go.click();
+    await until(() => !overlay().hidden, "the confirmation to reappear");
+    overlay().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    assert(overlay().hidden, "Escape did not dismiss the confirmation");
+    equal(document.getElementById("out").innerHTML, before, "Escape still derived a key");
+    // Proceed derives — and with the checkbox ticked, remembers the choice
+    // for the rest of the session. Completion is keyed on a new key tab: a
+    // tab only appears once the derivation commits, unlike a rendered result,
+    // which any earlier derivation may already have left behind.
+    const keyTabs = document.getElementById("key-tabs");
+    const tabsBeforeProceed = keyTabs.children.length;
+    go.click();
+    await until(() => !overlay().hidden, "the confirmation to reappear for proceed");
+    dismiss.click();
+    proceed.click();
+    await until(() => keyTabs.children.length > tabsBeforeProceed, "the low-entropy key to derive after proceeding");
+    assert(document.querySelector('#out [data-key-group="identity"]'), "Proceeding produced no key result");
+    assert(overlay().hidden, "Proceeding left the confirmation open");
+    // The session dismissal bypasses the confirmation entirely. Back on the
+    // Key Station lab, a different but still below-recommendation transcript
+    // derives with no modal. It must be a DIFFERENT valid transcript: the dice
+    // filter strips anything but faces 1–6, and deriving the same seed again
+    // updates the existing tab in place (fingerprint dedupe) instead of
+    // committing a new one. The completion signal is the new tab plus the new
+    // result's own fingerprint — a rendered result alone cannot prove
+    // completion, because it already exists from the first derivation.
+    const firstFingerprint = await until(() => keyTabs.lastElementChild.querySelector("[data-fingerprint]")?.dataset.fingerprint, "the first key fingerprint");
+    document.getElementById("key-tab-lab").click();
+    const labDice = await until(() => {
+      const node = document.getElementById("dice");
+      return node && node.value === "" ? node : null;
+    }, "the lab to restore with an empty dice input");
+    input(labDice, "6543216");
+    equal(labDice.value, "6543216", "The dice filter rewrote the bypass transcript");
+    const labGo = await until(() => {
+      const node = document.getElementById("go");
+      return node && !node.disabled ? node : null;
+    }, "Derive Key to re-enable for the bypass transcript");
+    const tabsBeforeBypass = keyTabs.children.length;
+    labGo.click();
+    assert(overlay().hidden, "A session dismissal still showed the confirmation");
+    const bypassTab = await until(() => keyTabs.children.length > tabsBeforeBypass ? keyTabs.lastElementChild : null, "the bypassed re-derivation to commit a new key tab");
+    const bypassFingerprint = await until(() => bypassTab.querySelector("[data-fingerprint]")?.dataset.fingerprint, "the bypassed key fingerprint");
+    assert(bypassFingerprint !== firstFingerprint, "The bypassed re-derivation reproduced the first key");
+    // Leave the Key Station the way the test found it: no committed key tabs,
+    // so later tests that derive their own keys start from a clean station.
+    while (keyTabs.children.length > 1) {
+      keyTabs.lastElementChild.click();
+      document.getElementById("delete-key").click();
+      await wait(0);
+    }
+    equal(keyTabs.children.length, 1, "cleanup should leave only Key Station");
+    const labInput = document.getElementById("dice");
+    if (labInput && labInput.value) input(labInput, "");
+  });
+
   await test("partial entropy word grids remain copyable", async () => {
     await chooseMode("Number bases");
     document.querySelector('input[name="entropy-format"][value="bin"]').click();

@@ -70,6 +70,13 @@ browser test that asserts this must stay green.
   `rust-toolchain.toml`), runs its test suite against the fresh build, and
   commits the artifact back to `rock` after each merge (same flow as
   `entropylab.html`).
+- Reproducibility is enforced, not assumed: `npm run reproduce` builds the
+  working tree twice from different staging paths and requires identical
+  digests, and the `reproduce` CI job requires the same commit to build to
+  identical bytes on the runner and inside the pinned dev image — including
+  the WASM modules, built twice inside the image. The pinned image is the
+  canonical build environment; cross-machine WASM byte identity holds only as
+  far as the clang version does.
 
 ```sh
 git clone https://github.com/OogaBoogaX/entropylab.git && cd entropylab
@@ -80,7 +87,8 @@ npm test
 ```
 
 Useful commands (same as CI): `npm run build`, `npm run verify`,
-`npm run test:validate`, `npm run test:browser` (runs every installed
+`npm run reproduce`, `npm run test:validate`, `npm run test:browser` (runs
+every installed
 engine: Firefox, Chrome/Chromium, Microsoft Edge — an installed browser
 is required; set `FIREFOX_BINARY` / `CHROME_BINARY` / `EDGE_BINARY` to
 point the harness at a specific one), `npm run ci`. `npm run build:wasm`

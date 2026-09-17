@@ -54,6 +54,7 @@ import {
 } from "./core-importdescriptors.js";
 import { initQrReferences } from "./qr-references.js";
 import { addressQrButtonHtml as hodlAddressQrButton, initAddressQr as hodlInitAddressQr } from "./address-qr.js";
+import { initLowEntropyConfirm } from "./low-entropy-confirm.js";
 import { NONCE_HISTORY_MAX_TEXT, compareNonceHistory, mergeNonceHistory, nonceHistoryRecord, parseNonceHistory, serializeNonceHistory } from "./nonce-history.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
@@ -2130,6 +2131,17 @@ function hodlHandleDerivationButton(kind, derive) {
   if (hodlActiveDerivation) {
     hodlStopDerivation(kind);
     return;
+  }
+  // Single-sig fresh-entropy sources that can derive below the recommended
+  // amount confirm first (#416). A "Don't show again this session" dismissal
+  // bypasses the step for the rest of the page session; the multisig station
+  // derives from co-signer xpubs, not user entropy, so it never gates.
+  if (kind === "key" && hodlLowEntropyConfirm) {
+    let warning = hodlLowEntropyWarning();
+    if (warning && !hodlLowEntropyConfirm.isDismissed()) {
+      hodlLowEntropyConfirm.open(warning, () => hodlDeriveWithProgress(kind, derive));
+      return;
+    }
   }
   return hodlDeriveWithProgress(kind, derive);
 }
@@ -6173,6 +6185,40 @@ function hodlCanDeriveCurrentKey() {
   } catch {
     return false;
   }
+}
+var hodlLowEntropyConfirm = null;
+// The below-recommendation check for the Derive Key confirmation (#416), kept
+// pure so the unit suite drives it without a DOM. Only the fresh-entropy
+// sources that can actually derive below their recommendation can warn:
+// hashed dice rolls (coldcard/coleman) and hashed card transcripts. D++,
+// BitBox, and direct cards only enable Derive once their full construction is
+// entered, number bases require the exact digit count, and the seed and
+// private-key modes import existing material — none of those have a
+// "recommended amount" the user can fall short of at derive time. The brain
+// wallet keeps its own explicit acknowledgement instead.
+function hodlLowEntropyWarningFor(mode, method, value, targetWords) {
+  let config = hodlSeedConfig(targetWords);
+  if (mode === "dice" && (method === "coldcard" || method === "coleman")) {
+    let rolls = hodlSplitDiceString(value).rolls;
+    if (rolls.length && rolls.length < config.hashRolls) {
+      return { bits: hodlDiceEntropyBits(rolls.length).toFixed(1), recommended: config.bits, words: config.words, detail: hodlNote("{have} of {n} recommended rolls", { have: rolls.length, n: config.hashRolls }) };
+    }
+  }
+  if (mode === "cards" && method === "hashed") {
+    let parsed = hodlParseCards(value, config.words), required = parsed.needed.first + parsed.needed.extra;
+    if (parsed.cards.length && parsed.cards.length < required) {
+      return { bits: parsed.bits.toFixed(1), recommended: config.bits, words: config.words, detail: hodlNote("{have} of {need} recommended cards", { have: parsed.cards.length, need: required }) };
+    }
+  }
+  return null;
+}
+function hodlLowEntropyWarning() {
+  try {
+    if (hodlKeyMode === "dice") return hodlLowEntropyWarningFor("dice", hodlDiceMethod, document.getElementById("dice")?.value ?? "", hodlTargetWordCount);
+    if (hodlKeyMode === "cards") return hodlLowEntropyWarningFor("cards", hodlCardMethod, document.getElementById(hodlCardMethod === "direct" ? "direct-cards" : "cards")?.value ?? "", hodlTargetWordCount);
+  } catch {
+  }
+  return null;
 }
 function hodlSyncDeriveButton() {
   let button = document.getElementById("go");
@@ -15198,6 +15244,7 @@ function hodlApplyLocale() {
 async function hodlBoot() {
   hodlInitWorkspace();
   hodlInitAddressQr(hodlQrSvg, { copy: hodlClipboardIconMarkup, copied: hodlCopiedIconMarkup });
+  hodlLowEntropyConfirm = initLowEntropyConfirm();
   hodlInitDefaultTabStates();
   if (__ENTROPYLAB_TEST_HOOKS__) await hodlLoadTestKeys();
   hodlInitKeyManager();
