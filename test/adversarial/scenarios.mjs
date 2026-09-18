@@ -169,13 +169,24 @@ export const SCENARIOS = [
   {
     name: "dice-oversized",
     description:
-      "Stuff 100k+ junk characters into the dice textarea; the page must stay alive.",
+      "Stuff 100k+ junk characters into the dice textarea. By design the app accepts ANY dice input the user brings (their entropy, their choice — a test user needs no minimum quality), so the contract is: accept it, compute stats, stay alive.",
     actions: [
       `(() => { const el = first(["#dice"]); if (!el) return "no-dice-textarea"; put(el, "1".repeat(120000) + "\\u0000".repeat(50) + "9".repeat(20000)); return "dice-stuffed len=" + el.value.length; })()`,
       `(async () => { await sleep(700); const meta = $("#dice-meta"); return "dice-meta=" + (meta ? (meta.textContent || "").slice(0, 100) : "(none)"); })()`,
     ],
     assert: `
-      (() => { const failures = []; if (!document.body) failures.push("document lost"); return { failures, info: {} }; })()
+      (() => {
+        const failures = [];
+        if (!document.body) failures.push("document lost");
+        // The design contract: arbitrary dice input is legitimate user-supplied
+        // entropy material. The app must accept it and compute stats, not
+        // reject or crash on it.
+        const el = document.querySelector("#dice");
+        if (!el || el.value.length < 100000) failures.push("oversized dice input was not accepted (field holds " + (el ? el.value.length : "no field") + ")");
+        const meta = document.querySelector("#dice-meta");
+        if (!meta || !(meta.textContent || "").trim()) failures.push("oversized dice input produced no stats in #dice-meta");
+        return { failures, info: {} };
+      })()
     `,
   },
   {
@@ -214,7 +225,43 @@ export const SCENARIOS = [
       `(async () => { await sleep(500); return "settled title=" + document.title.slice(0, 60); })()`,
     ],
     assert: `
-      (() => { const failures = []; if (!document.body) failures.push("document lost"); return { failures, info: {} }; })()
+      (() => {
+        const failures = [];
+        if (!document.body) failures.push("document lost");
+        // State consistency: exactly one workspace tab is selected, and the
+        // visible tool card matches it.
+        const selected = [...document.querySelectorAll('button.workspace-tab[aria-selected="true"]')];
+        if (selected.length !== 1) failures.push("after hammering, " + selected.length + " tabs are selected (expected exactly 1)");
+        if (selected.length === 1) {
+          const activeTool = selected[0].dataset.workspace;
+          // Each workspace has at least one container the switcher unhides;
+          // none of them may be left hidden for the selected tab.
+          const homes = {
+            calc: ["key-manager", "calc-card"],
+            bip85: ["bip85-card", "bip85-manager"],
+            msig: ["msig-card", "msig-manager"],
+            sp: ["sp-card", "sp-manager"],
+            vanity: ["vanity-card"],
+            ln: ["ln-card", "ln-inv-card"],
+            journal: ["journal-manager", "journal-card", "journal-notes-card", "journal-keymanager-card", "journal-state-card", "journal-log-card"],
+            psbt: ["psbt-card", "psbt-manager"],
+          };
+          const candidates = homes[activeTool] || [];
+          const visible = candidates.filter((id) => { const el = document.getElementById(id); return el && !el.hidden; });
+          if (candidates.length && !visible.length) failures.push("selected tab '" + activeTool + "' has no visible card (state desync)");
+        }
+        // Journal log stays coherent: bounded and appending (the hammer wrote
+        // workspace events; the log must not be corrupted by them).
+        // Page stays responsive: a real derive still works after the hammer.
+        const dice = document.querySelector("#dice");
+        if (dice) {
+          dice.value = "123456";
+          dice.dispatchEvent(new Event("input", { bubbles: true }));
+          const meta = document.querySelector("#dice-meta");
+          if (!meta || !(meta.textContent || "").trim()) failures.push("page unresponsive after hammering: dice derive produced no stats");
+        }
+        return { failures, info: {} };
+      })()
     `,
   },
   {

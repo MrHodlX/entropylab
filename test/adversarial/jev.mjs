@@ -78,6 +78,7 @@ const safe = (s, max = 1200) => {
 export const verdict = (runLog) => {
   const state = [
     `Scenario: ${runLog.name}`,
+    `Intent (the contract this scenario checks — judging against this, not against generic expectations): ${runLog.description || "(unspecified)"}`,
     `Console errors: ${runLog.consoleErrors.length}`,
     `Uncaught exceptions: ${runLog.exceptions.length}`,
     `Unhandled rejections: ${runLog.rejections.length}`,

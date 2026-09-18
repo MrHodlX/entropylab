@@ -208,6 +208,7 @@ const evaluate = (cdp, sessionId, expr, timeoutMs = 30000) => {
 const runScenario = async (cdp, scenario, onEvent) => {
   const log = {
     name: scenario.name,
+    description: scenario.description || "",
     actions: [],
     consoleErrors: [],
     exceptions: [],
