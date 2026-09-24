@@ -7893,22 +7893,26 @@ function hodlPickPsbtSessionKey(state) {
 // "Key Station" take you there. The sentence is translated whole, with the
 // link as a placeholder so every language keeps its own word order, then built
 // from nodes: nothing here is parsed as HTML.
+const hodlKeyStationMarker = "\u0000";
+function hodlPaintKeyStationNote(id, visible, sentence) {
+  let note = document.getElementById(id);
+  if (!note) return;
+  note.hidden = !visible;
+  if (!visible) return;
+  let [before, after = ""] = sentence.split(hodlKeyStationMarker);
+  let link = document.createElement("a");
+  link.href = "#key-station";
+  link.textContent = hodlTText("Key Station");
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    hodlOpenKeyStation();
+  });
+  note.replaceChildren(before, link, after);
+}
 function hodlPaintPsbtKeyNotes() {
   let empty = !hodlPsbtSourceKeys().length;
   for (let id of ["psbt-session-keys-note", "nonce-session-keys-note"]) {
-    let note = document.getElementById(id);
-    if (!note) continue;
-    note.hidden = !empty;
-    if (!empty) continue;
-    let marker = "\u0000", [before, after = ""] = hodlTText("Keys that are derived in {station} can be used to enhance PSBT inspection.", { station: marker }).split(marker);
-    let link = document.createElement("a");
-    link.href = "#key-station";
-    link.textContent = hodlTText("Key Station");
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      hodlOpenKeyStation();
-    });
-    note.replaceChildren(before, link, after);
+    hodlPaintKeyStationNote(id, empty, hodlTText("Keys that are derived in {station} can be used to enhance PSBT inspection.", { station: hodlKeyStationMarker }));
   }
 }
 function hodlOpenKeyStation() {
@@ -7923,6 +7927,8 @@ function hodlRefreshStationKeyPickers() {
   hodlFillStationKeyPicker("psbt-session-keys", hodlPsbtSource, hodlPickPsbtSessionKey, hodlPsbtSourceKeys());
   hodlFillStationKeyPicker("nonce-session-keys", hodlPsbtSource, hodlPickPsbtSessionKey, hodlPsbtSourceKeys());
   hodlPaintPsbtKeyNotes();
+  hodlPaintKeyStationNote("sp-session-keys-note", !hodlSessionHdRootKeys().length, hodlTText("Choose a compatible HD-root key from the {station}, or enter a seed phrase or root extended private key below.", { station: hodlKeyStationMarker }));
+  hodlSyncSpControls();
   // The selected key's passphrase and path may have changed on the Keys tab.
   hodlVanitySyncSource();
 }
@@ -9513,6 +9519,12 @@ function hodlPsbtClearNonceHistory(all = false) {
 // Nonces and Download need a PSBT or transaction that decodes, and End Session
 // needs something to end.
 // The session is shared, so End Session counts both cards and the key.
+function hodlSetButtonEnabled(id, on) {
+  let button = document.getElementById(id);
+  if (!button) return;
+  button.disabled = !on;
+  button.setAttribute("aria-disabled", String(!on));
+}
 function hodlSyncPsbtControls() {
   let value = (id) => String(document.getElementById(id)?.value || "").trim();
   let decodes = (text) => {
@@ -9524,12 +9536,7 @@ function hodlSyncPsbtControls() {
       return false;
     }
   };
-  let enable = (id, on) => {
-    let button = document.getElementById(id);
-    if (!button) return;
-    button.disabled = !on;
-    button.setAttribute("aria-disabled", String(!on));
-  };
+  let enable = hodlSetButtonEnabled;
   let loaded = Boolean(hodlPsbtPriv || hodlPsbtHd);
   let idle = hodlPsbtSessionSpec.key === "No session key. Inspect-only mode.";
   let anything = loaded || hodlPsbtNonceHistory.length > 0;
@@ -10378,11 +10385,29 @@ function hodlSpParseLabels(text) {
     return value;
   });
 }
+// Each run button waits until its mode has what it needs; End Session waits
+// until there is something to clear. Contents are validated on click, so a
+// present-but-malformed field still reports its own error.
+function hodlSyncSpControls() {
+  let value = (id) => String(document.getElementById(id)?.value || "").trim();
+  let key = Boolean(hodlSpHd || value("sp-key"));
+  hodlSetButtonEnabled("sp-derive", key);
+  hodlSetButtonEnabled("sp-send-go", key && Boolean(value("sp-recipients") && value("sp-send-vins")));
+  hodlSetButtonEnabled("sp-verify-go", key && Boolean(value("sp-verify-vins") && value("sp-verify-outputs")));
+  let typed = ["sp-key", "sp-pass", "sp-recipients", "sp-send-vins", "sp-verify-vins", "sp-verify-outputs", "sp-label", "sp-payname"].some((id) => value(id));
+  let changed = value("sp-account") !== "0" || value("sp-verify-labels") !== "0";
+  let shown = Boolean(document.getElementById("sp-out")?.childElementCount || document.getElementById("sp-error")?.textContent);
+  hodlSetButtonEnabled("sp-wipe", Boolean(hodlSpHd || hodlSpSource || typed || changed || shown));
+}
 function hodlSpSetMode(mode) {
   hodlSpMode = mode;
   ["receive", "send", "verify"].forEach((id) => {
     let panel = document.getElementById(`sp-${id}`);
     if (panel) panel.hidden = id !== mode;
+  });
+  // The action row is shared: only the current mode's run button shows.
+  document.querySelectorAll("#sp-card [data-sp-action]").forEach((button) => {
+    button.hidden = button.dataset.spAction !== mode;
   });
   document.querySelectorAll("#sp-modes [data-sp-mode]").forEach((button) => {
     let active = button.dataset.spMode === mode;
@@ -10611,6 +10636,7 @@ function hodlRunSp() {
     error.textContent = exception instanceof Error ? exception.message : String(exception);
     hodlJournalLog("calculate-error", hodlSpMode, "sp");
   }
+  hodlSyncSpControls();
 }
 function hodlInitSp() {
   if (!document.getElementById("sp-card")) return;
@@ -10625,7 +10651,7 @@ function hodlInitSp() {
   document.getElementById("sp-key").addEventListener("input", detachStationKey);
   document.getElementById("sp-pass").addEventListener("input", detachStationKey);
   document.querySelectorAll("#sp-modes [data-sp-mode]").forEach((button) => {
-    button.onclick = () => { hodlSpSetMode(button.dataset.spMode); document.getElementById("sp-out").innerHTML = ""; document.getElementById("sp-error").textContent = ""; };
+    button.onclick = () => { hodlSpSetMode(button.dataset.spMode); document.getElementById("sp-out").innerHTML = ""; document.getElementById("sp-error").textContent = ""; hodlSyncSpControls(); };
   });
   document.getElementById("sp-derive").onclick = () => { hodlSpMode = "receive"; hodlRunSp(); };
   document.getElementById("sp-send-go").onclick = () => { hodlSpMode = "send"; hodlRunSp(); };
@@ -10645,6 +10671,8 @@ function hodlInitSp() {
     document.getElementById("sp-session").textContent = "Session ended and accessible fields were cleared (best effort).";
     hodlRefreshStationKeyPickers();
   };
+  document.getElementById("sp-card").addEventListener("input", hodlSyncSpControls);
+  document.getElementById("sp-card").addEventListener("change", hodlSyncSpControls);
   document.getElementById("sp-out").addEventListener("click", (event) => {
     let button = event.target.closest?.("[data-sp-copy]");
     if (!button) return;

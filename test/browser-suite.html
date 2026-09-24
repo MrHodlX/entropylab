@@ -2381,6 +2381,34 @@
     document.querySelector('#workspace [data-workspace="calc"]').click();
     await until(() => !document.getElementById("key-manager").hidden, "key workspace");
   });
+  await test("Silent Payments shows only the current mode's run button beside End Session", async () => {
+    document.querySelector('#workspace [data-workspace="sp"]').click();
+    await until(() => !document.getElementById("sp-card").hidden, "Silent Payments workspace");
+    const disabled = (id) => document.getElementById(id).disabled;
+    // Start from an empty card: End Session only enables once there is
+    // something to clear, so give it something first.
+    input(document.getElementById("sp-label"), "1");
+    document.getElementById("sp-wipe").click();
+    for (const id of ["sp-derive", "sp-send-go", "sp-verify-go", "sp-wipe"]) assert(disabled(id), `${id} enabled on an empty card`);
+    input(document.getElementById("sp-key"), "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+    assert(!disabled("sp-derive") && !disabled("sp-wipe"), "Derive / End Session stayed disabled with a key entered");
+    assert(disabled("sp-send-go") && disabled("sp-verify-go"), "Send / Verify enabled with only a key");
+    input(document.getElementById("sp-recipients"), "sp1q");
+    assert(disabled("sp-send-go"), "Send enabled without inputs");
+    input(document.getElementById("sp-send-vins"), "[]");
+    assert(!disabled("sp-send-go"), "Send stayed disabled with key, recipients and inputs");
+    input(document.getElementById("sp-verify-vins"), "[]");
+    input(document.getElementById("sp-verify-outputs"), "00");
+    assert(!disabled("sp-verify-go"), "Verify stayed disabled with key, inputs and outputs");
+    document.getElementById("sp-wipe").click();
+    for (const id of ["sp-derive", "sp-send-go", "sp-verify-go", "sp-wipe"]) assert(disabled(id), `${id} enabled after End Session`);
+    const visibleActions = () => [...document.querySelectorAll("#sp-card [data-sp-action]")].filter((button) => !button.hidden).map((button) => button.id);
+    for (const [mode, id] of [["send", "sp-send-go"], ["verify", "sp-verify-go"], ["receive", "sp-derive"]]) {
+      document.querySelector(`#sp-modes [data-sp-mode="${mode}"]`).click();
+      equal(visibleActions().join(), id, `${mode} mode shows the wrong run button`);
+      assert(!document.getElementById("sp-wipe").hidden, `End Session hidden in ${mode} mode`);
+    }
+  });
   await test("Session log audits meaningful dashboard actions without secret input values", async () => {
     const theme = document.getElementById("theme-toggle");
     theme.click();
@@ -2390,6 +2418,11 @@
     document.querySelector('#workspace [data-workspace="sp"]').click();
     await until(() => !document.getElementById("sp-card").hidden, "Silent Payments audit workspace");
     document.querySelector('#sp-modes [data-sp-mode="send"]').click();
+    // Send waits on a key, recipients and inputs; a key that does not parse
+    // still fails on click, which is the failure the log must record.
+    input(document.getElementById("sp-key"), "not a seed phrase");
+    input(document.getElementById("sp-recipients"), "sp1q");
+    input(document.getElementById("sp-send-vins"), "[]");
     document.getElementById("sp-send-go").click();
     document.getElementById("sp-wipe").click();
     document.querySelector('#workspace [data-workspace="psbt"]').click();
