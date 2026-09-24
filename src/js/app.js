@@ -10157,6 +10157,7 @@ function hodlDeleteActiveBip85() {
       document.getElementById("bip85-key").value = "";
       hodlSyncBip85Parent();
     }
+    hodlSpDropAddressesFrom(source);
     if (hodlSpSource === source) {
       hodlSpWipeKeys();
       document.getElementById("sp-key").value = "";
@@ -10288,11 +10289,109 @@ function hodlSpWipeKeys() {
   }
   hodlSpHd = null;
   hodlSpSource = "";
+  hodlSpParentFingerprint = "";
   hodlSpNote = "No session key. Receive and verify need a seed or root xprv.";
 }
 function hodlSpWipeMem() {
   hodlSpWipeKeys();
   hodlSpReveal = false;
+  // Address tabs hold their own scan and spend keys: a page-wide clear takes
+  // them too, back to the bare station.
+  for (let state of hodlSpAddresses) if (!state.isLab) hodlSpWipeAddress(state);
+  hodlSpAddresses = [hodlNewSpBenchState()];
+  hodlActiveSp = 0;
+  if (document.getElementById("sp-tabs")) {
+    hodlRenderStationTabs(hodlSpTabs);
+    hodlSyncSpView();
+  }
+}
+// Resets the station form for the next address: wipes the loaded root and
+// returns every field to its default. Address tabs are left alone.
+function hodlSpResetStation(message) {
+  hodlSpWipeKeys();
+  hodlSpReveal = false;
+  ["sp-key", "sp-pass", "sp-recipients", "sp-send-vins", "sp-verify-vins", "sp-verify-outputs", "sp-label", "sp-payname"].forEach((id) => {
+    let field = document.getElementById(id);
+    if (field) field.value = "";
+  });
+  let labels = document.getElementById("sp-verify-labels");
+  if (labels) labels.value = "0";
+  let account = document.getElementById("sp-account");
+  if (account) account.value = "0";
+  document.getElementById("sp-out").innerHTML = "";
+  document.getElementById("sp-error").textContent = "";
+  document.getElementById("sp-session").textContent = message;
+  hodlRefreshStationKeyPickers();
+}
+// Silent Payments address tabs. The station is the bench; each Derive files
+// the address in its own tab holding only the BIP-352 scan and spend keys
+// (never the wallet root), and the station resets for the next address.
+var hodlSpAddresses = [], hodlActiveSp = 0, hodlNextSpAddressId = 1, hodlSpParentFingerprint = "";
+var hodlSpTabs = {
+  tabs: "sp-tabs", panel: "sp-card", remove: "delete-sp", tabClass: "sp-tab", tool: "sp", itemKind: "address",
+  items: () => hodlSpAddresses, active: () => hodlActiveSp, setActive: (index) => { hodlActiveSp = index; },
+  tabId: (state) => state.isLab ? "sp-tab-bench" : "sp-tab-" + state.id,
+  create: (index) => hodlCreateSpTab(index), select: (index) => hodlSelectSp(index),
+  bench: () => hodlNewSpBenchState(), syncView: () => hodlSyncSpView(),
+};
+function hodlNewSpBenchState() {
+  return { isLab: true, id: 0, name: "SP Station" };
+}
+function hodlSpTabName(state) {
+  return state.label === null ? state.fingerprint : `${state.fingerprint} · m=${state.label}`;
+}
+function hodlSpWipeAddress(state) {
+  if (!state?.keys) return;
+  try { state.keys.scanPriv && state.keys.scanPriv.fill(0); } catch {}
+  try { state.keys.spendPriv && state.keys.spendPriv.fill(0); } catch {}
+  state.keys = null;
+}
+function hodlCreateSpTab(index) {
+  let { state, active, button, label } = hodlStationTabButton(hodlSpTabs, index), name = state.isLab ? "SP Station" : hodlSpTabName(state);
+  label.textContent = name;
+  if (state.isLab) {
+    button.append(hodlCreateSilentPaymentsIcon(), label);
+    button.setAttribute("aria-label", "SP Station" + (active ? ", selected" : ". Activate to derive a silent payment address."));
+    button.title = "Derive a silent payment address";
+  } else {
+    hodlAppendSessionKeyLifehashes(button, state, state.fingerprint);
+    button.append(label);
+    let lineage = state.parentFingerprint ? " " + hodlTText("child of parent {fingerprint}", { fingerprint: state.parentFingerprint }) : "";
+    button.setAttribute("aria-label", `Silent payment address ${name}` + lineage + `${state.network === "mainnet" ? "" : ", testnet"}${active ? ", selected" : ". Activate to select."}`);
+    button.title = `Account ${state.account}${state.label === null ? " · unlabeled" : ` · label m = ${state.label}`}`;
+  }
+  return button;
+}
+function hodlSelectSp(index) {
+  hodlSelectStationTab(hodlSpTabs, index);
+}
+function hodlSyncSpView() {
+  let state = hodlSpAddresses[hodlActiveSp], bench = document.getElementById("sp-bench"), view = document.getElementById("sp-address-view"), card = document.getElementById("sp-card");
+  let address = Boolean(state && !state.isLab);
+  if (bench) bench.hidden = address;
+  if (card) card.classList.toggle("is-result-view", address);
+  if (!view) return;
+  view.hidden = !address;
+  if (address) hodlRenderSpAddress(state);
+  else view.replaceChildren();
+}
+function hodlDeleteActiveSp() {
+  hodlDeleteStationTab(hodlSpTabs, hodlSpWipeAddress);
+}
+// A deleted parent key takes the addresses derived from it.
+function hodlSpDropAddressesFrom(source) {
+  let active = hodlSpAddresses[hodlActiveSp], dropped = false;
+  hodlSpAddresses = hodlSpAddresses.filter((state) => {
+    if (state.isLab || state.source !== source) return true;
+    hodlSpWipeAddress(state);
+    dropped = true;
+    return false;
+  });
+  if (!dropped) return;
+  let index = hodlSpAddresses.indexOf(active);
+  hodlActiveSp = index >= 0 ? index : Math.max(0, hodlSpAddresses.findIndex((state) => state.isLab));
+  hodlRenderStationTabs(hodlSpTabs);
+  hodlSyncSpView();
 }
 function hodlSpNetwork() {
   return document.getElementById("sp-network")?.value === "testnet" ? "testnet" : "mainnet";
@@ -10345,6 +10444,8 @@ function hodlSpUseKey(state) {
     hodlSpNote = "Session key from " + (state.name || "existing key") + " (root xprv). Kept in page memory only.";
   } else throw new Error("SP Station needs a seed or root xprv. Account-level and single keys cannot derive m/352'.");
   hodlSpSource = "key:" + state.id;
+  // A BIP-85 child remembers its parent, so its address tabs show the lineage.
+  hodlSpParentFingerprint = state.parentFingerprint || "";
 }
 function hodlPickSpSessionKey(state) {
   let error = document.getElementById("sp-error");
@@ -10465,28 +10566,43 @@ function hodlSpEscape(value) {
 function hodlSpCopyButton(id, label) {
   return `<button type="button" class="btn secondary sp-copy" data-sp-copy="${id}">${label}</button>`;
 }
-function hodlRenderSpReceive() {
+function hodlDeriveSpAddress() {
   hodlSpDeriveSessionKeys();
-  let hrp = hodlSpHrp(hodlSpNetwork());
   let labelField = document.getElementById("sp-label")?.value;
   let labeled = String(labelField ?? "").trim() !== "";
   let m = labeled ? Number(labelField) : null;
   if (labeled && (!Number.isInteger(m) || m < 0 || m > 0xffffffff)) throw new Error("Label m must be an integer between 0 and 4294967295.");
-  let scanPoint = hodlSecp256k1.Point.fromBytes(hodlSpKeys.scanPub);
-  let spendPoint = hodlSecp256k1.Point.fromBytes(hodlSpKeys.spendPub);
-  let address = labeled ? createLabeledSilentPaymentAddress(hodlSpKeys.scanPriv, spendPoint, m, hrp) : encodeSilentPaymentAddress(scanPoint, spendPoint, hrp);
+  let fingerprint = hodlSpKeys.fingerprint, account = hodlSpAccount(), network = hodlSpNetwork();
+  let index = hodlSpAddresses.findIndex((state) => !state.isLab && state.fingerprint === fingerprint && state.account === account && state.network === network && state.label === m);
+  if (index < 0) {
+    // The tab takes ownership of the derived keys; the station reset below
+    // then wipes only its root.
+    hodlSpAddresses.push({ isLab: false, id: hodlNextSpAddressId++, fingerprint, account, network, label: m, payname: document.getElementById("sp-payname")?.value || "", source: hodlSpSource || "manual", parentFingerprint: hodlSpParentFingerprint, keys: hodlSpKeys, reveal: false });
+    hodlSpKeys = null;
+    index = hodlSpAddresses.length - 1;
+  }
+  hodlSpResetStation(hodlSpNote);
+  hodlSelectSp(index);
+}
+function hodlRenderSpAddress(state) {
+  let view = document.getElementById("sp-address-view"), keys = state.keys;
+  if (!view || !keys) return;
+  let hrp = hodlSpHrp(state.network), m = state.label, labeled = m !== null;
+  let scanPoint = hodlSecp256k1.Point.fromBytes(keys.scanPub);
+  let spendPoint = hodlSecp256k1.Point.fromBytes(keys.spendPub);
+  let address = labeled ? createLabeledSilentPaymentAddress(keys.scanPriv, spendPoint, m, hrp) : encodeSilentPaymentAddress(scanPoint, spendPoint, hrp);
   let uri = encodeBitcoinUri(address);
   let txt = encodeBip353Txt(address);
-  let named = bip353Lookup(document.getElementById("sp-payname")?.value);
-  let spscan = encodeSpscan(hodlSpKeys.scanPriv, hodlSpKeys.spendPub, hodlSpNetwork());
-  let spspend = encodeSpspend(hodlSpKeys.scanPriv, hodlSpKeys.spendPriv, hodlSpNetwork());
-  let origin = `${hodlSpKeys.fingerprint}/352h/${hodlSpCoinType()}h/${hodlSpAccount()}h`;
-  let qr = hodlQrSvg(address);
-  let secrets = hodlSpReveal;
-  document.getElementById("sp-out").innerHTML = `
+  let named = bip353Lookup(state.payname);
+  let coinType = state.network === "mainnet" ? 0 : 1;
+  let origin = `${state.fingerprint}/352h/${coinType}h/${state.account}h`;
+  let secrets = state.reveal;
+  let spscan = secrets ? encodeSpscan(keys.scanPriv, keys.spendPub, state.network) : "";
+  let spspend = secrets ? encodeSpspend(keys.scanPriv, keys.spendPriv, state.network) : "";
+  view.innerHTML = `
     <div class="sp-result">
       <p class="label">Reusable silent payment address${labeled ? ` · label m = ${m}${m === 0 ? " (change)" : ""}` : ""}</p>
-      <div class="sp-qr">${qr}</div>
+      <div class="sp-qr">${hodlQrSvg(address)}</div>
       <p class="psbt-kv" id="sp-address-value">${hodlSpEscape(address)}</p>
       ${hodlSpCopyButton("sp-address-value", "Copy address")}
       <p class="label">BIP-321 URI</p>
@@ -10496,20 +10612,20 @@ function hodlRenderSpReceive() {
       <p class="psbt-kv" id="sp-bip353-txt">${hodlSpEscape(txt)}</p>
       ${hodlSpCopyButton("sp-bip353-txt", "Copy TXT")}
       <p class="muted">${named ? `Create a TXT record at <code>${hodlSpEscape(named.lookup)}</code> for <code>${hodlSpEscape(named.name)}</code>.` : "Name the record <code>you@yourdomain</code> above and this prints its lookup, e.g. <code>you.user._bitcoin-payment.yourdomain</code>."} This page does not resolve DNS.</p>
-      <p class="muted">Scan path <code>${hodlSpKeys.scanPath}</code> · Spend path <code>${hodlSpKeys.spendPath}</code></p>
+      <p class="muted">Scan path <code>${keys.scanPath}</code> · Spend path <code>${keys.spendPath}</code></p>
       <p class="label">Scan public key</p>
-      <p class="psbt-kv" id="sp-scan-pub">${hodlSpBytesToHex(hodlSpKeys.scanPub)}</p>
+      <p class="psbt-kv" id="sp-scan-pub">${hodlSpBytesToHex(keys.scanPub)}</p>
       <p class="label">Spend public key</p>
-      <p class="psbt-kv" id="sp-spend-pub">${hodlSpBytesToHex(hodlSpKeys.spendPub)}</p>
+      <p class="psbt-kv" id="sp-spend-pub">${hodlSpBytesToHex(keys.spendPub)}</p>
       <label class="choice"><input type="checkbox" id="sp-reveal" ${secrets ? "checked" : ""}> <span>Reveal scan/spend private material and BIP-392 descriptors</span></label>
       ${secrets ? `<p class="label">BIP-392 watch-only <code>spscan</code></p><p class="psbt-kv" id="sp-spscan">${hodlSpEscape(formatSpDescriptor(spscan, origin))}</p>
         <p class="label">BIP-392 spend <code>spspend</code></p><p class="psbt-kv" id="sp-spspend">${hodlSpEscape(formatSpDescriptor(spspend, origin))}</p>
-        <p class="label">Scan private key</p><p class="psbt-kv" id="sp-scan-priv">${hodlSpBytesToHex(hodlSpKeys.scanPriv)}</p>
-        <p class="label">Spend private key</p><p class="psbt-kv" id="sp-spend-priv">${hodlSpBytesToHex(hodlSpKeys.spendPriv)}</p>` : `<p class="muted">Private scan/spend material stays hidden until you reveal it.</p>`}
+        <p class="label">Scan private key</p><p class="psbt-kv" id="sp-scan-priv">${hodlSpBytesToHex(keys.scanPriv)}</p>
+        <p class="label">Spend private key</p><p class="psbt-kv" id="sp-spend-priv">${hodlSpBytesToHex(keys.spendPriv)}</p>` : `<p class="muted">Private scan/spend material stays hidden until you reveal it.</p>`}
     </div>`;
   document.getElementById("sp-reveal")?.addEventListener("change", (event) => {
-    hodlSpReveal = event.target.checked;
-    try { hodlRenderSpReceive(); } catch (error) { document.getElementById("sp-error").textContent = error.message || String(error); }
+    state.reveal = event.target.checked;
+    hodlRenderSpAddress(state);
   });
 }
 // Resolve every eligible vin's input key from the loaded SP session root —
@@ -10668,7 +10784,7 @@ function hodlRunSp() {
   try {
     if (hodlSpMode === "send") hodlRenderSpSend();
     else if (hodlSpMode === "verify") hodlRenderSpVerify();
-    else hodlRenderSpReceive();
+    else hodlDeriveSpAddress();
     hodlJournalLog("calculate", hodlSpMode, "sp");
   } catch (exception) {
     error.textContent = exception instanceof Error ? exception.message : String(exception);
@@ -10694,24 +10810,12 @@ function hodlInitSp() {
   document.getElementById("sp-derive").onclick = () => { hodlSpMode = "receive"; hodlRunSp(); };
   document.getElementById("sp-send-go").onclick = () => { hodlSpMode = "send"; hodlRunSp(); };
   document.getElementById("sp-verify-go").onclick = () => { hodlSpMode = "verify"; hodlRunSp(); };
-  document.getElementById("sp-wipe").onclick = () => {
-    hodlSpWipeMem();
-    ["sp-key", "sp-pass", "sp-recipients", "sp-send-vins", "sp-verify-vins", "sp-verify-outputs", "sp-label", "sp-payname"].forEach((id) => {
-      let field = document.getElementById(id);
-      if (field) field.value = "";
-    });
-    let labels = document.getElementById("sp-verify-labels");
-    if (labels) labels.value = "0";
-    let account = document.getElementById("sp-account");
-    if (account) account.value = "0";
-    document.getElementById("sp-out").innerHTML = "";
-    document.getElementById("sp-error").textContent = "";
-    document.getElementById("sp-session").textContent = "Session ended and accessible fields were cleared (best effort).";
-    hodlRefreshStationKeyPickers();
-  };
+  document.getElementById("sp-wipe").onclick = () => hodlSpResetStation("Session ended and accessible fields were cleared (best effort).");
+  document.getElementById("add-sp").onclick = () => hodlSelectStationBench(hodlSpTabs);
+  document.getElementById("delete-sp").onclick = hodlDeleteActiveSp;
   document.getElementById("sp-card").addEventListener("input", hodlSyncSpControls);
   document.getElementById("sp-card").addEventListener("change", hodlSyncSpControls);
-  document.getElementById("sp-out").addEventListener("click", (event) => {
+  document.getElementById("sp-card").addEventListener("click", (event) => {
     let button = event.target.closest?.("[data-sp-copy]");
     if (!button) return;
     let node = document.getElementById(button.dataset.spCopy);
@@ -12417,6 +12521,7 @@ function hodlDeleteActiveKey() {
   }
   let deletedIndex = hodlActiveKey, deletedState = state;
   hodlKeys.splice(deletedIndex, 1);
+  hodlSpDropAddressesFrom("key:" + deletedState.id);
   hodlNextKeyNumber = hodlKeys.length ? hodlKeys.reduce((latest, state) => Math.max(latest, state.number), 0) + 1 : deletedState.number;
   if (!hodlKeys.length) {
     hodlKeys.push(hodlNewLabState());
@@ -13051,20 +13156,10 @@ function hodlInitMsigManager() {
   else document.getElementById("msig-card").hidden = true;
 }
 function hodlInitSpBench() {
-  let tabs = document.getElementById("sp-tabs");
-  if (!tabs) return;
-  let button = document.createElement("button"), label = document.createElement("span");
-  button.type = "button";
-  button.id = "sp-tab-bench";
-  button.className = "tab key-tab is-lab station-tab active";
-  button.setAttribute("role", "tab");
-  button.setAttribute("aria-selected", "true");
-  button.setAttribute("aria-controls", "sp-card");
-  button.setAttribute("aria-label", "SP Station, selected");
-  label.className = "key-tab-label";
-  label.textContent = "SP Station";
-  button.append(hodlCreateSilentPaymentsIcon(), label);
-  tabs.replaceChildren(button);
+  if (!document.getElementById("sp-tabs")) return;
+  if (!hodlSpAddresses.length) hodlSpAddresses = [hodlNewSpBenchState()];
+  hodlRenderStationTabs(hodlSpTabs);
+  hodlSyncSpView();
 }
 function hodlInitDefaultTabStates() {
   if (!hodlKeys.length) {

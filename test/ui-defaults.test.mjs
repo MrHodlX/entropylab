@@ -1025,7 +1025,6 @@ test("multisig consistently uses derive for its heading and action", () => {
 test("Station tabs stay pinned left while add controls stay pinned right", () => {
   assert.match(appSource, /button\.className = "tab key-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
   assert.match(appSource, /button\.className = "tab key-tab msig-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
-  assert.match(appSource, /button\.className = "tab key-tab is-lab station-tab active"/);
   assert.match(appSource, /pinnedWidth = station && tab !== station \? station\.offsetWidth : 0/);
   assert.match(appSource, /start < left \+ pinnedWidth/);
 });
@@ -1941,7 +1940,6 @@ test("Silent Payments has a connected SP Station with a monochrome coin-and-sign
   assert.match(appSource, /ridge\.setAttribute\("data-part", "coin-ridge"\)/);
   assert.doesNotMatch(appSource, /let inset = document\.createElementNS/);
   assert.match(appSource, /function hodlInitSpBench\(\) \{/);
-  assert.match(appSource, /label\.textContent = "SP Station";/);
   assert.match(appSource, /button\.append\(hodlCreateSilentPaymentsIcon\(\), label\);/);
   for (const markup of [shell]) {
     assert.match(markup, /id="sp-manager"/);

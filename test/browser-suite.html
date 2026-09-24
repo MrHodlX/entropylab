@@ -1556,7 +1556,7 @@
       document.querySelector('#workspace [data-workspace="sp"]').click();
       await until(() => !document.getElementById("sp-card").hidden, "Silent Payments spacing audit");
       const spModes = document.getElementById("sp-modes");
-      const spKeys = document.querySelector("#sp-card > .station-key-source");
+      const spKeys = document.querySelector("#sp-bench > .station-key-source");
       assert(spModes && spKeys, "Silent Payments spacing blocks are missing");
       equal(gap(spModes, spKeys), token("--space-section"), "Silent Payments mode-to-key-source spacing");
 
@@ -2408,6 +2408,51 @@
       equal(visibleActions().join(), id, `${mode} mode shows the wrong run button`);
       assert(!document.getElementById("sp-wipe").hidden, `End Session hidden in ${mode} mode`);
     }
+  });
+  await test("Silent Payments files each derived address in its own tab and resets the station", async () => {
+    document.querySelector('#workspace [data-workspace="sp"]').click();
+    await until(() => !document.getElementById("sp-card").hidden, "Silent Payments workspace");
+    const seed = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const tabs = () => [...document.querySelectorAll("#sp-tabs [role=tab]")];
+    const names = () => tabs().map((tab) => tab.querySelector(".key-tab-label").textContent.trim());
+    const selected = () => tabs().find((tab) => tab.getAttribute("aria-selected") === "true");
+    const bench = () => document.getElementById("sp-tab-bench");
+    const derive = async (label, expected) => {
+      bench().click();
+      input(document.getElementById("sp-key"), seed);
+      input(document.getElementById("sp-label"), label);
+      document.getElementById("sp-derive").click();
+      await until(() => selected()?.querySelector(".key-tab-label").textContent.trim() === expected, `SP tab ${expected}`);
+    };
+    const start = tabs().length;
+    await derive("", "73c5da0a");
+    equal(tabs().length, start + 1, "Derive did not add exactly one address tab");
+    assert(document.getElementById("sp-address-value")?.textContent.startsWith("sp1q"), "The address tab did not show its address");
+    assert(document.getElementById("sp-bench").hidden, "The station form stayed visible on an address tab");
+    bench().click();
+    assert(!document.getElementById("sp-bench").hidden, "The station form did not return on the station tab");
+    equal(document.getElementById("sp-key").value, "", "Derive did not clear the station's session key");
+    assert(document.getElementById("sp-derive").disabled, "The cleared station still offered Derive");
+    await derive("1", "73c5da0a · m=1");
+    equal(tabs().length, start + 2, "A labeled address did not get its own tab");
+    // The same address again selects its tab instead of adding one.
+    await derive("", "73c5da0a");
+    equal(tabs().length, start + 2, "Deriving an existing address added a duplicate tab");
+    // End Session clears the station and leaves the address tabs.
+    bench().click();
+    input(document.getElementById("sp-key"), seed);
+    document.getElementById("sp-wipe").click();
+    equal(tabs().length, start + 2, "End Session removed address tabs");
+    // Minus removes the selected address tab only.
+    tabs().find((tab) => tab.textContent.includes("m=1")).click();
+    assert(!document.getElementById("delete-sp").disabled, "Minus was unavailable on an address tab");
+    document.getElementById("delete-sp").click();
+    await until(() => tabs().length === start + 1, "address tab deletion");
+    assert(!names().includes("73c5da0a · m=1"), "Minus did not remove the selected address tab");
+    tabs().find((tab) => tab.textContent.trim() === "73c5da0a").click();
+    document.getElementById("delete-sp").click();
+    await until(() => tabs().length === start, "second address tab deletion");
+    assert(document.getElementById("delete-sp").disabled, "Minus stayed available on the station tab");
   });
   await test("Session log audits meaningful dashboard actions without secret input values", async () => {
     const theme = document.getElementById("theme-toggle");
@@ -4339,6 +4384,18 @@
     await until(() => tabs.children.length === 3 && document.querySelector("#bip85-out .key-summary"), "second BIP-85 child tab");
     const secondFingerprint = tabs.children[2].querySelector(".key-tab-label")?.textContent.trim();
     childChip("sp-session-keys", secondFingerprint).click();
+    // An SP address derived from the child lives in its own tab until the
+    // child is deleted. Deriving resets the SP station, so reload the child.
+    const spTabNames = () => [...document.querySelectorAll("#sp-tabs .key-tab-label")].map((label) => label.textContent.trim());
+    document.getElementById("sp-derive").click();
+    await until(() => spTabNames().includes(secondFingerprint), "SP address tab for the BIP-85 child");
+    const spChildTab = [...document.querySelectorAll("#sp-tabs [role=tab]")].find((tab) => tab.querySelector(".key-tab-label").textContent.trim() === secondFingerprint);
+    const spLineage = [...spChildTab.querySelectorAll("img.key-tab-lifehash")];
+    assert(spChildTab.querySelector(".key-lineage-arrow"), "The SP address tab for a BIP-85 child did not show its lineage arrow");
+    equal(spLineage.length, 2, "The SP address tab for a BIP-85 child did not show both lineage LifeHashes");
+    equal(spLineage[0].dataset.fingerprint, parentFingerprint, "The SP address tab showed the wrong parent LifeHash");
+    equal(spLineage[1].dataset.fingerprint, secondFingerprint, "The SP address tab showed the wrong child LifeHash");
+    childChip("sp-session-keys", secondFingerprint).click();
     childChip("psbt-session-keys", secondFingerprint).click();
     childChip("vanity-session-keys", secondFingerprint).click();
     assert(document.querySelector('#sp-session-keys [data-key-id^="bip85:"].active'), "SP Station could not load the child");
@@ -4352,6 +4409,7 @@
       assert(!childChip(id, secondFingerprint), `${id} kept the deleted BIP-85 child`);
     }
     assert(!document.getElementById("sp-key").value && !document.getElementById("psbt-session-keys").querySelector(".active") && document.getElementById("vanity-source-block").hidden, "Deleting a child left a loaded private-key session active");
+    assert(!spTabNames().includes(secondFingerprint), "Deleting a BIP-85 child left the SP address tab derived from it");
     equal([...document.getElementById("journal-key-insert").options].filter((option) => option.dataset.referenceKind === "bip85").length, 1, "The Journal picker retained a deleted BIP-85 child");
     assert(!document.getElementById("delete-bip85").disabled, "The remaining child was not selected after deletion");
 
@@ -4425,6 +4483,12 @@
     document.getElementById("sp-derive").click();
     const receiveAddress = await until(() => document.getElementById("sp-address-value")?.textContent.startsWith("tsp1") && document.getElementById("sp-address-value"), "SP receive address");
     const recipient = receiveAddress.textContent.trim();
+    // Derive filed the address in its own tab and reset the station, so go
+    // back to the station and load the same key again to send from it.
+    document.getElementById("sp-tab-bench").click();
+    document.querySelector("#sp-session-keys .session-key-option").click();
+    spNetwork.value = "testnet";
+    spNetwork.dispatchEvent(new Event("change", { bubbles: true }));
     document.querySelector('#sp-modes [data-sp-mode="send"]').click();
     // m/86'/1'/0'/0/0 of this suite's wallet, as a key-path P2TR input.
     const ownedVin = [{ txid: "00".repeat(32), vout: 0, scriptSig: "", txinwitness: "01" + "40" + "5a".repeat(64), prevout: { scriptPubKey: { hex: "51203b82b2b2a9185315da6f80da5f06d0440d8a5e1457fa93387c2d919c86ec8786" } } }];
