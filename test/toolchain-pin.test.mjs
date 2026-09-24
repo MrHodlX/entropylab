@@ -15,6 +15,11 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (path) => readFileSync(join(root, path), "utf8");
 
+// The crates build-wasm compiles, derived from the build script itself so a
+// crate added there without the matching pins fails here rather than
+// drifting past a hard-coded list.
+const buildCrates = () => [...read("scripts/build-wasm.mjs").matchAll(/^\s+dir: "([^"]+)",$/gm)].map((m) => m[1]);
+
 test("the CI workflow and the Dockerfile pin the same exact Node version", () => {
   const workflow = read(".github/workflows/ci-cd.yml").match(/^  NODE_VERSION: "([^"]+)"$/m);
   const dockerfile = read("Dockerfile").match(/^ARG NODE_VERSION=v(.+)$/m);
@@ -24,7 +29,7 @@ test("the CI workflow and the Dockerfile pin the same exact Node version", () =>
 });
 
 test("all WASM crates and the dev image pin the same Rust channel", () => {
-  const channels = ["entropylab-wasm", "psbt-wasm", "vanity-wasm"].map((crate) => {
+  const channels = buildCrates().map((crate) => {
     const channel = read(`${crate}/rust-toolchain.toml`).match(/^channel = "([^"]+)"$/m);
     assert.ok(channel, `${crate}/rust-toolchain.toml pins a channel`);
     return channel[1];
@@ -33,6 +38,28 @@ test("all WASM crates and the dev image pin the same Rust channel", () => {
   const image = read("Dockerfile").match(/--toolchain (\S+)/);
   assert.ok(image, "Dockerfile adds the wasm target for an explicit toolchain");
   assert.equal(image[1], channels[0]);
+});
+
+// #527: the warm-up must pre-fetch every crate's dependency graph, and the
+// shared CARGO_HOME must be writable by the image's default user — otherwise
+// the documented `docker compose run dev npm run build:wasm` needs network
+// and dies on the root-owned registry, which CI never sees (it runs as root).
+// The crate list comes from build-wasm.mjs, so a crate added there without a
+// warm-up fails here.
+test("the dev image pre-fetches every crate and chowns the cargo home to dev", () => {
+  const dockerfile = read("Dockerfile");
+  const block = dockerfile.match(/RUN cd (\/warm\/\S+) \\\n[\s\S]*?cargo fetch/);
+  assert.ok(block, "the image warms the cargo registry before switching to dev");
+  const fetched = [block[1], ...[...dockerfile.matchAll(/&& cd (\/warm\/\S+) \\\n\s*&& cargo fetch/g)].map((m) => m[1])];
+  for (const crate of buildCrates()) {
+    const warmDir = dockerfile.match(new RegExp(`^COPY ${crate}/ (/warm/\\S+)/$`, "m"));
+    assert.ok(warmDir, `Dockerfile copies ${crate} into the warm-up`);
+    assert.ok(fetched.includes(warmDir[1]), `${crate}'s dependency graph is cargo-fetched in the warm-up`);
+  }
+  const chown = dockerfile.match(/^RUN chown -R dev:dev (.+?)( && .*)?$/m);
+  assert.ok(chown, "the image chowns shared caches to the dev user");
+  assert.match(chown[1], /\/usr\/local\/npm-cache/);
+  assert.match(chown[1], /\/usr\/local\/cargo/, "CARGO_HOME is writable by dev (issue #527)");
 });
 
 test("the dev image pins linux/amd64, one Ubuntu snapshot, and exact clang", () => {

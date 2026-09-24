@@ -166,9 +166,11 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha,scope=dev-image
           cache-to: type=gha,mode=max,scope=dev-image
-      # Root, because the image's cargo home is root-owned. The script trusts
-      # the mount itself (`safe.directory=*`); do not delete target/ from the
-      # runner — those directories are root-owned and the host rm cannot.
+      # Root, because the mounted workspace is runner-owned and the image's
+      # dev user could not write target/ into it (the image's own cargo home
+      # is dev-owned since #529). The script trusts the mount itself
+      # (`safe.directory=*`); do not delete target/ from the runner — those
+      # directories are root-owned and the host rm cannot.
       - name: Rebuild the WASM artifacts inside the pinned image
         run: |
           docker run --rm --platform linux/amd64 --user root \
