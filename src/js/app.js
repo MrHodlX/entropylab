@@ -10001,21 +10001,106 @@ function hodlRenderBip85Out() {
     copy.onclick = () => hodlCopyBip85Child(copy);
   }
 }
-function hodlCreateBip85Tab(index) {
-  let state = hodlBip85Children[index], active = index === hodlActiveBip85, button = document.createElement("button"), label = document.createElement("span"), name = state.isLab ? "BIP-85 Station" : state.fingerprint;
+// Stations with generated tabs (BIP-85 children, Silent Payments addresses)
+// share one tab strip: a list of tab states, the first usually the station
+// bench (isLab), and the index of the active one. Each station passes a
+// config naming its elements and hooks; the tab's own name, icon, and
+// accessible label stay with the station.
+function hodlStationTabButton(config, index) {
+  let state = config.items()[index], active = index === config.active(), button = document.createElement("button"), label = document.createElement("span");
   button.type = "button";
-  button.id = state.isLab ? "bip85-tab-lab" : "bip85-tab-" + state.id;
-  button.className = "tab key-tab bip85-tab" + (state.isLab ? " is-lab station-tab" : "") + (active ? " active" : "");
+  button.id = config.tabId(state);
+  button.className = "tab key-tab " + config.tabClass + (state.isLab ? " is-lab station-tab" : "") + (active ? " active" : "");
   label.className = "key-tab-label";
+  button.setAttribute("role", "tab");
+  button.setAttribute("aria-controls", config.panel);
+  button.setAttribute("aria-selected", String(active));
+  button.onclick = () => config.select(index);
+  button.tabIndex = active ? 0 : -1;
+  button.onkeydown = (event) => hodlStationTabKeydown(config, event, index);
+  return { state, active, button, label };
+}
+function hodlStationTabKeydown(config, event, index) {
+  let next = null, length = config.items().length;
+  if (event.key === "ArrowRight") next = (index + 1) % length;
+  else if (event.key === "ArrowLeft") next = (index - 1 + length) % length;
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = length - 1;
+  if (next === null) return;
+  event.preventDefault();
+  config.select(next);
+  document.getElementById(config.tabs)?.children[next]?.focus();
+}
+function hodlSyncStationDeleteButton(config) {
+  let button = document.getElementById(config.remove), state = config.items()[config.active()];
+  if (!button) return;
+  button.disabled = !state || state.isLab;
+  button.setAttribute("aria-disabled", String(button.disabled));
+}
+function hodlRenderStationTabs(config) {
+  let box = document.getElementById(config.tabs), panel = document.getElementById(config.panel);
+  if (!box || !panel) return;
+  box.innerHTML = "";
+  panel.removeAttribute("aria-labelledby");
+  config.items().forEach((state, index) => {
+    let button = config.create(index);
+    box.appendChild(button);
+    if (index === config.active()) panel.setAttribute("aria-labelledby", button.id);
+  });
+  hodlRevealTab(box, config.active());
+  hodlSyncStationDeleteButton(config);
+}
+function hodlSelectStationTab(config, index) {
+  let items = config.items();
+  if (!items[index]) return;
+  config.setActive(index);
+  hodlRenderStationTabs(config);
+  config.syncView();
+  hodlJournalLog("station-select", items[index].isLab ? "station" : config.itemKind, config.tool);
+}
+function hodlSelectStationBench(config) {
+  let items = config.items(), index = items.findIndex((state) => state.isLab);
+  if (index < 0) {
+    items.unshift(config.bench());
+    index = 0;
+    if (config.active() >= 0) config.setActive(config.active() + 1);
+  }
+  config.select(index);
+}
+// Removes the active generated tab. `release` runs first, with the state still
+// listed, to wipe its secrets and detach anything that borrowed it; `after`
+// runs once the strip and view are redrawn.
+function hodlDeleteStationTab(config, release, after = () => {}) {
+  let items = config.items(), deletedIndex = config.active(), state = items[deletedIndex];
+  if (!state || state.isLab) {
+    hodlSyncStationDeleteButton(config);
+    return;
+  }
+  release(state);
+  items.splice(deletedIndex, 1);
+  if (!items.length) items.push(config.bench());
+  config.setActive(Math.min(deletedIndex, items.length - 1));
+  hodlRenderStationTabs(config);
+  config.syncView();
+  after();
+  hodlJournalLog("station-delete", config.itemKind, config.tool);
+  document.getElementById(config.tabs)?.children[config.active()]?.focus();
+}
+var hodlBip85Tabs = {
+  tabs: "bip85-tabs", panel: "bip85-card", remove: "delete-bip85", tabClass: "bip85-tab", tool: "bip85", itemKind: "child",
+  items: () => hodlBip85Children, active: () => hodlActiveBip85, setActive: (index) => { hodlActiveBip85 = index; },
+  tabId: (state) => state.isLab ? "bip85-tab-lab" : "bip85-tab-" + state.id,
+  create: (index) => hodlCreateBip85Tab(index), select: (index) => hodlSelectBip85(index),
+  bench: () => hodlNewBip85BenchState(), syncView: () => hodlSyncBip85View(),
+};
+function hodlCreateBip85Tab(index) {
+  let { state, active, button, label } = hodlStationTabButton(hodlBip85Tabs, index), name = state.isLab ? "BIP-85 Station" : state.fingerprint;
   label.textContent = name;
   if (state.isLab) button.append(hodlCreateBip85BenchIcon(), label);
   else {
     hodlAppendSessionKeyLifehashes(button, state, state.fingerprint);
     button.append(label);
   }
-  button.setAttribute("role", "tab");
-  button.setAttribute("aria-controls", "bip85-card");
-  button.setAttribute("aria-selected", String(active));
   if (state.isLab) {
     button.setAttribute("aria-label", "BIP-85 Station" + (active ? ", selected" : ". Activate to derive a BIP-85 child."));
     button.title = "Derive a BIP-85 child";
@@ -10024,29 +10109,13 @@ function hodlCreateBip85Tab(index) {
     button.setAttribute("aria-label", hodlBip85AppLabel(state.result?.app) + " " + hodlTText("child of parent {fingerprint}", { fingerprint: state.parentFingerprint }) + `, ${kind} ${name}${active ? ", selected" : ". Activate to select."}`);
     button.title = `${hodlBip85AppLabel(state.result?.app)} · ${state.result?.path || ""}`;
   }
-  button.onclick = () => hodlSelectBip85(index);
-  button.tabIndex = active ? 0 : -1;
-  button.onkeydown = (event) => hodlBip85TabKeydown(event, index);
   return button;
 }
 function hodlSyncBip85DeleteButton() {
-  let button = document.getElementById("delete-bip85"), state = hodlBip85ActiveState();
-  if (!button) return;
-  button.disabled = !state || state.isLab;
-  button.setAttribute("aria-disabled", String(button.disabled));
+  hodlSyncStationDeleteButton(hodlBip85Tabs);
 }
 function hodlRenderBip85Tabs() {
-  let box = document.getElementById("bip85-tabs"), panel = document.getElementById("bip85-card");
-  if (!box || !panel) return;
-  box.innerHTML = "";
-  panel.removeAttribute("aria-labelledby");
-  hodlBip85Children.forEach((state, index) => {
-    let button = hodlCreateBip85Tab(index);
-    box.appendChild(button);
-    if (index === hodlActiveBip85) panel.setAttribute("aria-labelledby", button.id);
-  });
-  hodlRevealTab(box, hodlActiveBip85);
-  hodlSyncBip85DeleteButton();
+  hodlRenderStationTabs(hodlBip85Tabs);
 }
 // A parent is in hand once a session key is picked, or once text is pasted in
 // the root field. Pasted text is only parsed on derive, so it counts here as
@@ -10075,74 +10144,43 @@ function hodlSyncBip85View() {
   hodlRenderBip85Out();
 }
 function hodlSelectBip85(index) {
-  if (!hodlBip85Children[index]) return;
-  hodlActiveBip85 = index;
-  hodlRenderBip85Tabs();
-  hodlSyncBip85View();
-  hodlJournalLog("station-select", hodlBip85Children[index].isLab ? "station" : "child", "bip85");
+  hodlSelectStationTab(hodlBip85Tabs, index);
 }
 function hodlSelectBip85Bench() {
-  let index = hodlBip85Children.findIndex((state) => state.isLab);
-  if (index < 0) {
-    hodlBip85Children.unshift(hodlNewBip85BenchState());
-    index = 0;
-    if (hodlActiveBip85 >= 0) hodlActiveBip85 += 1;
-  }
-  hodlSelectBip85(index);
+  hodlSelectStationBench(hodlBip85Tabs);
 }
 function hodlDeleteActiveBip85() {
-  let state = hodlBip85ActiveState();
-  if (!state || state.isLab) {
-    hodlSyncBip85DeleteButton();
-    return;
-  }
-  let deletedIndex = hodlActiveBip85;
-  let source = `key:bip85:${state.id}`;
-  if (hodlBip85Source === source) {
-    hodlBip85WipeParent();
-    document.getElementById("bip85-key").value = "";
-    hodlSyncBip85Parent();
-  }
-  if (hodlSpSource === source) {
-    hodlSpWipeKeys();
-    document.getElementById("sp-key").value = "";
-    document.getElementById("sp-pass").value = "";
-    document.getElementById("sp-out").replaceChildren();
-    document.getElementById("sp-session").textContent = hodlSpNote;
-  }
-  if (hodlPsbtSource === source) {
-    hodlPsbtWipeMem();
-    hodlPaintPsbtSession();
-    hodlSyncPsbtControls();
-  }
-  if (hodlVanitySource === source) {
-    hodlVanityCancel();
-    hodlVanityClearResults();
-    hodlVanitySource = "";
-  }
-  hodlBip85Result = null;
-  wipeBip85Result(state.result);
-  hodlBip85Children.splice(deletedIndex, 1);
-  if (!hodlBip85Children.length) hodlBip85Children.push(hodlNewBip85BenchState());
-  hodlActiveBip85 = Math.min(deletedIndex, hodlBip85Children.length - 1);
-  hodlRenderBip85Tabs();
-  hodlSyncBip85View();
-  hodlRefreshMsigSessionPickers();
-  hodlRefreshStationKeyPickers();
-  hodlRefreshJournalKeyPicker();
-  hodlJournalLog("station-delete", "child", "bip85");
-  document.getElementById("bip85-tabs")?.children[hodlActiveBip85]?.focus();
-}
-function hodlBip85TabKeydown(event, index) {
-  let next = null, length = hodlBip85Children.length;
-  if (event.key === "ArrowRight") next = (index + 1) % length;
-  else if (event.key === "ArrowLeft") next = (index - 1 + length) % length;
-  else if (event.key === "Home") next = 0;
-  else if (event.key === "End") next = length - 1;
-  if (next === null) return;
-  event.preventDefault();
-  hodlSelectBip85(next);
-  document.getElementById("bip85-tabs")?.children[next]?.focus();
+  hodlDeleteStationTab(hodlBip85Tabs, (state) => {
+    let source = `key:bip85:${state.id}`;
+    if (hodlBip85Source === source) {
+      hodlBip85WipeParent();
+      document.getElementById("bip85-key").value = "";
+      hodlSyncBip85Parent();
+    }
+    if (hodlSpSource === source) {
+      hodlSpWipeKeys();
+      document.getElementById("sp-key").value = "";
+      document.getElementById("sp-pass").value = "";
+      document.getElementById("sp-out").replaceChildren();
+      document.getElementById("sp-session").textContent = hodlSpNote;
+    }
+    if (hodlPsbtSource === source) {
+      hodlPsbtWipeMem();
+      hodlPaintPsbtSession();
+      hodlSyncPsbtControls();
+    }
+    if (hodlVanitySource === source) {
+      hodlVanityCancel();
+      hodlVanityClearResults();
+      hodlVanitySource = "";
+    }
+    hodlBip85Result = null;
+    wipeBip85Result(state.result);
+  }, () => {
+    hodlRefreshMsigSessionPickers();
+    hodlRefreshStationKeyPickers();
+    hodlRefreshJournalKeyPicker();
+  });
 }
 function hodlRunBip85() {
   let error = document.getElementById("bip85-error"), session = document.getElementById("bip85-session"), manual = document.getElementById("bip85-key")?.value || "";

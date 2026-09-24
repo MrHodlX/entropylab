@@ -1024,7 +1024,6 @@ test("multisig consistently uses derive for its heading and action", () => {
 
 test("Station tabs stay pinned left while add controls stay pinned right", () => {
   assert.match(appSource, /button\.className = "tab key-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
-  assert.match(appSource, /button\.className = "tab key-tab bip85-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
   assert.match(appSource, /button\.className = "tab key-tab msig-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
   assert.match(appSource, /button\.className = "tab key-tab is-lab station-tab active"/);
   assert.match(appSource, /pinnedWidth = station && tab !== station \? station\.offsetWidth : 0/);
