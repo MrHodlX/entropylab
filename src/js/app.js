@@ -951,6 +951,10 @@ function hodlRootWalletResult(root, network, source, accountIndex, masterFingerp
     rootPrivateLabel: hodlExtendedKeyVersions[hodlNetworkFamily(network)].x.prvName,
     rootPublicLabel: hodlExtendedKeyVersions[hodlNetworkFamily(network)].x.pubName,
     masterFingerprint,
+    // The wallet's network-independent identity (chain code + root pubkey):
+    // xpub serializations are versioned per network, the fingerprint is only
+    // 4 display bytes.
+    masterIdentity: hodlHex.encode(root.chainCode) + ":" + hodlHex.encode(root.publicKey),
     multisigCosignerExports: root.privateKey ? hodlBuildMultisigCosignerExports(root, network, accountIndex, masterFingerprint, coinType) : [],
     imported: false,
     notes: source.notes,
@@ -11515,7 +11519,7 @@ function hodlKeyManagerRename(state, input) {
   if (hodlKeys.includes(state)) hodlRenderKeyTabs();
   hodlKeyManagerRender();
   hodlKeyManagerStatus("Key name updated in memory. Download the key file to keep the change.");
-  hodlJournalLog("key-manager-rename", keyVaultIdentity(state), "journal");
+  hodlJournalLog("key-manager-rename", hodlKeyLogLabel(state), "journal");
 }
 function hodlKeyManagerDetails(state) {
   let result = state.result || {};
@@ -11657,16 +11661,22 @@ function hodlKeyManagerRender() {
   panel.appendChild(actions);
   hodlKeyManagerRenderIgnored();
 }
+// Journal-safe label for key events: never the wallet identity itself
+// (masterIdentity/rootXpub are permanent, linkable identifiers); the
+// fingerprint is display metadata, and the key number is the last resort.
+function hodlKeyLogLabel(state) {
+  return state?.result?.masterFingerprint || `key-${state?.number ?? state?.id ?? "?"}`;
+}
 function hodlKeyManagerToggle(state) {
   let identity = keyVaultIdentity(state);
   if (hodlKeyManagerIds.has(identity)) {
     hodlKeyManagerIds.delete(identity);
     hodlKeyManagerStatus("Key removed from the next key-file download.");
-    hodlJournalLog("key-manager-exclude", identity, "journal");
+    hodlJournalLog("key-manager-exclude", hodlKeyLogLabel(state), "journal");
   } else {
     hodlKeyManagerIds.add(identity);
     hodlKeyManagerStatus("Key included in the next key-file download.");
-    hodlJournalLog("key-manager-include", identity, "journal");
+    hodlJournalLog("key-manager-include", hodlKeyLogLabel(state), "journal");
   }
   hodlKeyManagerRender();
 }
@@ -11709,7 +11719,7 @@ function hodlKeyManagerUseInStation(state) {
     hodlActiveKey = hodlKeys.length - 1;
   }
   hodlRenderKeyTabs();
-  hodlJournalLog("key-manager-use", identity, "journal");
+  hodlJournalLog("key-manager-use", hodlKeyLogLabel(state), "journal");
   hodlShowWorkspace("calc");
 }
 function hodlKeyManagerUseAllInStation() {
@@ -11720,7 +11730,7 @@ function hodlKeyManagerUseAllInStation() {
     if (pending < 0) return;
     hodlKeyManagerPending.splice(pending, 1);
     hodlKeys.push(state);
-    hodlJournalLog("key-manager-use", keyVaultIdentity(state), "journal");
+    hodlJournalLog("key-manager-use", hodlKeyLogLabel(state), "journal");
   });
   hodlActiveKey = hodlKeys.indexOf(states[0]);
   hodlRenderKeyTabs();
@@ -11741,7 +11751,7 @@ function hodlKeyManagerIgnore(state) {
   hodlKeyManagerActiveId = "";
   hodlKeyManagerRender();
   hodlKeyManagerStatus("Key moved to Ignored keys.");
-  hodlJournalLog("key-manager-ignore", identity, "journal");
+  hodlJournalLog("key-manager-ignore", hodlKeyLogLabel(state), "journal");
 }
 function hodlKeyManagerRestoreIgnored(entry) {
   let identity = keyVaultIdentity(entry), state = hodlKeyManagerStates().find((candidate) => keyVaultIdentity(candidate) === identity);
@@ -11754,7 +11764,7 @@ function hodlKeyManagerRestoreIgnored(entry) {
   hodlKeyManagerActiveId = keyVaultIdentity(state);
   hodlKeyManagerRender();
   hodlKeyManagerStatus("Key restored and included in the next key-file download.");
-  hodlJournalLog("key-manager-restore", identity, "journal");
+  hodlJournalLog("key-manager-restore", hodlKeyLogLabel(state), "journal");
 }
 function hodlKeyManagerDetachFromStation(state) {
   let identity = keyVaultIdentity(state), index = hodlKeys.indexOf(state);
@@ -11832,6 +11842,17 @@ function hodlCloneDerivedKey(source, existing) {
   });
   return state;
 }
+// The wallet a key tab belongs to: its network-independent master identity
+// (chain code + root pubkey), with the serialized root xpub as a stand-in for
+// states that predate it — never the 4-byte master fingerprint, which two
+// wallets can share (the Key Station sibling of GHSA-6rr2-5r82-grwc). Null
+// means "no identity": the commit always opens a new tab rather than risk
+// overwriting another wallet's — a duplicate tab is harmless, an overwrite
+// loses a wallet. Imported account keys carry no master material, so they
+// land here, as they did before.
+function hodlKeyWalletIdentity(result) {
+  return result?.masterIdentity || result?.rootXpub || null;
+}
 function hodlCommitDerivedKey() {
   let lab = hodlKeys[hodlActiveKey];
   if (!lab?.isLab || !lab.result) {
@@ -11840,8 +11861,8 @@ function hodlCommitDerivedKey() {
     return hodlActiveKey;
   }
   let imported = hodlKeyManagerPending.find((state) => state.id === lab.importedKeyId);
-  let fingerprint = lab.result.masterFingerprint || "";
-  let existing = fingerprint ? hodlKeys.findIndex((state) => !state.isLab && state.result?.masterFingerprint === fingerprint) : -1;
+  let identity = hodlKeyWalletIdentity(lab.result);
+  let existing = identity ? hodlKeys.findIndex((state) => !state.isLab && hodlKeyWalletIdentity(state.result) === identity) : -1;
   if (existing >= 0) {
     hodlKeys[existing] = hodlCloneDerivedKey(lab, hodlKeys[existing]);
     hodlKeys[hodlActiveKey] = hodlNewLabState();

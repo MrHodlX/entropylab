@@ -69,7 +69,8 @@ function importHarness() {
   };
   for (const name of ["hodlNewKeyState", "hodlNewLabState", "hodlKeyManagerImportedState",
     "hodlKeyManagerStates", "hodlKeyManagerUseInStation", "hodlKeyManagerUseAllInStation",
-    "hodlCloneDerivedKey", "hodlFillLabFromKey", "hodlCommitDerivedKey", "hodlKeyManagerImportFile",
+    "hodlCloneDerivedKey", "hodlFillLabFromKey", "hodlKeyWalletIdentity", "hodlCommitDerivedKey", "hodlKeyManagerImportFile",
+    "hodlKeyManagerToggle", "hodlKeyManagerIgnore", "hodlKeyManagerEntry", "hodlKeyLogLabel",
     "hodlKeyManagerRestoreIgnored"])
     runInNewContext(loadSlice(name), context);
   context.hodlKeys.push(context.hodlNewLabState());
@@ -142,6 +143,8 @@ function enableDerivation(c) {
       const master = HDKey.fromMasterSeed(mnemonicToSeedSync(words, passphrase));
       const leaf = master.derive("m/84'/0'/0'/0/0");
       return { network, mnemonic: words, masterFingerprint: master.fingerprint.toString(16).padStart(8, "0"),
+        masterIdentity: Buffer.from(master.chainCode).toString("hex") + ":" + Buffer.from(master.publicKey).toString("hex"),
+        rootXpub: master.publicExtendedKey,
         rootXprv: master.privateExtendedKey, address: p2wpkh(leaf.publicKey).address };
     },
   });
@@ -167,6 +170,68 @@ test("only a successful fresh derivation retires an imported input and publishes
   assert.equal(c.hodlKeyManagerIds.has(oldIdentity), false);
   assert.equal(c.hodlKeyManagerIds.has(keyVaultIdentity(derived)), true);
   assert.equal(parseKeyVault(serializeKeyVault([derived])).keys[0].result, null, "even a genuine export must be rederived next time");
+});
+
+test("two wallets sharing a master fingerprint stay two keys in the station and the Key Manager (GHSA-6rr2-5r82-grwc sibling)", async () => {
+  // Both seeds are valid BIP39 with master fingerprint 5c86104e (found by
+  // brute force, 127,677 trials); their wallets differ. Fingerprint-keyed
+  // dedup collapsed them into one tab and one vault identity: the second
+  // wallet never reached a downloaded key file.
+  const seedA = "abandon arm moon abandon abandon abandon abandon abandon abandon abandon abandon ability";
+  const seedB = "abandon auto pyramid abandon abandon abandon abandon abandon abandon abandon abandon abstract";
+  const { context: c, importFile } = importHarness();
+  const deriveThrough = async (seed, id) => {
+    const entry = legacyEntry();
+    entry.id = id;
+    entry.importedKeyId = id;
+    entry.fields.seed = seed;
+    await importFile(legacyFile([entry]));
+    c.hodlKeyManagerUseInStation(c.hodlKeyManagerPending[c.hodlKeyManagerPending.length - 1]);
+    assert.equal(await c.hodlCalculateKey({}), true, "derivation for " + seed.split(" ")[1]);
+  };
+  enableDerivation(c);
+  await deriveThrough(seedA, 1);
+  await deriveThrough(seedB, 2);
+  const tabs = c.hodlKeys.filter((state) => !state.isLab && state.result);
+  assert.equal(tabs.length, 2, "the second wallet did not get its own tab");
+  assert.equal(tabs[0].result.masterFingerprint, "5c86104e");
+  assert.equal(tabs[1].result.masterFingerprint, "5c86104e", "the fixture no longer collides");
+  assert.notEqual(tabs[0].result.masterIdentity, tabs[1].result.masterIdentity);
+  assert.notEqual(keyVaultIdentity(tabs[0]), keyVaultIdentity(tabs[1]), "the vault merges the two wallets");
+  const states = c.hodlKeyManagerStates();
+  assert.equal(states.length, 2, "the Key Manager (and its Download) collapses the colliding wallets into one");
+  // Same-wallet re-derivation still updates in place.
+  await deriveThrough(seedA, 3);
+  assert.equal(c.hodlKeys.filter((state) => !state.isLab && state.result).length, 2, "re-deriving an existing wallet added a duplicate tab");
+});
+
+test("key-manager journal events never log the wallet identity (#534 review)", async () => {
+  // The journal persists, so a keyVaultIdentity detail would write the root
+  // xpub's contents (chain code + pubkey) into it — a permanent, linkable
+  // identifier. Every key-manager event must log the journal-safe label.
+  const { context: c, calls, importFile } = importHarness();
+  const entry = legacyEntry();
+  entry.fields.seed = "abandon arm moon abandon abandon abandon abandon abandon abandon abandon abandon ability";
+  await importFile(legacyFile([entry]));
+  c.hodlKeyManagerUseInStation(c.hodlKeyManagerPending[0]);
+  enableDerivation(c);
+  assert.equal(await c.hodlCalculateKey({}), true);
+  const state = c.hodlKeys.find((item) => !item.isLab && item.result);
+  assert.ok(state?.result?.masterIdentity, "the fixture derives a master identity");
+  calls.length = 0;
+  c.hodlKeyManagerToggle(state); // exclude
+  c.hodlKeyManagerToggle(state); // include
+  c.hodlKeyManagerUseInStation(state);
+  c.hodlKeyManagerIgnore(state);
+  c.hodlKeyManagerRestoreIgnored(c.hodlKeyManagerIgnored[0]);
+  const events = calls.filter((call) => call[0]?.startsWith?.("key-manager-"));
+  assert.ok(events.length >= 5, `expected include/exclude/use/ignore/restore events, got ${JSON.stringify(events)}`);
+  for (const call of events) {
+    const detail = String(call[1]);
+    assert.ok(!detail.includes(state.result.masterIdentity) && !detail.includes(state.result.rootXpub),
+      `${call[0]} logged the wallet identity: ${detail.slice(0, 40)}…`);
+    assert.ok(detail === "5c86104e" || detail.startsWith("key-"), `${call[0]} logged an unexpected detail: ${detail}`);
+  }
 });
 
 test("invalid source inputs cannot fall back to the imported cached wallet", async () => {

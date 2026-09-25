@@ -31,6 +31,7 @@ function stationHarness(keys, pending, ignored = []) {
     hodlShowWorkspace: (id) => calls.push(["workspace", id]),
   };
   runInNewContext(slice("hodlKeyManagerStates", "hodlKeyManagerEntry") +
+    slice("hodlKeyLogLabel", "hodlKeyManagerToggle") +
     slice("hodlKeyManagerUseAllInStation", "hodlKeyManagerIgnore"), context);
   return { context, calls };
 }

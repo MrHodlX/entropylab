@@ -724,10 +724,16 @@ test("vault backups are bounded and schema-checked on both directions", () => {
   assert.ok(serializeKeyVault([]).endsWith("}\n")); // stable on-disk shape
 });
 
-test("vault identity falls back through fingerprint, xpubs, then id", () => {
-  assert.equal(keyVaultIdentity({ result: { masterFingerprint: "deadbeef", rootXpub: "xpub1", xpub: "xpub2" }, id: 7 }), "deadbeef");
+test("vault identity prefers the full wallet identity, then xpubs, fingerprint, id", () => {
+  // The 4-byte fingerprint is display metadata and can be shared by two
+  // wallets (GHSA-6rr2-5r82-grwc's Key Station sibling), so the full identity
+  // and the xpubs come first; the fingerprint only serves states that have
+  // nothing else.
+  assert.equal(keyVaultIdentity({ result: { masterIdentity: "mi", masterFingerprint: "deadbeef", rootXpub: "xpub1", xpub: "xpub2" }, id: 7 }), "mi");
+  assert.equal(keyVaultIdentity({ result: { masterFingerprint: "deadbeef", rootXpub: "xpub1", xpub: "xpub2" }, id: 7 }), "xpub1");
   assert.equal(keyVaultIdentity({ result: { rootXpub: "xpub1", xpub: "xpub2" }, id: 7 }), "xpub1");
   assert.equal(keyVaultIdentity({ result: { xpub: "xpub2" }, id: 7 }), "xpub2");
+  assert.equal(keyVaultIdentity({ result: { masterFingerprint: "deadbeef" }, id: 7 }), "deadbeef");
   assert.equal(keyVaultIdentity({ result: {}, id: 7 }), "7");
   assert.equal(keyVaultIdentity({}), "");
   assert.equal(keyVaultIdentity(null), "");
