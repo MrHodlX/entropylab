@@ -87,6 +87,19 @@ const unsignedTx = (txHex) => {
 };
 
 const kv = (key, value) => [...varBytes(key), ...varBytes(value)];
+// PSBT bytes with one more key-value pair in input map `input` (inserted
+// before the map's terminator). Walks the maps by their compact-size keys.
+const withInputPair = (psbt, input, key, value) => {
+  const bytes = [...psbt];
+  let o = 5;
+  const varint = () => { const first = bytes[o++]; if (first < 0xfd) return first; const width = first === 0xfd ? 2 : 4; let v = 0; for (let i = 0; i < width; i++) v += bytes[o++] * 2 ** (8 * i); return v; };
+  const skipMap = () => { for (let len = varint(); len; len = varint()) { o += len; const valueLen = varint(); o += valueLen; } };
+  skipMap(); // global
+  for (let n = 0; n < input; n++) skipMap();
+  for (let len = varint(); len; len = varint()) { o += len; const valueLen = varint(); o += valueLen; }
+  bytes.splice(o - 1, 0, ...kv(key, value));
+  return Uint8Array.from(bytes);
+};
 // One PSBT for one check: every input declares its prevout as a witness UTXO
 // (Core's vectors give the script and amount, not the previous
 // transaction), and the checked input carries the redeem/witness script and
@@ -386,14 +399,18 @@ test("BIP143 commits to the hash type byte as given: undefined types are consens
 // --- 4. tapscript: the OP_CODESEPARATOR position (BIP342) --------------------
 
 const TAP_KEYS = [1, 2].map((n) => { const key = new Uint8Array(32); key[31] = n; return key; });
-const tapCase = (leafFor, codeSeparator) => {
+// `sibling`: a second leaf in the tree, so the input carries two leaf
+// scripts and the verifier must pick the signed one by its hash.
+// `withLeafScript: false` drops PSBT_IN_TAP_LEAF_SCRIPT from the input.
+const tapCase = (leafFor, codeSeparator, { sibling, withLeafScript = true } = {}) => {
   const [internal, signer] = TAP_KEYS;
   const x = schnorr.getPublicKey(signer);
   const leaf = leafFor(x);
-  const out = p2tr(schnorr.getPublicKey(internal), { script: leaf }, undefined, true);
+  const tree = sibling ? [{ script: leaf }, { script: sibling(x) }] : { script: leaf };
+  const out = p2tr(schnorr.getPublicKey(internal), tree, undefined, true);
   const amount = 70_000n;
   const tx = new Transaction({ ...SCURE_OPTS, version: 2 });
-  tx.addInput({ txid: new Uint8Array(32).fill(7), index: 0, witnessUtxo: { script: out.script, amount }, tapLeafScript: out.tapLeafScript });
+  tx.addInput({ txid: new Uint8Array(32).fill(7), index: 0, witnessUtxo: { script: out.script, amount }, ...(withLeafScript ? { tapLeafScript: out.tapLeafScript } : {}) });
   tx.addOutput({ script: p2wpkh(secp256k1.getPublicKey(signer, true)), amount: 1000n });
   const digest = tx.preimageWitnessV1(0, [out.script], 0x00, [amount], codeSeparator, leaf, 0xc0);
   const signature = schnorr.sign(digest, signer, new Uint8Array(32));
@@ -410,9 +427,169 @@ for (const [name, leafFor, valid, invalid] of [
   ["IF CODESEPARATOR ENDIF <x> CHECKSIG", (x) => cat([0x63, 0xab, 0x68, 0x20], x, [0xac]), [1, NONE_RAN], [0, 2]],
   ["IF CODESEPARATOR ELSE CODESEPARATOR ENDIF <x> CHECKSIG", (x) => cat([0x63, 0xab, 0x67, 0xab, 0x68, 0x20], x, [0xac]), [1, 3], [NONE_RAN, 0]],
   ["CODESEPARATOR IF CODESEPARATOR ENDIF <x> CHECKSIG", (x) => cat([0xab, 0x63, 0xab, 0x68, 0x20], x, [0xac]), [0, 2], [NONE_RAN]],
+  // CHECKSIGADD checks a signature too: CODESEPARATOR 0 <x> CHECKSIGADD 1 NUMEQUAL.
+  ["CODESEPARATOR 0 <x> CHECKSIGADD 1 NUMEQUAL", (x) => cat([0xab, 0x00, 0x20], x, [0xba, 0x51, 0x9c]), [0], [NONE_RAN, 1]],
 ]) {
   test(`tapscript ${name}: signs position ${valid.join(" or ")}, not ${invalid.join(" or ")}`, () => {
     for (const position of valid) assert.deepEqual(tapCase(leafFor, position).map((p) => p.message), [], `position ${position}`);
     for (const position of invalid) assert.equal(tapCase(leafFor, position).length, 1, `position ${position}`);
   });
 }
+
+test("tapscript: the signed leaf is found by its hash among several leaf scripts", () => {
+  const leafFor = (x) => cat([0xab, 0x20], x, [0xac]);
+  const sibling = (x) => cat([0x20], x, [0xac]); // same key, no separator
+  assert.deepEqual(tapCase(leafFor, 0, { sibling }).map((p) => p.message), []);
+  assert.equal(tapCase(leafFor, NONE_RAN, { sibling }).length, 1, "the sibling's default position must not be borrowed");
+});
+
+test("tapscript without its leaf script: only the no-separator position can be checked", () => {
+  // No PSBT_IN_TAP_LEAF_SCRIPT, so the separator positions are unknown; the
+  // verifier checks the default a signer uses without the script. A
+  // separator-committed signature then reads as invalid: the PSBT cannot be
+  // finalized without the script either.
+  const leafFor = (x) => cat([0xab, 0x20], x, [0xac]);
+  assert.equal(tapCase(leafFor, 0, { withLeafScript: false }).length, 1);
+  assert.deepEqual(tapCase((x) => cat([0x20], x, [0xac]), NONE_RAN, { withLeafScript: false }).map((p) => p.message), []);
+});
+
+// --- 5. the remaining verdict paths and the stated limits --------------------
+
+// A legacy P2SH or P2WSH spend of `script`, signed over the code from `start`.
+const spendOf = (legacy, script, type = 0x01) => {
+  const key = randomKey(), pub = secp256k1.getPublicKey(key, true);
+  const built = typeof script === "function" ? script(pub) : script;
+  const spend = buildSpend(legacy, pub, built, type);
+  return { verdict: (start) => invalidSigs(signedPsbt(spend, key, spend.digestFrom(start), type), spend.idx), script: built };
+};
+const pk = (pub) => [33, ...pub];
+
+test("legacy commits to the hash type byte as given: undefined types are consensus valid", () => {
+  for (const type of [0x00, 0x04, 0x41, 0x7f, 0x80, 0xc1, 0xff]) {
+    const { verdict } = spendOf(true, (pub) => Uint8Array.of(...pk(pub), OP.CHECKSIG), type);
+    assert.deepEqual(verdict(0).map((p) => p.message), [], `0x${type.toString(16)}`);
+  }
+});
+
+test("P2SH-P2WPKH commits to the hash type byte as given", () => {
+  for (const type of [0x00, 0x41, 0xc3]) {
+    const key = randomKey(), pub = secp256k1.getPublicKey(key, true);
+    const tx = new Transaction({ ...SCURE_OPTS, version: 2 });
+    const amount = 90_000n;
+    tx.addInput({ txid: randomBytes(32), index: 0, witnessUtxo: { script: p2sh(p2wpkh(pub)), amount }, redeemScript: p2wpkh(pub) });
+    tx.addOutput({ script: p2wpkh(pub), amount: 1000n });
+    const digest = tx.preimageWitnessV0(0, cat([0x76, 0xa9, 0x14], hash160(pub), [0x88, 0xac]), type, amount);
+    assert.deepEqual(invalidSigs(signedPsbt({ tx, idx: 0 }, key, digest, type), 0).map((p) => p.message), [], `0x${type.toString(16)}`);
+  }
+});
+
+test("hybrid public keys (0x06/0x07) verify as Core parses them; a wrong parity tag does not", () => {
+  const key = randomKey();
+  const full = secp256k1.getPublicKey(key, false); // 04 || x || y
+  const odd = full[64] & 1;
+  const hybrid = (tag) => cat([tag], full.subarray(1));
+  for (const [tag, expect] of [[0x06 | odd, 0], [0x07 - odd, 1]]) {
+    const pub = hybrid(tag);
+    const script = cat([65], pub, [OP.CHECKSIG]);
+    const spend = buildSpend(true, pub, script, 0x01);
+    const signature = cat(secp256k1.sign(spend.digestFrom(0), key, { prehash: false, format: "der" }), [0x01]);
+    // scure refuses to encode a hybrid key, so the pair goes in by hand.
+    const psbt = withInputPair(spend.tx.toPSBT(), spend.idx, [0x02, ...pub], signature);
+    assert.equal(invalidSigs(psbt, spend.idx).length, expect, `tag 0x${tag.toString(16)}`);
+  }
+});
+
+test("a finalized P2PKH input with hash type 0 and high S is not a gate error", () => {
+  // Core's c99c49da… (tx_valid): consensus valid, so no error-severity
+  // problem may block the PSBT; the same scriptSig relabelled must.
+  const vector = vectorBySource("tx_valid.json (406b2b06bcd34d3c");
+  const [check] = vector.checks;
+  const [{ pubkey, signature }] = check.partialSigs;
+  const scriptSig = (sig) => [...varBytes(unhex(sig)), ...varBytes(unhex(pubkey))]; // two direct pushes
+  const finalProblems = (sig) => {
+    const psbt = withInputPair(psbtFor(vector, { ...check, partialSigs: [] }), 0, [0x07], scriptSig(sig));
+    return psbtInspectDoc(psbt).problems.filter((p) => p.scope === "input 0" && p.code === "final_scriptsig_bad");
+  };
+  assert.deepEqual(finalProblems(signature).map((p) => p.message), []);
+  const bad = finalProblems(relabel(signature));
+  assert.equal(bad.length, 1);
+  assert.equal(bad[0].severity, "error");
+});
+
+test("a finalized P2WPKH witness with a high-S signature is not a gate error", () => {
+  const key = randomKey(), pub = secp256k1.getPublicKey(key, true);
+  const tx = new Transaction({ ...SCURE_OPTS, version: 2 });
+  const amount = 80_000n;
+  tx.addInput({ txid: randomBytes(32), index: 0, witnessUtxo: { script: p2wpkh(pub), amount } });
+  tx.addOutput({ script: p2wpkh(pub), amount: 1000n });
+  const digest = tx.preimageWitnessV0(0, cat([0x76, 0xa9, 0x14], hash160(pub), [0x88, 0xac]), 0x01, amount);
+  const { r, s } = derInts(hex(cat(secp256k1.sign(digest, key, { prehash: false, format: "der" }), [0x01])));
+  const highS = der(r, derInt(N - big(s)), 0x01);
+  const finalProblems = (sig) => {
+    const copy = Transaction.fromPSBT(tx.toPSBT(), SCURE_OPTS);
+    copy.updateInput(0, { finalScriptWitness: [unhex(sig), pub] }, true);
+    return psbtInspectDoc(copy.toPSBT()).problems.filter((p) => p.scope === "input 0" && p.code === "final_witness_bad");
+  };
+  assert.deepEqual(finalProblems(highS).map((p) => p.message), []);
+  const bad = finalProblems(relabel(highS));
+  assert.equal(bad.length, 1);
+  assert.equal(bad[0].severity, "error");
+});
+
+test("an unbalanced script can never execute, so no signature over it is valid", () => {
+  for (const legacy of [true, false]) {
+    const balanced = spendOf(legacy, (pub) => Uint8Array.of(OP.IF, OP.ENDIF, ...pk(pub), OP.CHECKSIG));
+    assert.deepEqual(balanced.verdict(0).map((p) => p.message), [], "control: balanced");
+    for (const shape of [[OP.ENDIF], [OP.ELSE], [OP.IF]]) {
+      const unbalanced = spendOf(legacy, (pub) => Uint8Array.of(...pk(pub), OP.CHECKSIG, ...shape));
+      assert.equal(unbalanced.verdict(0).length, 1, `${legacy ? "legacy" : "BIP143"} trailing 0x${shape[0].toString(16)}`);
+    }
+  }
+});
+
+test("a script without a signature check is hashed whole, as a signer would", () => {
+  // 1 CODESEPARATOR 2: no opcode consumes a signature; the verifier falls
+  // back to the whole script rather than accuse or skip.
+  const { verdict, script } = spendOf(true, () => Uint8Array.of(0x51, OP.CODESEPARATOR, 0x52));
+  assert.deepEqual(verdict(0).map((p) => p.message), []);
+  assert.equal(verdict(2).length, 1, `from past the separator of ${hex(script)}`);
+});
+
+// Limits the verifier states, pinned so they cannot shift unnoticed: each
+// errs toward silence, never toward accusing a signature Core accepts.
+test("limit: stack values are not modelled — a branch no stack could take still counts", () => {
+  // 0 IF CODESEPARATOR ENDIF <K> CHECKSIG: the IF is never taken, so Core
+  // only ever hashes the whole script; the verifier also accepts the start
+  // past the separator.
+  for (const legacy of [true, false]) {
+    const { verdict } = spendOf(legacy, (pub) => Uint8Array.of(0x00, OP.IF, OP.CODESEPARATOR, OP.ENDIF, ...pk(pub), OP.CHECKSIG));
+    assert.deepEqual(verdict(0).map((p) => p.message), []);
+    assert.deepEqual(verdict(3).map((p) => p.message), [], "unreachable start (past the separator at byte 2), accepted");
+  }
+});
+
+test("limit: scripts that fail for other reasons are not used to accuse", () => {
+  // <K> CHECKSIG CAT: OP_CAT is disabled, so the script fails on every path,
+  // but only truncation and unbalanced conditionals are judged.
+  for (const legacy of [true, false]) {
+    const { verdict } = spendOf(legacy, (pub) => Uint8Array.of(...pk(pub), OP.CHECKSIG, 0x7e));
+    assert.deepEqual(verdict(0).map((p) => p.message), []);
+  }
+});
+
+test("the Core fixture is intact and self-describing", () => {
+  assert.match(VECTORS.source.commit, /^[0-9a-f]{40}$/);
+  for (const name of ["tx_valid.json", "tx_invalid.json"]) assert.match(VECTORS.source.sha256[name], /^[0-9a-f]{64}$/);
+  for (const vector of VECTORS.cases) {
+    assert.ok(vector.comment.length > 0, vector.source);
+    assert.ok(unsignedTx(vector.tx).length > 0);
+    for (const check of vector.checks) {
+      assert.ok(["valid", "invalid"].includes(check.expect));
+      assert.ok(check.input < vector.prevouts.length);
+      for (const { pubkey, signature } of check.partialSigs) {
+        assert.match(pubkey, /^(0[23][0-9a-f]{64}|04[0-9a-f]{128})$/);
+        assert.match(signature, /^30[0-9a-f]+$/);
+      }
+    }
+  }
+});

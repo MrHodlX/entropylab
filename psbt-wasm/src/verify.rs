@@ -1143,6 +1143,86 @@ mod tests {
         assert!(gate_error(&tx, &[map()]).is_some());
     }
 
+    /// A signature over `code` (already the serialized scriptCode) with key
+    /// [1; 32], its hash type byte appended.
+    fn sign_code(tx: &Transaction, code: &[u8], hash_type: u32) -> (Vec<u8>, Vec<u8>) {
+        let secp = Secp256k1::new();
+        let key = SecretKey::from_slice(&[1u8; 32]).unwrap();
+        let mut cache = SighashCache::new(tx);
+        let digest = ecdsa_digest(&mut cache, 0, SigVersion::Legacy, code, Amount::ZERO, hash_type).unwrap();
+        let mut sig = secp.sign_ecdsa(&Message::from_digest_slice(&digest).unwrap(), &key).serialize_der().to_vec();
+        sig.push(hash_type as u8);
+        (key.public_key(&secp).serialize().to_vec(), sig)
+    }
+
+    // IF CODESEPARATOR CODESEPARATOR ENDIF <K> CHECKSIG: three starts, two
+    // of which (past either separator) serialize to the same scriptCode.
+    fn three_starts_two_codes(pubkey: &[u8]) -> TxOut {
+        let script = [&[0x63, 0xab, 0xab, 0x68, 0x21][..], pubkey, &[0xac]].concat();
+        TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::from_bytes(script) }
+    }
+
+    #[test]
+    fn each_distinct_candidate_takes_one_budget_unit_and_duplicates_none() {
+        let (tx, _) = fixture();
+        let (pubkey, _) = sign_code(&tx, &[], 1);
+        let claim = three_starts_two_codes(&pubkey);
+        // Signed over a code no start produces: every candidate is tried.
+        let (_, sig) = sign_code(&tx, &[0xac], 1);
+        let mut budget = Budget { left: 10, noted: false };
+        let mut problems = Vec::new();
+        let mut cache = SighashCache::new(&tx);
+        let verdict = check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems);
+        assert!(matches!(verdict, Some(Err(_))), "{verdict:?}");
+        // The caller paid for the first digest; the second distinct code costs
+        // one more; the third start repeats the second and costs nothing.
+        assert_eq!(budget.left, 9);
+        assert!(problems.is_empty());
+    }
+
+    #[test]
+    fn running_out_between_candidates_accuses_nothing_and_fails_closed() {
+        let (tx, _) = fixture();
+        let (pubkey, _) = sign_code(&tx, &[], 1);
+        let claim = three_starts_two_codes(&pubkey);
+        let past_separator = [&[0x68, 0x21][..], &pubkey, &[0xac]].concat();
+        let whole = [&[0x63, 0x68, 0x21][..], &pubkey, &[0xac]].concat();
+        // Valid only for the second candidate, with no budget left for it.
+        let (_, sig) = sign_code(&tx, &past_separator, 1);
+        let mut budget = Budget { left: 0, noted: false };
+        let mut problems = Vec::new();
+        let mut cache = SighashCache::new(&tx);
+        assert_eq!(check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems), None);
+        assert!(problems.iter().any(|p| p.code == "verification_budget" && p.severity == ERROR), "{problems:?}");
+        // Valid for the first candidate: verified without touching the budget.
+        let (_, sig) = sign_code(&tx, &whole, 1);
+        let mut problems = Vec::new();
+        let mut budget = Budget { left: 0, noted: false };
+        assert_eq!(check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems), Some(Ok(())));
+        assert!(problems.is_empty());
+    }
+
+    #[test]
+    fn a_hostile_separator_count_is_bounded_by_the_budget() {
+        // 400 separators, each in its own IF block, before one CHECKSIG: 401
+        // distinct scriptCodes. The analysis stops at the budget.
+        let (tx, _) = fixture();
+        let (pubkey, sig) = sign_code(&tx, &[0xac], 1);
+        let mut script: Vec<u8> = std::iter::repeat([0x63, 0xab, 0x68]).take(400).flatten().collect();
+        script.push(0x21);
+        script.extend_from_slice(&pubkey);
+        script.push(0xac);
+        let claim = TxOut { value: Amount::from_sat(1), script_pubkey: ScriptBuf::from_bytes(script) };
+        let map = vec![pair(&format!("02{}", hex_encode(&pubkey)), &hex_encode(&sig))];
+        let mut problems = Vec::new();
+        let mut budget = Budget { left: MAX_SIGNATURE_CHECKS, noted: false };
+        let mut cache = SighashCache::new(&tx);
+        check_partial_sigs(&mut cache, 0, &map, &Spend::Legacy, &claim, None, &mut budget, &mut problems);
+        assert_eq!(budget.left, 0);
+        assert!(problems.iter().any(|p| p.code == "verification_budget"), "{problems:?}");
+        assert!(!problems.iter().any(|p| p.code == "partial_sig_invalid"), "unchecked is not invalid: {problems:?}");
+    }
+
     #[test]
     fn a_valid_legacy_partial_signature_passes_and_a_flipped_one_is_named() {
         let (tx, claim) = fixture();

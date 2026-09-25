@@ -514,6 +514,34 @@ mod tests {
     }
 
     #[test]
+    fn multisig_companion_subsets_are_bounded() {
+        let sig = h("300602010102010101");
+        // Distinct strict-DER pushes differing in S.
+        let companion = |n: u8| push_encoding(&[0x30, 0x06, 0x02, 0x01, 0x02, 0x02, 0x01, n, 0x01]);
+        let script = |count: u8| [vec![0x52], (1..=count).flat_map(|n| companion(n + 1)).collect(), h("52ae")].concat();
+        // Up to four: every subset.
+        assert_eq!(legacy_script_codes(&script(4), &sig, true).len(), 16);
+        // Five or more: none, each alone, all.
+        let codes = legacy_script_codes(&script(5), &sig, true);
+        assert_eq!(codes.len(), 7);
+        assert_eq!(codes[0], script(5));
+        assert_eq!(codes[6], h("5252ae"));
+        // A non-DER push is never a companion; a repeated one counts once.
+        let junk = [h("52"), push_encoding(&[0x30, 0x01]), companion(2), companion(2), h("52ae")].concat();
+        assert_eq!(legacy_script_codes(&junk, &sig, true).len(), 2);
+    }
+
+    #[test]
+    fn an_empty_signature_is_a_companion_and_deletes_op_0() {
+        // An empty signature on the multisig stack makes FindAndDelete remove
+        // every OP_0 on an opcode boundary (Core pushes it as the byte 0x00).
+        let sig = h("300602010102010101");
+        assert_eq!(legacy_script_codes(&h("0051ae"), &sig, true), vec![h("0051ae"), h("51ae")]);
+        // Without a multisig nothing but the own signature is removed.
+        assert_eq!(legacy_script_codes(&h("0051ac"), &sig, false), vec![h("0051ac")]);
+    }
+
+    #[test]
     fn legacy_codes_delete_own_signature_and_multisig_companions() {
         let sig = h("300602010102010101");
         // <sig> SWAP CHECKSIG (Core tx_valid, shortest DER): the push goes.
