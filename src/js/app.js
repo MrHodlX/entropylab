@@ -15433,7 +15433,7 @@ function hodlRenderVanityOut() {
     }
     let secret = hodlVanityReveal
       ? `<span class="mono vanity-pass-text">${hodlEscapeHtml(match.passphrase)}</span>`
-      : `<span class="mono vanity-pass-text" aria-hidden="true">${hodlEscapeHtml("•".repeat(12))}</span><span class="sr-only">Passphrase hidden — turn on the privacy switch to reveal</span>`;
+      : `<span class="mono vanity-pass-text" aria-hidden="true">${hodlEscapeHtml("•".repeat(12))}</span><span class="sr-only">${hodlT("Passphrase hidden — turn on the Private data switch above to reveal")}</span>`;
     return `<tr><th scope="row">${index + 1}</th><td class="mono">${match.counter.toString()}</td><td><span class="vanity-secret">${secret}${copyMarkup("data-vanity-copy", index, "Copy passphrase")}</span></td>${address}${keyCell(match)}<td class="vanity-apply-cell">${applyMarkup(match, index)}</td></tr>`;
   }).join("");
   let overflow = hodlVanityFound > hodlVanityMatches.length ? `<p class="muted">Only the first ${hodlVanityMatches.length} matches are listed; ${hodlVanityFormatCount(hodlVanityFound)} found in total.</p>` : "";
@@ -16206,7 +16206,10 @@ function hodlInitSecretFieldAutoClear() {
     hodlVanityApplying = false;
     let vanityPass = document.getElementById("vanity-pass"), vanityOut = document.getElementById("vanity-out"), vanityError = document.getElementById("vanity-error"), vanityStatus = document.getElementById("vanity-status");
     if (vanityPass) vanityPass.textContent = "";
-    if (vanityOut) vanityOut.innerHTML = "";
+    if (vanityOut) {
+      vanityOut.innerHTML = "";
+      vanityOut.style.removeProperty("--vanity-pass-width");
+    }
     if (vanityError) vanityError.textContent = "";
     if (vanityStatus) vanityStatus.textContent = "Idle. No range has been ground this session.";
     hodlVanitySyncSource();
