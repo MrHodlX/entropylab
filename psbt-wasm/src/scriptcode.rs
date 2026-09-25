@@ -22,6 +22,19 @@
 //!            given), OP_CODESEPARATOR opcodes skipped when serialized;
 //!   BIP143   the scriptCode from the start, as is;
 //!   tapscript the start's opcode position (BIP342 codesep_pos).
+//!
+//! Two bounds keep the walk as cheap as it is exact. EvalScript refuses a
+//! legacy or P2WSH script over 10,000 bytes (MAX_SCRIPT_SIZE), or one that
+//! reads more than 201 opcodes above OP_16 anywhere in its text
+//! (MAX_OPS_PER_SCRIPT — taken branch or not), before any opcode runs: a
+//! signature inside is moot, and the walk names the script instead of
+//! analysing it (v31.1 src/script/interpreter.cpp:428,452 — both checks are
+//! gated on SigVersion::BASE || WITNESS_V0). Tapscript has neither limit, so
+//! its walk (tapscript_starts) tracks the separator sets as a union-DAG in
+//! one arena — a set is a node id, forking an IF arm copies nothing — and
+//! lists at most MAX_STARTS candidates, the most one signature can be
+//! checked against under the verification budget, flagging a longer list
+//! rather than enumerating it.
 
 const OP_PUSHDATA1: u8 = 0x4c;
 const OP_PUSHDATA2: u8 = 0x4d;
@@ -39,6 +52,18 @@ const OP_CHECKSIGADD: u8 = 0xba;
 
 /// BIP342 codesep_pos when no OP_CODESEPARATOR executed.
 pub(crate) const NO_CODESEPARATOR: u32 = u32::MAX;
+
+/// Core's limits for the scripts it evaluates as SigVersion::BASE (legacy,
+/// including P2SH) or WITNESS_V0 (P2WSH): src/script/script.h. Beyond either
+/// one the script fails before any opcode runs.
+const MAX_SCRIPT_SIZE: usize = 10_000;
+const MAX_COUNTED_OPCODES: usize = 201;
+
+/// The most code starts one signature can be checked against: verify.rs
+/// spends one budget unit per start past the first out of
+/// MAX_SIGNATURE_CHECKS, so candidates past this prefix are unreachable and
+/// are reported as truncation instead of enumerated.
+pub(crate) const MAX_STARTS: usize = 256;
 
 /// One opcode as Core's GetOp reads it at `pc`: the opcode byte and the
 /// offset just past it and its push data. None at the end of the script or
@@ -171,9 +196,24 @@ pub(crate) enum Shape {
     /// ELSE/ENDIF without IF, or IF without ENDIF: EvalScript fails on every
     /// path (pre-tapscript; tapscript is not judged, OP_SUCCESS comes first).
     Unbalanced,
+    /// Over MAX_SCRIPT_SIZE or MAX_OPS_PER_SCRIPT: EvalScript refuses the
+    /// whole script before any opcode runs.
+    Overlimit,
     /// The starts some signature check can hash from, the no-separator start
     /// first when it is one. Empty when the script checks no signature.
     Starts(Vec<CodeStart>),
+}
+
+/// The tapscript side of the walk (see the module header): BIP342 codesep_pos
+/// candidates only — offsets and the multisig mark are legacy concerns.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Tapscript {
+    /// A push runs past the end.
+    Truncated,
+    /// The candidates a script-path signature can commit to, ascending,
+    /// NO_CODESEPARATOR first when it is one. At most MAX_STARTS of them;
+    /// `truncated` when more exist past the returned prefix.
+    Starts { positions: Vec<u32>, truncated: bool },
 }
 
 /// Fixed-size set of start indices (0 = no separator, k = the k-th one).
@@ -207,17 +247,29 @@ struct Frame {
     arm: usize,
 }
 
-/// The scriptCode starts of `script` (see `Shape`). The walk carries the set
-/// of separators that can be the last one executed; a separator replaces
-/// the set on its own arm, IF blocks fork it per condition value and join it
-/// at ENDIF, and every signature-checking opcode marks the set it sees.
-/// `tapscript` selects the opcodes that check signatures there
-/// (CHECKSIGADD; CHECKMULTISIG is disabled) and skips the balance verdict.
-pub(crate) fn code_starts(script: &[u8], tapscript: bool) -> Shape {
+/// The scriptCode starts of a legacy/P2SH/P2WSH `script` (see `Shape`). The
+/// walk carries the set of separators that can be the last one executed; a
+/// separator replaces the set on its own arm, IF blocks fork it per
+/// condition value and join it at ENDIF, and every signature-checking opcode
+/// marks the set it sees. Tapscript goes through `tapscript_starts`.
+pub(crate) fn code_starts(script: &[u8]) -> Shape {
+    // EvalScript checks the size before reading the script and counts
+    // opcodes as it reads them; both failures moot every signature inside.
+    if script.len() > MAX_SCRIPT_SIZE {
+        return Shape::Overlimit;
+    }
     let mut ops = Vec::new();
     let mut pc = 0;
+    let mut counted = 0usize;
     while pc < script.len() {
         let Some((op, end)) = next_op(script, pc) else { return Shape::Truncated };
+        if op > 0x60 {
+            // OP_16; pushes, OP_1NEGATE/OP_RESERVED and small integers do not.
+            counted += 1;
+            if counted > MAX_COUNTED_OPCODES {
+                return Shape::Overlimit;
+            }
+        }
         ops.push((op, end));
         pc = end;
     }
@@ -232,11 +284,12 @@ pub(crate) fn code_starts(script: &[u8], tapscript: bool) -> Shape {
             _ => {}
         }
     }
-    balanced &= depth == 0;
-    if !balanced && !tapscript {
+    if depth != 0 || !balanced {
         return Shape::Unbalanced;
     }
 
+    // The limits gate keeps bits ≤ 202, so the dense bitsets below are a
+    // handful of words each and the IF frames few.
     let separators: Vec<(usize, usize)> = ops
         .iter()
         .enumerate()
@@ -251,34 +304,27 @@ pub(crate) fn code_starts(script: &[u8], tapscript: bool) -> Shape {
     let mut next_separator = 1;
     for &(op, _) in &ops {
         match op {
-            // Unbalanced tapscript: no structure to follow, so no separator
-            // replaces the set — every one stays possible.
-            OP_CODESEPARATOR if !balanced => {
-                current.union(&Set::only(bits, next_separator));
-                next_separator += 1;
-            }
             OP_CODESEPARATOR => {
                 current = Set::only(bits, next_separator);
                 next_separator += 1;
             }
-            OP_IF | OP_NOTIF if balanced => {
+            OP_IF | OP_NOTIF => {
                 frames.push(Frame { when_true: current.clone(), when_false: current.clone(), arm: 0 });
             }
-            OP_ELSE if balanced => {
+            OP_ELSE => {
                 let frame = frames.last_mut().expect("balanced");
                 if frame.arm % 2 == 0 { frame.when_true = current } else { frame.when_false = current }
                 frame.arm += 1;
                 current = if frame.arm % 2 == 0 { frame.when_true.clone() } else { frame.when_false.clone() };
             }
-            OP_ENDIF if balanced => {
+            OP_ENDIF => {
                 let mut frame = frames.pop().expect("balanced");
                 if frame.arm % 2 == 0 { frame.when_true = current } else { frame.when_false = current }
                 frame.when_true.union(&frame.when_false);
                 current = frame.when_true;
             }
             OP_CHECKSIG | OP_CHECKSIGVERIFY => reached.union(&current),
-            OP_CHECKSIGADD if tapscript => reached.union(&current),
-            OP_CHECKMULTISIG | OP_CHECKMULTISIGVERIFY if !tapscript => {
+            OP_CHECKMULTISIG | OP_CHECKMULTISIGVERIFY => {
                 reached.union(&current);
                 multisig.union(&current);
             }
@@ -290,6 +336,126 @@ pub(crate) fn code_starts(script: &[u8], tapscript: bool) -> Shape {
         CodeStart { offset, position, multisig: multisig.contains(index) }
     };
     Shape::Starts((0..bits).filter(|&index| reached.contains(index)).map(start).collect())
+}
+
+/// The tapscript candidates of `script` (see `Tapscript`): the same dataflow
+/// as `code_starts` — a separator replaces the set of possible last-executed
+/// separators, IF/ELSE fork it per condition value, ENDIF joins the arms,
+/// every signature check marks the set it sees — but each set is an arena
+/// node: a base node for "no separator", a leaf per separator, a union node
+/// per join. Forking an IF arm copies a u32, never a set, so the walk is
+/// linear in the script however deep the nesting or dense the separators
+/// (the quadratic bitset copies of #535 are gone). The reached sets flatten
+/// once, deduplicating through the DAG, into the ascending prefix of
+/// MAX_STARTS the budget can reach; `truncated` flags the rest.
+pub(crate) fn tapscript_starts(script: &[u8]) -> Tapscript {
+    let mut ops = Vec::new();
+    let mut pc = 0;
+    while pc < script.len() {
+        let Some((op, end)) = next_op(script, pc) else { return Tapscript::Truncated };
+        ops.push(op);
+        pc = end;
+    }
+    let mut depth = 0usize;
+    let mut balanced = true;
+    for &op in &ops {
+        match op {
+            OP_IF | OP_NOTIF => depth += 1,
+            OP_ELSE if depth == 0 => balanced = false,
+            OP_ENDIF if depth == 0 => balanced = false,
+            OP_ENDIF => depth -= 1,
+            _ => {}
+        }
+    }
+    balanced &= depth == 0;
+
+    // Node encoding: [u32::MAX, u32::MAX] is the base set (no separator ran,
+    // node 0); [position, u32::MAX] the one-separator set {position};
+    // [a, b] otherwise the union of nodes a and b.
+    const NONE: u32 = u32::MAX;
+    let mut arena: Vec<[u32; 2]> = vec![[NONE; 2]];
+    let union = |arena: &mut Vec<[u32; 2]>, a: u32, b: u32| -> u32 {
+        if a == b {
+            return a;
+        }
+        arena.push([a, b]);
+        arena.len() as u32 - 1
+    };
+    let mut current: u32 = 0;
+    let mut reached: Option<u32> = None;
+    // One open IF block: the sets each condition value's chain of arms flows
+    // out (slot 0 = even arms), and which slot the running arm feeds.
+    let mut frames: Vec<([u32; 2], usize)> = Vec::new();
+    for (position, &op) in ops.iter().enumerate() {
+        match op {
+            OP_CODESEPARATOR => {
+                arena.push([position as u32, NONE]);
+                let leaf = arena.len() as u32 - 1;
+                // Unbalanced tapscript has no structure to follow: no
+                // separator replaces the set, every one stays possible.
+                current = if balanced { leaf } else { union(&mut arena, current, leaf) };
+            }
+            OP_IF | OP_NOTIF if balanced => frames.push(([current, current], 0)),
+            OP_ELSE if balanced => {
+                let (slots, arm) = frames.last_mut().expect("balanced");
+                slots[*arm] = current;
+                *arm ^= 1;
+                current = slots[*arm];
+            }
+            OP_ENDIF if balanced => {
+                let (mut slots, arm) = frames.pop().expect("balanced");
+                slots[arm] = current;
+                current = union(&mut arena, slots[0], slots[1]);
+            }
+            OP_CHECKSIG | OP_CHECKSIGVERIFY | OP_CHECKSIGADD => {
+                reached = Some(match reached {
+                    None => current,
+                    Some(r) => union(&mut arena, r, current),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    let Some(root) = reached else {
+        return Tapscript::Starts { positions: vec![], truncated: false };
+    };
+    // Flatten: the separator positions reachable under the DAG, deduplicated,
+    // and whether the no-separator base occurs.
+    let mut seen_node = vec![0u64; arena.len().div_ceil(64)];
+    let mut seen_position = vec![0u64; ops.len().div_ceil(64)];
+    let mut has_base = false;
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        let (word, bit) = ((id / 64) as usize, 1u64 << (id % 64));
+        if seen_node[word] & bit != 0 {
+            continue;
+        }
+        seen_node[word] |= bit;
+        match arena[id as usize] {
+            [NONE, NONE] => has_base = true,
+            [position, NONE] => seen_position[(position / 64) as usize] |= 1 << (position % 64),
+            [a, b] => {
+                stack.push(a);
+                stack.push(b);
+            }
+        }
+    }
+    let mut positions = Vec::new();
+    if has_base {
+        positions.push(NO_CODESEPARATOR);
+    }
+    let mut truncated = false;
+    for position in 0..ops.len() as u32 {
+        if seen_position[(position / 64) as usize] >> (position % 64) & 1 == 1 {
+            if positions.len() == MAX_STARTS {
+                truncated = true;
+                break;
+            }
+            positions.push(position);
+        }
+    }
+    Tapscript::Starts { positions, truncated }
 }
 
 /// The most signature-shaped pushes a legacy multisig scriptCode may embed
@@ -343,6 +509,209 @@ mod tests {
         (0..text.len()).step_by(2).map(|i| u8::from_str_radix(&text[i..i + 2], 16).unwrap()).collect()
     }
 
+    /// The pre-fix tapscript walk (#535), kept as a differential oracle: the
+    /// union of "last separator executed" sets over every signature check, as
+    /// a dense bitset copied per IF arm. The hand-checked cases above pin the
+    /// same BIP342 contract; this exists so the budgeted walk can be compared
+    /// against it on generated scripts, adversarial nesting included.
+    fn reference_tapscript_positions(script: &[u8]) -> Vec<u32> {
+        let mut ops = Vec::new();
+        let mut pc = 0;
+        while pc < script.len() {
+            let Some((op, end)) = next_op(script, pc) else { return vec![] };
+            ops.push((op, end));
+            pc = end;
+        }
+        let mut depth = 0usize;
+        let mut balanced = true;
+        for &(op, _) in &ops {
+            match op {
+                OP_IF | OP_NOTIF => depth += 1,
+                OP_ELSE if depth == 0 => balanced = false,
+                OP_ENDIF if depth == 0 => balanced = false,
+                OP_ENDIF => depth -= 1,
+                _ => {}
+            }
+        }
+        balanced &= depth == 0;
+        let separators: Vec<usize> = ops
+            .iter()
+            .enumerate()
+            .filter(|(_, (op, _))| *op == OP_CODESEPARATOR)
+            .map(|(position, _)| position)
+            .collect();
+        let bits = separators.len() + 1;
+        let mut reached = Set::new(bits);
+        let mut current = Set::only(bits, 0);
+        let mut frames: Vec<Frame> = Vec::new();
+        let mut next_separator = 1;
+        for &(op, _) in &ops {
+            match op {
+                OP_CODESEPARATOR if !balanced => {
+                    current.union(&Set::only(bits, next_separator));
+                    next_separator += 1;
+                }
+                OP_CODESEPARATOR => {
+                    current = Set::only(bits, next_separator);
+                    next_separator += 1;
+                }
+                OP_IF | OP_NOTIF if balanced => {
+                    frames.push(Frame { when_true: current.clone(), when_false: current.clone(), arm: 0 });
+                }
+                OP_ELSE if balanced => {
+                    let frame = frames.last_mut().expect("balanced");
+                    if frame.arm % 2 == 0 { frame.when_true = current } else { frame.when_false = current }
+                    frame.arm += 1;
+                    current = if frame.arm % 2 == 0 { frame.when_true.clone() } else { frame.when_false.clone() };
+                }
+                OP_ENDIF if balanced => {
+                    let mut frame = frames.pop().expect("balanced");
+                    if frame.arm % 2 == 0 { frame.when_true = current } else { frame.when_false = current }
+                    frame.when_true.union(&frame.when_false);
+                    current = frame.when_true;
+                }
+                OP_CHECKSIG | OP_CHECKSIGVERIFY | OP_CHECKSIGADD => reached.union(&current),
+                _ => {}
+            }
+        }
+        (0..bits)
+            .filter(|&index| reached.contains(index))
+            .map(|index| if index == 0 { NO_CODESEPARATOR } else { separators[index - 1] as u32 })
+            .collect()
+    }
+
+    /// Generated balanced and unbalanced tapscripts: the budgeted walk must
+    /// name exactly the candidates the reference walk does. Structure,
+    /// separators, pushes (whose data can read as opcodes) and ELSE chains
+    /// are all the generator's choice.
+    #[test]
+    fn tapscript_walk_matches_the_reference_enumeration() {
+        let mut state = 0x853c49e6748fea9bu64;
+        let mut rand = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for case in 0..2000 {
+            let mut script = Vec::new();
+            let mut depth = 0u32;
+            for _ in 0..1 + rand() % 60 {
+                match rand() % 10 {
+                    0..=2 => script.extend_from_slice(&[0x01, (rand() % 256) as u8]), // a 1-byte push
+                    3 => script.extend_from_slice(&[0x02, 0xab, 0xac]), // opcodes as data
+                    4 => script.push(OP_CODESEPARATOR),
+                    5 => script.push([OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CHECKSIGADD][(rand() % 3) as usize]),
+                    6 if depth < 12 => {
+                        script.push([OP_IF, OP_NOTIF][(rand() % 2) as usize]);
+                        depth += 1;
+                    }
+                    7 if depth > 0 => script.push(OP_ELSE),
+                    _ if depth > 0 => {
+                        script.push(OP_ENDIF);
+                        depth -= 1;
+                    }
+                    _ => script.push(0x61), // NOP
+                }
+            }
+            // Sometimes leave the conditionals open (unbalanced tapscript).
+            while depth > 0 && rand() % 4 != 0 {
+                script.push(OP_ENDIF);
+                depth -= 1;
+            }
+            let reference = reference_tapscript_positions(&script);
+            match tapscript_starts(&script) {
+                Tapscript::Starts { positions, truncated } if reference.len() <= MAX_STARTS => {
+                    assert_eq!(positions, reference, "case {case}: script {script:02x?}");
+                    assert!(!truncated, "case {case}");
+                }
+                Tapscript::Starts { positions, truncated } => {
+                    assert_eq!(positions, reference[..MAX_STARTS], "case {case}: prefix of {script:02x?}");
+                    assert!(truncated, "case {case}");
+                }
+                other => panic!("case {case}: {other:?}"),
+            }
+        }
+    }
+
+    /// 300 possible separators before one CHECKSIG: the walk returns the
+    /// first MAX_STARTS ascending — the most any signature can be checked
+    /// against given the verification budget — and says there were more,
+    /// rather than enumerating the rest. Separators past the CHECKSIG change
+    /// nothing.
+    #[test]
+    fn tapscript_candidates_beyond_budget_reach_are_a_prefix_and_truncated() {
+        // IF CODESEPARATOR ELSE ENDIF: the taken arm replaces, the empty arm
+        // keeps the entry set, so each block adds its separator to the
+        // candidates — block j's separator sits at opcode position 4*j + 1.
+        let block = [OP_IF, OP_CODESEPARATOR, OP_ELSE, OP_ENDIF];
+        let sep_pos = |j: usize| (4 * j + 1) as u32;
+        let tail = [0x51, OP_CHECKSIG, OP_CODESEPARATOR]; // the check, then a separator it ignores
+        let build = |blocks: usize| {
+            let mut script = Vec::new();
+            for _ in 0..blocks {
+                script.extend_from_slice(&block);
+            }
+            script.extend_from_slice(&tail);
+            script
+        };
+        let reference = reference_tapscript_positions(&build(300));
+        assert_eq!(reference.len(), 301, "no-separator plus one per block; the trailing separator is after the check");
+        match tapscript_starts(&build(300)) {
+            Tapscript::Starts { positions, truncated } => {
+                assert!(truncated);
+                assert_eq!(positions, reference[..MAX_STARTS]);
+                assert_eq!(positions[0], NO_CODESEPARATOR);
+                assert_eq!(positions[1], sep_pos(0));
+                assert_eq!(*positions.last().unwrap(), sep_pos(MAX_STARTS - 2));
+            }
+            other => panic!("{other:?}"),
+        }
+        // Exactly MAX_STARTS candidates: complete, the same enumeration.
+        let reference = reference_tapscript_positions(&build(MAX_STARTS - 1));
+        assert_eq!(reference.len(), MAX_STARTS);
+        assert_eq!(tapscript_starts(&build(MAX_STARTS - 1)), Tapscript::Starts { positions: reference, truncated: false });
+    }
+
+    /// The shapes of issue #535 against the budgeted walk, at the issue's
+    /// scale: quadratic behaviour here froze psbtInspectDoc for about a
+    /// minute (80k nested IF+separator, 240 KB). On the fixed walk both are
+    /// milliseconds; the ceiling only fails a regression, at ~10x the slowest
+    /// machine observed for the linear implementation.
+    #[test]
+    fn hostile_separator_analysis_stays_within_its_time_budget() {
+        use std::time::Instant;
+        const CEILING: std::time::Duration = std::time::Duration::from_secs(8);
+        // 2.56 million separators in a row, then OP_1 CHECKSIG.
+        let mut row = vec![OP_CODESEPARATOR; 2_560_000];
+        row.extend_from_slice(&[0x51, OP_CHECKSIG]);
+        let start = Instant::now();
+        let shape = tapscript_starts(&row);
+        let elapsed = start.elapsed();
+        assert_eq!(shape, Tapscript::Starts { positions: vec![2_559_999], truncated: false });
+        assert!(elapsed < CEILING, "2.56M separators in a row took {elapsed:?}");
+        // 150k nested IF blocks each holding a separator (the issue's 80k was
+        // already a minute; go deeper to keep margin against the old walk).
+        let depth = 150_000;
+        let mut nested = Vec::with_capacity(3 * depth + 2);
+        for _ in 0..depth {
+            nested.extend_from_slice(&[OP_IF, OP_CODESEPARATOR]);
+        }
+        nested.extend_from_slice(&[0x51, OP_CHECKSIG]);
+        nested.extend(std::iter::repeat(OP_ENDIF).take(depth));
+        let start = Instant::now();
+        let shape = tapscript_starts(&nested);
+        let elapsed = start.elapsed();
+        // One candidate — each separator replaces the set, the CHECKSIG sees
+        // only the innermost — yet the old walk copied a full bitset per IF.
+        assert_eq!(shape, Tapscript::Starts { positions: vec![(2 * depth - 1) as u32], truncated: false });
+        assert!(elapsed < CEILING, "150k nested IF+separator took {elapsed:?}");
+        // The legacy/P2WSH gate: 2.56M separators refuse before analysis.
+        let start = Instant::now();
+        assert_eq!(code_starts(&row), Shape::Overlimit);
+        assert!(start.elapsed() < CEILING, "over-limit gate took {:?}", start.elapsed());
+    }
+
     #[test]
     fn strip_codeseparators_removes_opcodes_but_keeps_pushed_data() {
         // Bare opcodes go, everything else stays.
@@ -364,7 +733,7 @@ mod tests {
         // PUSHDATA4 lengths near 2^32 (would wrap a 32-bit sum), truncated
         // PUSHDATA headers, and a length exactly one past the end.
         for script in [h("4efbffffff"), h("515151515151515151514ef6ffffff"), h("4c"), h("4d01"), h("4e010000"), h("4c02ab"), h("03abab")] {
-            assert_eq!(code_starts(&script, false), Shape::Truncated, "{script:02x?}");
+            assert_eq!(code_starts(&script), Shape::Truncated, "{script:02x?}");
             let _ = strip_codeseparators(&script);
             let _ = find_and_delete(&script, &[0xab]);
         }
@@ -438,7 +807,7 @@ mod tests {
     }
 
     fn starts(script: &str) -> Vec<(usize, u32, bool)> {
-        match code_starts(&h(script), false) {
+        match code_starts(&h(script)) {
             Shape::Starts(starts) => starts.into_iter().map(|s| (s.offset, s.position, s.multisig)).collect(),
             other => panic!("{script}: {other:?}"),
         }
@@ -489,16 +858,16 @@ mod tests {
 
     #[test]
     fn scripts_that_can_never_execute_are_named() {
-        assert_eq!(code_starts(&h("68ac"), false), Shape::Unbalanced, "ENDIF without IF");
-        assert_eq!(code_starts(&h("67ac"), false), Shape::Unbalanced, "ELSE without IF");
-        assert_eq!(code_starts(&h("63ac"), false), Shape::Unbalanced, "IF without ENDIF");
-        assert_eq!(code_starts(&h("51ab05ac"), false), Shape::Truncated);
+        assert_eq!(code_starts(&h("68ac")), Shape::Unbalanced, "ENDIF without IF");
+        assert_eq!(code_starts(&h("67ac")), Shape::Unbalanced, "ELSE without IF");
+        assert_eq!(code_starts(&h("63ac")), Shape::Unbalanced, "IF without ENDIF");
+        assert_eq!(code_starts(&h("51ab05ac")), Shape::Truncated);
     }
 
     #[test]
     fn tapscript_positions_count_every_opcode() {
-        let tap = |script: &str| match code_starts(&h(script), true) {
-            Shape::Starts(starts) => starts.into_iter().map(|s| s.position).collect::<Vec<_>>(),
+        let tap = |script: &str| match tapscript_starts(&h(script)) {
+            Tapscript::Starts { positions, truncated: false } => positions,
             other => panic!("{other:?}"),
         };
         let x = format!("20{}", "02".repeat(32));
@@ -509,6 +878,51 @@ mod tests {
         assert_eq!(tap(&format!("ab{x}ae")), Vec::<u32>::new(), "CHECKMULTISIG checks nothing in tapscript");
         // Unbalanced tapscript is not judged here; every separator stays possible.
         assert_eq!(tap(&format!("ab68{x}ac")), vec![NO_CODESEPARATOR, 0]);
+        // A truncated tapscript parse is named, as before.
+        assert_eq!(tapscript_starts(&h("4c02ab")), Tapscript::Truncated);
+    }
+
+    /// Bitcoin Core v31.1's gates for the script versions that have them
+    /// (src/script/interpreter.cpp EvalScript): a legacy or P2WSH script over
+    /// 10,000 bytes (MAX_SCRIPT_SIZE), or reading more than 201 opcodes above
+    /// OP_16 (MAX_OPS_PER_SCRIPT — counted for every opcode read, taken branch
+    /// or not), fails before any opcode runs, so no signature in it can ever
+    /// be consumed. The walk names such a script instead of analysing it —
+    /// which is also what keeps its accounting cheap.
+    #[test]
+    fn scripts_past_the_base_and_witness_v0_limits_are_named() {
+        // MAX_SCRIPT_SIZE: 10,000 is fine, 10,001 is not (Core: `>`).
+        assert_eq!(code_starts(&vec![0x51; 10_000]), Shape::Starts(vec![]));
+        assert_eq!(code_starts(&vec![0x51; 10_001]), Shape::Overlimit);
+        // MAX_OPS_PER_SCRIPT: 201 opcodes above OP_16 pass, the 202nd fails.
+        assert_eq!(code_starts(&vec![0x61; 201]), Shape::Starts(vec![]));
+        assert_eq!(code_starts(&vec![0x61; 202]), Shape::Overlimit);
+        // Pushes, small integers (OP_1 = 0x51, OP_16 = 0x60) and OP_RESERVED
+        // (0x50) do not count, however many.
+        let mut script = vec![0x51; 300];
+        script.extend_from_slice(&[0x60, 0x50, 0x4f, 0xac]);
+        assert!(matches!(code_starts(&script), Shape::Starts(_)), "300 small integers + CHECKSIG: 1 counted opcode");
+        // The count is over opcodes read, not opcodes that can run: one in a
+        // branch never taken counts all the same. IF + 199 NOPs + ENDIF is
+        // 201 exactly; one more NOP is 202.
+        let mut dead = vec![0x63];
+        dead.extend_from_slice(&vec![0x61; 199]);
+        dead.push(0x68);
+        assert!(matches!(code_starts(&dead), Shape::Starts(_)), "201 counted exactly");
+        dead.insert(dead.len() - 1, 0x61);
+        assert_eq!(code_starts(&dead), Shape::Overlimit, "202nd counted opcode sits in a dead branch");
+        // Core's order: the size/op-count gate fires even for a script whose
+        // conditionals do not balance; a truncated push past the gate stays
+        // named Truncated (GetOp fails where the count is still under).
+        let mut unbalanced = vec![0x63];
+        unbalanced.extend_from_slice(&vec![0x61; 202]);
+        assert_eq!(code_starts(&unbalanced), Shape::Overlimit);
+        assert_eq!(code_starts(&h("4c02ab")), Shape::Truncated);
+        // P2WSH is subject to the same limits (SigVersion::WITNESS_V0); the
+        // caller selects them via `tapscript: false`... tapscript has neither
+        // limit: 202 NOPs and 10,001 bytes analyse normally.
+        assert_eq!(tapscript_starts(&vec![0x61; 202]), Tapscript::Starts { positions: vec![], truncated: false });
+        assert_eq!(tapscript_starts(&vec![0x51; 10_001]), Tapscript::Starts { positions: vec![], truncated: false });
     }
 
     #[test]

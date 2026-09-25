@@ -17,6 +17,8 @@
 //! script hashing to the claimed program, a Taproot control block proving
 //! its script under the claimed output key).
 
+use std::rc::Rc;
+
 use bitcoin::blockdata::script::{Instruction, Script};
 use bitcoin::consensus::{encode, Decodable};
 use bitcoin::hashes::{hash160, sha256, sha256d, Hash};
@@ -38,12 +40,36 @@ pub(crate) const WARNING: &str = "warning";
 // sanitize pass uses (a 5 MB hostile PSBT must not freeze the editor).
 const MAX_SIGNATURE_CHECKS: usize = 256;
 const _: () = assert!(1 << scriptcode::MAX_MULTISIG_COMPANIONS <= MAX_SIGNATURE_CHECKS);
+const _: () = assert!(
+    scriptcode::MAX_STARTS <= MAX_SIGNATURE_CHECKS,
+    "every start the analysis lists must be checkable within the budget"
+);
 
 /// The verification budget: `take()` returns false once exhausted, and the
 /// caller notes the exhaustion in the problem list exactly once.
 struct Budget {
     left: usize,
     noted: bool,
+}
+
+/// One script's separator analysis, memoized for the whole run: every
+/// signature of an input is checked against the same script, and the result
+/// depends only on the script's bytes. Identity is the content, not the
+/// buffer — spend scripts are re-buffered each input, so a stale pointer
+/// match carries the old bytes alongside.
+struct AnalysisMemo<T> {
+    script: Option<Box<[u8]>>,
+    result: Option<Rc<T>>,
+}
+
+impl<T> AnalysisMemo<T> {
+    fn get(&mut self, script: &[u8], compute: impl FnOnce(&[u8]) -> T) -> Rc<T> {
+        if self.script.as_deref() != Some(script) {
+            self.script = Some(script.into());
+            self.result = Some(Rc::new(compute(script)));
+        }
+        Rc::clone(self.result.as_ref().expect("stored above or by an earlier call"))
+    }
 }
 
 impl Budget {
@@ -244,6 +270,7 @@ fn check_ecdsa(
     sig: &[u8],
     budget: &mut Budget,
     problems: &mut Vec<Problem>,
+    starts_memo: &mut AnalysisMemo<scriptcode::Shape>,
 ) -> Option<Result<(), String>> {
     let hash_type = *sig.last()? as u32;
     let p2wpkh_code;
@@ -263,18 +290,22 @@ fn check_ecdsa(
         // or a future witness version: nothing to hash.
         Spend::P2wsh(None) | Spend::WrappedP2wsh(_, None) | Spend::P2tr(_) | Spend::Unknown | Spend::UnknownWitness => return None,
     };
-    let starts = match scriptcode::code_starts(script, false) {
+    let shape = starts_memo.get(script, scriptcode::code_starts);
+    let starts = match &*shape {
         scriptcode::Shape::Starts(starts) if starts.is_empty() => {
             // No opcode in the script checks a signature: none it carries is
             // ever consumed. Hash the whole script, what a signer would.
             vec![scriptcode::CodeStart { offset: 0, position: scriptcode::NO_CODESEPARATOR, multisig: false }]
         }
-        scriptcode::Shape::Starts(starts) => starts,
+        scriptcode::Shape::Starts(starts) => starts.clone(),
         scriptcode::Shape::Truncated => {
             return Some(Err("cannot be valid: its script has a push running past the end, so it never executes".into()))
         }
         scriptcode::Shape::Unbalanced => {
             return Some(Err("cannot be valid: its script's IF/ELSE/ENDIF do not balance, so it never executes".into()))
+        }
+        scriptcode::Shape::Overlimit => {
+            return Some(Err("cannot be valid: its script exceeds consensus limits (10,000 bytes / 201 opcodes), so it never executes".into()))
         }
     };
     if !scriptcode::is_valid_signature_encoding(sig) {
@@ -375,16 +406,25 @@ fn taproot_sighash_script_spend(
 /// positions of the separators an execution can run last before a
 /// signature check, no-separator first when it is one. Without the script,
 /// only the no-separator default — what a signer uses absent a script.
-fn tapscript_codesep_positions(map: &[RawPair], leaf_hash: TapLeafHash) -> Vec<u32> {
+/// `truncated` when the script offers more candidates than the verification
+/// budget can reach (the prefix is exactly what the budget could try).
+fn tapscript_codesep_positions(
+    map: &[RawPair],
+    leaf_hash: TapLeafHash,
+    memo: &mut AnalysisMemo<scriptcode::Tapscript>,
+) -> (Vec<u32>, bool) {
     let script = map.iter().filter(|pair| pair.key[0] == 0x15).find_map(|pair| {
         let (&version, script) = pair.value.split_last()?;
         let version = LeafVersion::from_consensus(version).ok()?;
         (version == LeafVersion::TapScript && TapLeafHash::from_script(Script::from_bytes(script), version) == leaf_hash)
             .then_some(script)
     });
-    match script.map(|script| scriptcode::code_starts(script, true)) {
-        Some(scriptcode::Shape::Starts(starts)) if !starts.is_empty() => starts.into_iter().map(|start| start.position).collect(),
-        _ => vec![scriptcode::NO_CODESEPARATOR],
+    match script.map(|script| memo.get(script, scriptcode::tapscript_starts)) {
+        Some(shape) => match &*shape {
+            scriptcode::Tapscript::Starts { positions, truncated } if !positions.is_empty() => (positions.clone(), *truncated),
+            _ => (vec![scriptcode::NO_CODESEPARATOR], false),
+        },
+        None => (vec![scriptcode::NO_CODESEPARATOR], false),
     }
 }
 
@@ -424,6 +464,7 @@ fn check_partial_sigs(
     sighash_field: Option<u32>,
     budget: &mut Budget,
     problems: &mut Vec<Problem>,
+    starts_memo: &mut AnalysisMemo<scriptcode::Shape>,
 ) {
     let scope = format!("input {index}");
     for pair in map.iter().filter(|pair| pair.key[0] == 0x02) {
@@ -457,7 +498,7 @@ fn check_partial_sigs(
         if !budget.take(problems) {
             continue;
         }
-        match check_ecdsa(cache, index, spend, claim, pubkey, &pair.value, budget, problems) {
+        match check_ecdsa(cache, index, spend, claim, pubkey, &pair.value, budget, problems, starts_memo) {
             Some(Ok(())) => {}
             Some(Err(why)) => problems.push(Problem::warning(
                 scope.clone(),
@@ -480,6 +521,7 @@ fn check_tap_sigs(
     prevouts: &Option<Vec<TxOut>>,
     budget: &mut Budget,
     problems: &mut Vec<Problem>,
+    tap_memo: &mut AnalysisMemo<scriptcode::Tapscript>,
 ) {
     let Spend::P2tr(output_key) = spend else { return };
     let scope = format!("input {index}");
@@ -524,8 +566,9 @@ fn check_tap_sigs(
         let leaf_hash = TapLeafHash::from_slice(leaf_hash).expect("32 bytes");
         // Valid when it verifies at some position; each position past the
         // first is another digest and takes its own budget.
+        let (positions, truncated) = tapscript_codesep_positions(map, leaf_hash, tap_memo);
         let mut verdict = None;
-        for (n, position) in tapscript_codesep_positions(map, leaf_hash).into_iter().enumerate() {
+        for (n, &position) in positions.iter().enumerate() {
             if n > 0 && !budget.take(problems) {
                 verdict = None;
                 break;
@@ -537,11 +580,25 @@ fn check_tap_sigs(
             }
         }
         if let Some(Err(why)) = verdict {
-            problems.push(Problem::warning(
-                scope.clone(),
-                "tap_sig_invalid",
-                format!("script-path signature (xonly {short}…) {why}"),
-            ));
+            if truncated {
+                // The unreachable tail may contain a position the signature
+                // committed to: unchecked, an error so the gate fails closed,
+                // never reported invalid (same shape as the multisig cap).
+                problems.push(Problem::error(
+                    scope.clone(),
+                    "verification_incomplete",
+                    format!(
+                        "a signature is unchecked: its script allows more separator positions than the {} the verification budget reaches",
+                        scriptcode::MAX_STARTS
+                    ),
+                ));
+            } else {
+                problems.push(Problem::warning(
+                    scope.clone(),
+                    "tap_sig_invalid",
+                    format!("script-path signature (xonly {short}…) {why}"),
+                ));
+            }
         }
     }
 }
@@ -582,6 +639,7 @@ fn check_final_scriptsig(
     has_final_witness: bool,
     budget: &mut Budget,
     problems: &mut Vec<Problem>,
+    starts_memo: &mut AnalysisMemo<scriptcode::Shape>,
 ) {
     let scope = format!("input {index}");
     let script = Script::from_bytes(value);
@@ -653,7 +711,7 @@ fn check_final_scriptsig(
     if !budget.take(problems) {
         return;
     }
-    match check_ecdsa(cache, index, &Spend::Legacy, claim, pubkey, sig, budget, problems) {
+    match check_ecdsa(cache, index, &Spend::Legacy, claim, pubkey, sig, budget, problems, starts_memo) {
         Some(Ok(())) => {}
         Some(Err(why)) => problems.push(Problem::error(scope, "final_scriptsig_bad", format!("final scriptSig {why}"))),
         None => problems.push(Problem::error(scope, "final_scriptsig_bad", "final scriptSig sighash cannot be computed")),
@@ -676,6 +734,7 @@ fn check_final_witness(
     prevouts: &Option<Vec<TxOut>>,
     budget: &mut Budget,
     problems: &mut Vec<Problem>,
+    starts_memo: &mut AnalysisMemo<scriptcode::Shape>,
 ) {
     let scope = format!("input {index}");
     let items: Vec<&[u8]> = witness.iter().collect();
@@ -701,7 +760,7 @@ fn check_final_witness(
             if !budget.take(problems) {
                 return;
             }
-            match check_ecdsa(cache, index, spend, claim, items[1], items[0], budget, problems) {
+            match check_ecdsa(cache, index, spend, claim, items[1], items[0], budget, problems, starts_memo) {
                 Some(Ok(())) => {}
                 Some(Err(why)) => problems.push(Problem::error(scope, "final_witness_bad", format!("final witness {why}"))),
                 None => problems.push(Problem::error(scope, "final_witness_bad", "final witness sighash cannot be computed")),
@@ -887,6 +946,8 @@ pub(crate) fn analyze(tx: &Transaction, inputs: &[Vec<RawPair>]) -> Vec<Problem>
 
     let mut cache = SighashCache::new(tx);
     let mut budget = Budget { left: MAX_SIGNATURE_CHECKS, noted: false };
+    let mut starts_memo = AnalysisMemo { script: None, result: None };
+    let mut tap_memo = AnalysisMemo { script: None, result: None };
     for (index, map) in inputs.iter().enumerate() {
         let scope = format!("input {index}");
         let (witness_claim, non_witness_claim) = &claims[index];
@@ -946,14 +1007,14 @@ pub(crate) fn analyze(tx: &Transaction, inputs: &[Vec<RawPair>]) -> Vec<Problem>
         let sighash_field = input_field(map, 0x03)
             .filter(|value| value.len() == 4)
             .map(|value| u32::from_le_bytes(value.try_into().unwrap()));
-        check_partial_sigs(&mut cache, index, map, &spend, &claim, sighash_field, &mut budget, &mut problems);
-        check_tap_sigs(&mut cache, index, map, &spend, &all_claims, &mut budget, &mut problems);
+        check_partial_sigs(&mut cache, index, map, &spend, &claim, sighash_field, &mut budget, &mut problems, &mut starts_memo);
+        check_tap_sigs(&mut cache, index, map, &spend, &all_claims, &mut budget, &mut problems, &mut tap_memo);
         let final_witness = input_field(map, 0x08).and_then(|value| Witness::consensus_decode(&mut &value[..]).ok());
         if let Some(value) = input_field(map, 0x07) {
-            check_final_scriptsig(&mut cache, index, value, &spend, &claim, final_witness.is_some(), &mut budget, &mut problems);
+            check_final_scriptsig(&mut cache, index, value, &spend, &claim, final_witness.is_some(), &mut budget, &mut problems, &mut starts_memo);
         }
         if let Some(witness) = &final_witness {
-            check_final_witness(&mut cache, index, witness, &spend, &claim, &all_claims, &mut budget, &mut problems);
+            check_final_witness(&mut cache, index, witness, &spend, &claim, &all_claims, &mut budget, &mut problems, &mut starts_memo);
         }
     }
     problems
@@ -1021,7 +1082,7 @@ mod tests {
             let hash_type = hash_type.as_i64().unwrap() as i32 as u32;
             let mut expected = hex(expected.as_str().unwrap());
             expected.reverse(); // Core prints uint256 byte-reversed
-            assert!(matches!(scriptcode::code_starts(&script, false), scriptcode::Shape::Starts(_) | scriptcode::Shape::Unbalanced), "vector {n} parses");
+            assert!(matches!(scriptcode::code_starts(&script), scriptcode::Shape::Starts(_) | scriptcode::Shape::Unbalanced), "vector {n} parses");
             let code = scriptcode::strip_codeseparators(&script);
             if code.len() < script.len() {
                 with_separators += 1;
@@ -1189,7 +1250,8 @@ mod tests {
         let mut budget = Budget { left: 10, noted: false };
         let mut problems = Vec::new();
         let mut cache = SighashCache::new(&tx);
-        let verdict = check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems);
+        let mut memo = AnalysisMemo { script: None, result: None };
+        let verdict = check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems, &mut memo);
         assert!(matches!(verdict, Some(Err(_))), "{verdict:?}");
         // The caller paid for the first digest; the second distinct code costs
         // one more; the third start repeats the second and costs nothing.
@@ -1209,20 +1271,25 @@ mod tests {
         let mut budget = Budget { left: 0, noted: false };
         let mut problems = Vec::new();
         let mut cache = SighashCache::new(&tx);
-        assert_eq!(check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems), None);
+        let mut memo = AnalysisMemo { script: None, result: None };
+        assert_eq!(check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems, &mut memo), None);
         assert!(problems.iter().any(|p| p.code == "verification_budget" && p.severity == ERROR), "{problems:?}");
         // Valid for the first candidate: verified without touching the budget.
         let (_, sig) = sign_code(&tx, &whole, 1);
         let mut problems = Vec::new();
         let mut budget = Budget { left: 0, noted: false };
-        assert_eq!(check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems), Some(Ok(())));
+        let mut memo = AnalysisMemo { script: None, result: None };
+        assert_eq!(check_ecdsa(&mut cache, 0, &Spend::Legacy, &claim, &pubkey, &sig, &mut budget, &mut problems, &mut memo), Some(Ok(())));
         assert!(problems.is_empty());
     }
 
     #[test]
-    fn a_hostile_separator_count_is_bounded_by_the_budget() {
-        // 400 separators, each in its own IF block, before one CHECKSIG: 401
-        // distinct scriptCodes. The analysis stops at the budget.
+    fn a_script_core_can_never_run_is_refused_before_separator_accounting() {
+        // 400 IF CODESEPARATOR ENDIF blocks before one CHECKSIG: 1201 opcodes
+        // above OP_16 — past MAX_OPS_PER_SCRIPT, so EvalScript fails the
+        // script on any path before any of the separators is reached. The
+        // signature is moot and gets the never-executes verdict at once;
+        // the budget is untouched.
         let (tx, _) = fixture();
         let (pubkey, sig) = sign_code(&tx, &[0xac], 1);
         let mut script: Vec<u8> = std::iter::repeat([0x63, 0xab, 0x68]).take(400).flatten().collect();
@@ -1234,10 +1301,80 @@ mod tests {
         let mut problems = Vec::new();
         let mut budget = Budget { left: MAX_SIGNATURE_CHECKS, noted: false };
         let mut cache = SighashCache::new(&tx);
-        check_partial_sigs(&mut cache, 0, &map, &Spend::Legacy, &claim, None, &mut budget, &mut problems);
-        assert_eq!(budget.left, 0);
-        assert!(problems.iter().any(|p| p.code == "verification_budget"), "{problems:?}");
-        assert!(!problems.iter().any(|p| p.code == "partial_sig_invalid"), "unchecked is not invalid: {problems:?}");
+        let mut memo = AnalysisMemo { script: None, result: None };
+        check_partial_sigs(&mut cache, 0, &map, &Spend::Legacy, &claim, None, &mut budget, &mut problems, &mut memo);
+        assert_eq!(budget.left, MAX_SIGNATURE_CHECKS - 1, "{problems:?}");
+        let [problem] = problems.as_slice() else { panic!("{problems:?}") };
+        assert_eq!(problem.code, "partial_sig_invalid");
+        assert!(problem.message.contains("never executes"), "{problem:?}");
+        // Inside the limits the same shape verifies as before: 60 blocks.
+        let mut script: Vec<u8> = std::iter::repeat([0x63, 0xab, 0x68]).take(60).flatten().collect();
+        script.push(0x21);
+        script.extend_from_slice(&pubkey);
+        script.push(0xac);
+        let claim = TxOut { value: Amount::from_sat(1), script_pubkey: ScriptBuf::from_bytes(script) };
+        let mut problems = Vec::new();
+        let mut memo = AnalysisMemo { script: None, result: None };
+        check_partial_sigs(&mut cache, 0, &map, &Spend::Legacy, &claim, None, &mut budget, &mut problems, &mut memo);
+        let [problem] = problems.as_slice() else { panic!("{problems:?}") };
+        assert_eq!(problem.code, "partial_sig_invalid");
+        assert!(!problem.message.contains("never executes"), "{problem:?}");
+    }
+
+    /// More candidate separator positions than the budget can ever reach: the
+    /// prefix still verifies a signature that commits to it, and one that
+    /// does not is reported unchecked (fail closed), never invalid.
+    #[test]
+    fn tapscript_positions_past_budget_reach_are_incomplete_not_invalid() {
+        use bitcoin::taproot::{LeafVersion, TapLeafHash};
+        let secp = Secp256k1::new();
+        let keypair = secp256k1::Keypair::from_secret_key(&secp, &SecretKey::from_slice(&[1u8; 32]).unwrap());
+        let (xonly, _parity) = keypair.x_only_public_key();
+        // 300 IF CODESEPARATOR ELSE ENDIF blocks: each adds its separator to
+        // the candidates (the empty arm keeps the entry set), 301 in all —
+        // more than the budget can reach. Block j's separator sits at opcode
+        // position 4*j + 1.
+        let mut leaf = Vec::new();
+        for _ in 0..300 {
+            leaf.extend_from_slice(&[0x63, 0xab, 0x67, 0x68]);
+        }
+        leaf.extend_from_slice(&[0x20]);
+        leaf.extend_from_slice(&xonly.serialize());
+        leaf.push(0xac);
+        let leaf_hash = TapLeafHash::from_script(Script::from_bytes(&leaf), LeafVersion::TapScript);
+        let claim = TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::new_p2tr(&secp, xonly, None) };
+        let (tx, _) = fixture();
+        let prevouts = vec![claim.clone()];
+        let sign_at = |position: u32| {
+            let mut cache = SighashCache::new(&tx);
+            let digest = taproot_sighash_script_spend(&mut cache, 0, &Some(prevouts.clone()), leaf_hash, position, TapSighashType::Default).unwrap();
+            secp.sign_schnorr_no_aux_rand(&Message::from_digest_slice(&digest).unwrap(), &keypair).serialize().to_vec()
+        };
+        let map_for = |sig: &[u8]| {
+            let mut key = hex_encode(&[0x14]);
+            key.push_str(&hex_encode(&xonly.serialize()));
+            key.push_str(&hex_encode(&leaf_hash.to_byte_array()));
+            let mut leaf_with_version = leaf.clone();
+            leaf_with_version.push(0xc0);
+            vec![pair("01", &witness_utxo_value(&claim)), pair("15", &hex_encode(&leaf_with_version)), pair(&key, &hex_encode(sig))]
+        };
+        // A signature at a position inside the prefix (block 5's separator,
+        // opcode position 21) still verifies, with no incomplete report.
+        let problems = analyze(&tx, &[map_for(&sign_at(4 * 5 + 1))]);
+        assert!(problems.is_empty(), "{problems:?}");
+        // One at a position past the prefix (block 280's separator): correct
+        // under the script but unreachable within budget — unchecked, an
+        // error, and never named invalid.
+        let problems = analyze(&tx, &[map_for(&sign_at(4 * 280 + 1))]);
+        assert!(!problems.iter().any(|p| p.code == "tap_sig_invalid"), "{problems:?}");
+        assert!(problems.iter().any(|p| p.code == "verification_incomplete" && p.severity == ERROR), "{problems:?}");
+        // A junk signature: budget cost is capped at MAX_SIGNATURE_CHECKS
+        // however many candidates the script offers.
+        let mut junk = sign_at(0);
+        junk[10] ^= 1;
+        let problems = analyze(&tx, &[map_for(&junk)]);
+        assert!(!problems.iter().any(|p| p.code == "tap_sig_invalid"), "unchecked is not invalid: {problems:?}");
+        assert!(problems.iter().any(|p| p.code == "verification_incomplete" && p.severity == ERROR), "{problems:?}");
     }
 
     #[test]
