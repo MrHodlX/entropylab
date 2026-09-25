@@ -2837,7 +2837,16 @@
       assert(Math.abs(mark.right - box.right) < 12, "The hint should sit at the switcher's right edge");
       assert(mark.bottom <= strip.getBoundingClientRect().top + 1, "The hint should sit above the strip");
       // One click reaches the end, and the label clears itself on arrival.
+      // Headless Firefox on software rendering can stall the frames a smooth
+      // scroll is driven by, so the scroll-end event lands past the timeout;
+      // force the instant path the app already uses for reduced motion. The
+      // scroll-left assertion below still proves the click reached the end.
+      const realMatchMedia = window.matchMedia;
+      window.matchMedia = (query) => /prefers-reduced-motion/.test(query)
+        ? { matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }
+        : realMatchMedia(query);
       hint.click();
+      window.matchMedia = realMatchMedia;
       await until(() => hint.hidden, "one click to reach the end and clear the hint");
       assert(
         strip.scrollWidth - strip.clientWidth - strip.scrollLeft <= 1,
