@@ -2496,6 +2496,47 @@
       await until(() => tabs().length === start + n - 1, "address tab deletion");
     }
   });
+  await test("Key Station tabs are keyed by the wallet, not its fingerprint (GHSA-6rr2-5r82-grwc sibling)", async () => {
+    // The same colliding seeds as the SP test: both master fingerprints are
+    // 5c86104e. The pre-fix commit dedup matched on the fingerprint alone,
+    // so committing the second wallet overwrote the first wallet's tab in
+    // place and took over its id — and every SP tab sourced from it.
+    const seedA = "abandon arm moon abandon abandon abandon abandon abandon abandon abandon abandon ability";
+    const seedB = "abandon auto pyramid abandon abandon abandon abandon abandon abandon abandon abandon abstract";
+    const keyTabs = document.getElementById("key-tabs");
+    const committed = () => keyTabs.querySelectorAll(".key-tab:not(.is-lab)").length;
+    const derive = async (seed) => {
+      document.getElementById("key-tab-lab").click();
+      await chooseMode("Seed phrase");
+      // The lab defaults to 24 words and earlier tests leave a passphrase
+      // behind; both hold Derive disabled, and the passphrase changes the
+      // wallet too.
+      const length = document.getElementById("seed-length-select");
+      length.value = "12";
+      length.dispatchEvent(new Event("change", { bubbles: true }));
+      input(document.getElementById("pass"), "");
+      input(await until(() => document.getElementById("seed"), "seed input"), seed);
+      (await until(() => !document.getElementById("go").disabled && document.getElementById("go"), "Derive Key")).click();
+      await until(() => document.getElementById("out").textContent.trim(), "derived key result");
+      return document.getElementById("out").textContent;
+    };
+    const start = committed();
+    const resultA = await derive(seedA);
+    equal(committed(), start + 1, "the first seed did not commit a tab");
+    const resultB = await derive(seedB);
+    equal(committed(), start + 2, "a second wallet sharing the fingerprint did not get its own tab");
+    assert(resultA !== resultB, "the second wallet shows the first wallet's result");
+    // Committing the first wallet again updates its tab in place: still two.
+    const againA = await derive(seedA);
+    equal(committed(), start + 2, "re-deriving an existing wallet added a duplicate tab");
+    equal(againA, resultA, "the updated tab shows a different wallet's result");
+    // Remove exactly the tabs this test added (they are the last two).
+    while (committed() > start) {
+      keyTabs.lastElementChild.click();
+      document.getElementById("delete-key").click();
+      await wait(0);
+    }
+  });
   await test("An SP address tab copies its address from the text, the QR, and the button", async () => {
     document.querySelector('#workspace [data-workspace="sp"]').click();
     await until(() => !document.getElementById("sp-card").hidden, "Silent Payments workspace");
@@ -2796,7 +2837,16 @@
       assert(Math.abs(mark.right - box.right) < 12, "The hint should sit at the switcher's right edge");
       assert(mark.bottom <= strip.getBoundingClientRect().top + 1, "The hint should sit above the strip");
       // One click reaches the end, and the label clears itself on arrival.
+      // Headless Firefox on software rendering can stall the frames a smooth
+      // scroll is driven by, so the scroll-end event lands past the timeout;
+      // force the instant path the app already uses for reduced motion. The
+      // scroll-left assertion below still proves the click reached the end.
+      const realMatchMedia = window.matchMedia;
+      window.matchMedia = (query) => /prefers-reduced-motion/.test(query)
+        ? { matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }
+        : realMatchMedia(query);
       hint.click();
+      window.matchMedia = realMatchMedia;
       await until(() => hint.hidden, "one click to reach the end and clear the hint");
       assert(
         strip.scrollWidth - strip.clientWidth - strip.scrollLeft <= 1,

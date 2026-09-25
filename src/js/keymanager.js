@@ -5,7 +5,10 @@ export const KEY_VAULT_VERSION = 2;
 export const KEY_VAULT_MAX_KEYS = 100;
 
 export function keyVaultIdentity(state) {
-  return String(state?.result?.masterFingerprint || state?.result?.rootXpub || state?.result?.xpub || state?.id || "");
+  // The full wallet identity first: the 4-byte master fingerprint is display
+  // metadata and can be shared by two wallets (GHSA-6rr2-5r82-grwc's Key
+  // Station sibling); keying on it merged two wallets into one vault entry.
+  return String(state?.result?.masterIdentity || state?.result?.rootXpub || state?.result?.xpub || state?.result?.masterFingerprint || state?.id || "");
 }
 
 function vaultEntry(entry) {
