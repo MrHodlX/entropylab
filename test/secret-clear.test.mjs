@@ -308,6 +308,12 @@ test("Vanity grinder salt, matches, and running workers are cleared", () => {
   assert.match(lifecycle, /vanityPass\.textContent\s*=\s*""/);
   assert.match(lifecycle, /getElementById\("vanity-out"\)/);
   assert.match(lifecycle, /vanityOut\.innerHTML\s*=\s*""/);
+  // The masked column is sized from the passphrase lengths; that width goes
+  // with the matches, on the wipe and when results are cleared.
+  assert.match(lifecycle, /vanityOut\.style\.removeProperty\("--vanity-pass-width"\)/);
+  const renderStart = app.indexOf("function hodlRenderVanityOut()");
+  const render = app.slice(renderStart, app.indexOf("\nfunction ", renderStart + 1));
+  assert.match(render, /box\.style\.removeProperty\("--vanity-pass-width"\)/);
   assert.match(lifecycle, /getElementById\("vanity-error"\)/);
   assert.match(lifecycle, /vanityError\.textContent\s*=\s*""/);
 });
