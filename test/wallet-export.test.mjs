@@ -657,7 +657,6 @@ test("template, build script, and app wiring ship the export", () => {
   assert.match(app, /hodlWalletExport\.buildWalletDat\(\s*hodlWalletResult\s*,\s*withSecrets\s*,\s*hodlWalletDatDeps\(\s*\)\s*,\s*creationTime\s*\)/);
   assert.match(app, /hodlWalletExport\.walletDatFilename\(hodlWalletResult, withSecrets\)/);
   assert.match(app, /document\.getElementById\("download-wallet-dat"\)/);
-  assert.match(app, /class="btn secondary green save-wallet-dat"/);
 });
 
 // --- UI wiring: the real app.js controls rendered against stubbed globals ---

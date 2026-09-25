@@ -1412,7 +1412,7 @@ function hodlPrivateDataControls(descriptionId, scope = "wallet") {
     <p class="label">${hodlT("Downloads")}</p>
     <p class="edge-note ${privateSheet ? "is-private" : "is-public"} recovery-download-disclosure" id="recovery-sheet-disclosure"><strong>${privateSheet ? hodlT("Private export:") : hodlT("Watch-only export:")}</strong> ${disclosure}</p>
     ${hodlWalletDatBirthdayField()}
-    <button class="btn secondary green save-recovery-sheet" id="save" type="button" aria-describedby="recovery-sheet-disclosure">${downloadLabel}</button>
+    <button class="btn secondary ${privateSheet ? "red" : "green"} save-recovery-sheet" id="save" type="button" aria-describedby="recovery-sheet-disclosure">${downloadLabel}</button>
     ${hodlWalletDatControl(privateSheet)}
   </div>`;
 }
@@ -1422,7 +1422,8 @@ function hodlWalletDatControl(includePrivate) {
   // the reveal toggle, so the label and filename never lie for an imported
   // watch-only wallet (issue #366).
   const withSecrets = includePrivate && hodlWalletExport.hasPrivateDescriptors(hodlWalletResult);
-  return `<button class="btn secondary green save-wallet-dat" id="download-wallet-dat" type="button" aria-describedby="recovery-sheet-disclosure wallet-dat-birthday-help">${hodlWalletExport.walletDatButtonLabel(withSecrets)}</button>`;
+  // A download carrying private material wears the destructive red.
+  return `<button class="btn secondary ${withSecrets ? "red" : "green"} save-wallet-dat" id="download-wallet-dat" type="button" aria-describedby="recovery-sheet-disclosure wallet-dat-birthday-help">${hodlWalletExport.walletDatButtonLabel(withSecrets)}</button>`;
 }
 // The footer opens on the wallet birthday, titled and explained the way
 // Key Station titles a field: label, what the choice does, then the picker.
