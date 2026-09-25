@@ -2454,6 +2454,48 @@
     await until(() => tabs().length === start, "second address tab deletion");
     assert(document.getElementById("delete-sp").disabled, "Minus stayed available on the station tab");
   });
+  await test("SP address tabs are keyed by the derived keys, not the wallet fingerprint (GHSA-6rr2-5r82-grwc)", async () => {
+    // Two valid BIP39 seeds whose master fingerprints collide at 5c86104e
+    // (found by brute force, 127,677 trials). The fingerprint is 4 display
+    // bytes; the wallets are different. The pre-fix dedup keyed address tabs
+    // on fingerprint + account + network + label, so deriving the second
+    // seed selected the first seed's tab, showed its address, and wiped the
+    // second seed's keys — an address the second wallet's backup cannot
+    // recover. Both derives below are unlabeled, mainnet, account 0.
+    document.querySelector('#workspace [data-workspace="sp"]').click();
+    await until(() => !document.getElementById("sp-card").hidden, "Silent Payments workspace");
+    const seedA = "abandon arm moon abandon abandon abandon abandon abandon abandon abandon abandon ability";
+    const seedB = "abandon auto pyramid abandon abandon abandon abandon abandon abandon abandon abandon abstract";
+    const tabs = () => [...document.querySelectorAll("#sp-tabs [role=tab]")];
+    const selected = () => tabs().find((tab) => tab.getAttribute("aria-selected") === "true");
+    const label = () => selected()?.querySelector(".key-tab-label").textContent.trim();
+    const bench = () => document.getElementById("sp-tab-bench");
+    const derive = async (seed) => {
+      bench().click();
+      input(document.getElementById("sp-key"), seed);
+      document.getElementById("sp-derive").click();
+      await until(() => document.getElementById("sp-address-value")?.textContent.startsWith("sp1q"), "SP address tab");
+      return document.getElementById("sp-address-value").textContent.trim();
+    };
+    const start = tabs().length;
+    const addressA = await derive(seedA);
+    const nameA = label();
+    const addressB = await derive(seedB);
+    const nameB = label();
+    equal(nameA, nameB, "the seeds do not actually share a fingerprint");
+    equal(tabs().length, start + 2, "two wallets sharing a fingerprint did not get two address tabs");
+    assert(addressA !== addressB, "both wallets show the same address — the second wallet's keys were dropped");
+    // Deriving the first wallet again still reuses its tab, with its address.
+    const again = await derive(seedA);
+    equal(tabs().length, start + 2, "re-deriving an existing address added a duplicate tab");
+    equal(again, addressA, "the reused tab shows a different address than before");
+    // Clean up both tabs (labels collide, so delete by position).
+    for (let n = 2; n > 0; n--) {
+      tabs().filter((tab) => !tab.id.includes("bench")).at(-1).click();
+      document.getElementById("delete-sp").click();
+      await until(() => tabs().length === start + n - 1, "address tab deletion");
+    }
+  });
   await test("An SP address tab copies its address from the text, the QR, and the button", async () => {
     document.querySelector('#workspace [data-workspace="sp"]').click();
     await until(() => !document.getElementById("sp-card").hidden, "Silent Payments workspace");
