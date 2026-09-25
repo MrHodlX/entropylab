@@ -1671,7 +1671,10 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 /* Every column carries a title, the operators an empty one, so the symbols sit
    on the same line as the values without a hand-tuned offset. */
 .vanity-formula-col { display: flex; flex: 1 1 0; min-width: 0; flex-direction: column; justify-content: flex-start; align-items: center; gap: 4px; }
-.vanity-formula-col.vanity-formula-op { flex: 0 0 auto; }
+.vanity-formula-col.vanity-formula-op { flex: 0 0 auto; padding-inline: var(--space-control); }
+/* The typed term needs only a few characters: it keeps its equal share on a
+   phone but stops at 220px, and the two value columns take the rest. */
+.vanity-formula-col.vanity-formula-input { max-width: 220px; }
 /* The shared label, with its block margins dropped so the columns stay level.
    The operators carry an empty one, which still needs a line box to hold the
    row open. */
@@ -1688,25 +1691,22 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .vanity-prefix-row input:not([type="radio"]):not([type="checkbox"]) { width: 100%; min-width: 0; margin-top: 0; text-align: center; }
 .vanity-secret { display: inline-flex; align-items: center; gap: 6px; }
 .vanity-secret .copy-button { flex: 0 0 auto; }
-/* The selected key, restated where the grind reads from it: which key, what
-   kind, and its starting passphrase verbatim. */
-/* The selected key reads, it does not take input: square and edgeless on the
-   same ground the key view's summary bar uses. The border stays unpainted so
-   nothing shifts by a pixel. */
-.vanity-source {
-  padding: 14px 16px 16px;
-  border: 1px solid transparent;
-  background: color-mix(in oklab, var(--surface-2) 28%, var(--bg));
-}
+/* The selected key, restated where the grind reads from it with the key
+   view's own summary block (.key-summary), then its starting passphrase
+   verbatim. */
 .vanity-source-block[hidden] { display: none; }
-.vanity-source-block > .label { margin-top: 0; }
-.vanity-source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-.vanity-source-key { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 14px; font-weight: 600; }
-.vanity-source-key code { font-family: var(--mono); }
-.vanity-source-head .muted { font-size: 12px; }
-.vanity-source > .label { margin-top: var(--space-section); }
-.vanity-source #vanity-pass { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
+.vanity-source-block > .label:first-child { margin-top: 0; }
 .vanity-apply-cell { white-space: nowrap; }
+/* The privacy switch opens the matches with the key view's step before its
+   values, and every cell in a match row sits on the row's centre line. */
+#vanity-out > .wallet-data-actions { margin-bottom: var(--space-component); }
+#vanity-out tbody :is(td, th) { vertical-align: middle; }
+.vanity-pass-text { display: inline-block; width: var(--vanity-pass-width, 12ch); white-space: nowrap; }
+/* Scanning breaks: the formula, the found-passphrase note, the stop switch,
+   and the closing action row each open on the wider seam. The formula's gap
+   is its label's own margin, since the grid around it does not collapse. */
+#vanity-prefix-label,
+#vanity-card > :is(.edge-note.is-public, .vanity-first-row, .current-item-actions) { margin-top: var(--space-major); }
 .vanity-key { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
 .vanity-key code { font-family: var(--mono); }
 .vanity-apply { min-height: 36px; padding: 4px 12px; font-size: 12px; }
@@ -2111,8 +2111,10 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .label:has(+ .label-description) { margin-bottom: 4px; }
 /* A toggle's title does the same job as a label, so a description written to
    sit under it sits the same way. */
+.label-description { margin-top: 8px; }
 .label + .label-description,
-.psbted-map > h3 + .label-description,
+.psbted-map > h3 + .label-description { margin-top: 8px; margin-bottom: 0; }
+
 :is(.derivation-advanced, .key-group, .msig-import, .sources, .wallet-advanced) > summary + :is(.label-description, .field-note) { margin-top: 0; margin-bottom: 0; }
 /* The exception: a checkbox's own text is not a heading over content. It sits
    inside the control, on one line with the box, so it owns no gap either side.
@@ -2891,7 +2893,9 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 }
 .key-group.is-revealed > summary { color: var(--danger-bright); }
 .private-field > .label { display: inline-flex; align-items: center; margin: 0; }
-.private-field.is-revealed > .label { color: var(--danger-bright); }
+/* A table column holding private values titles itself the same way. */
+.private-heading { display: inline-flex; align-items: center; }
+.private-field.is-revealed > .label, .private-heading.is-revealed { color: var(--danger-bright); }
 .privacy-bar-state { color: var(--fg); font-weight: var(--toolbar-row-weight, 600); }
 .privacy-bar-hint { font-size: 12px; }
 .privacy-bar.is-revealed {

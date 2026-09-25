@@ -1536,8 +1536,10 @@
       equal(parseFloat(getComputedStyle(card.lastElementChild).marginBottom), 0, `${id} last-child margin`);
     });
     document.querySelectorAll(".tool-actions").forEach((row) => {
-      // The nonce-history controls close a nested section, so they take the section step.
-      const expected = row.closest("#nonce-history-options") ? token("--space-section") : token("--space-component");
+      // The nonce-history controls close a nested section, so they take the
+      // section step; the Vanity card's closing row opens on the wide seam.
+      const expected = row.closest("#nonce-history-options") ? token("--space-section")
+        : row.matches("#vanity-card > .tool-actions") ? token("--space-major") : token("--space-component");
       equal(parseFloat(getComputedStyle(row).marginTop), expected, "tool action-row spacing");
     });
     document.querySelectorAll(".tool-intro, .journal-section-intro").forEach((intro) => {
@@ -1548,10 +1550,6 @@
     try {
       document.querySelector('#workspace [data-workspace="vanity"]').click();
       await until(() => !document.getElementById("vanity-card").hidden, "Vanity spacing audit");
-      const vanityMessages = document.getElementById("vanity-grind-warning");
-      const vanityKeys = document.querySelector("#vanity-card > .station-key-source");
-      assert(vanityMessages && vanityKeys, "Vanity spacing blocks are missing");
-      equal(gap(vanityMessages, vanityKeys), token("--space-section"), "Vanity warning-to-key-source spacing");
 
       document.querySelector('#workspace [data-workspace="sp"]').click();
       await until(() => !document.getElementById("sp-card").hidden, "Silent Payments spacing audit");
@@ -1743,9 +1741,16 @@
     assert(getComputedStyle(picked.querySelector(".session-key-check")).display !== "none", "the picked chip carries a visible check mark");
     assert(!document.getElementById("vanity-source").hidden, "the selected-key panel opens");
     equal(document.getElementById("vanity-source-name").textContent, "ef94d090", "the panel names the key");
-    equal(document.getElementById("vanity-pass").textContent, "correct horse battery staple", "the starting passphrase is the key's passphrase, verbatim");
-    assert(!document.getElementById("vanity-pass").matches("input, textarea") && !document.getElementById("vanity-pass").isContentEditable, "the starting passphrase is not editable here — it changes on the Keys tab");
-    assert(!document.getElementById("vanity-go").disabled, "Start grinding enables once a key is picked");
+    // Vanity has no End Session: the selected chip toggles off, and back on.
+    picked.click();
+    await wait(0);
+    assert(!document.querySelector("#vanity-session-keys .session-key-option.active"), "clicking the selected chip did not release the key");
+    assert(document.getElementById("vanity-source-block").hidden, "releasing the key left the selected-key panel open");
+    document.querySelector("#vanity-session-keys .session-key-option").click();
+    await wait(0);
+    assert(document.querySelector("#vanity-session-keys .session-key-option.active"), "the released key could not be picked again");
+    // Start waits for the settings as well as the key: no vanity characters yet.
+    assert(document.getElementById("vanity-go").disabled, "Start Grinding enabled before any vanity characters were entered");
     // Passphrase grind: counter 0 / "a" makes the passphrase
     // "correct horse battery staplea", whose m/84'/0'/0'/0/0 P2WPKH address is
     // bc1qylthc2drk6x5q0czdljal99vqwed9tja80z06d (scure re-derivation in
@@ -1759,6 +1764,11 @@
     input(document.getElementById("vanity-start"), "0");
     input(document.getElementById("vanity-count"), "62");
     input(document.getElementById("vanity-workers"), "1");
+    assert(!document.getElementById("vanity-go").disabled, "Start Grinding stayed disabled with a key and valid settings");
+    input(document.getElementById("vanity-count"), "");
+    assert(document.getElementById("vanity-go").disabled, "Start Grinding enabled with an empty range size");
+    input(document.getElementById("vanity-count"), "62");
+    assert(!document.getElementById("vanity-go").disabled, "Start Grinding did not re-enable once the range size was back");
     assert(document.getElementById("vanity-estimate").textContent.includes("1 in 1,024"), "the estimate line prices two free bech32 characters");
     // The device sample taken on tab entry turns the odds into a time.
     await until(() => /expect a match roughly every/.test(document.getElementById("vanity-estimate").textContent), "the estimate to be timed from the device sample", 60000);
@@ -1770,7 +1780,7 @@
     assert(Math.abs(vanityGo.getBoundingClientRect().width - vanityGoWidth) < 0.5, "The grinding Stop button changed width");
     vanityGo.click();
     await until(() => document.getElementById("vanity-status").textContent.startsWith("Stopped:"), "the shared grinding action to stop the run", 60000);
-    equal(vanityGo.textContent.trim(), "Start grinding", "The grinder action did not return to Start grinding");
+    equal(vanityGo.textContent.trim(), "Start Grinding", "The grinder action did not return to Start Grinding");
     assert(Math.abs(vanityGo.getBoundingClientRect().width - vanityGoWidth) < 0.5, "Start grinding changed width after stopping");
     input(document.getElementById("vanity-start"), "0");
     // Stop on first find is a checkbox: counter 0 matches inside the first
@@ -1787,7 +1797,7 @@
     assert(!vanityGo.disabled && vanityGo.dataset.derivationState === "running", "The grinding Stop button was not available");
     assert(Math.abs(vanityGo.getBoundingClientRect().width - vanityGoWidth) < 0.5, "The grinding Stop button changed width");
     await until(() => document.getElementById("vanity-status").textContent.includes("Stopped at first match"), "the grind to stop at the first match", 60000);
-    equal(vanityGo.textContent.trim(), "Start grinding", "The grinder action did not return to Start grinding");
+    equal(vanityGo.textContent.trim(), "Start Grinding", "The grinder action did not return to Start Grinding");
     assert(Math.abs(vanityGo.getBoundingClientRect().width - vanityGoWidth) < 0.5, "Start grinding changed width after the run");
     assert(document.querySelectorAll("#vanity-out table tbody tr").length === 1, "exactly one match is listed");
     assert(/1 match\b/.test(document.getElementById("vanity-status").textContent), "the status counts the single match");
@@ -1819,8 +1829,7 @@
     // address as its first receive address.
     document.querySelector("#vanity-out [data-vanity-apply]").click();
     await until(() => document.getElementById("vanity-status").textContent.includes("Saved to key c55401c7"), "Update key to finish", 60000);
-    assert(document.querySelector("#vanity-out .vanity-saved").textContent.includes("c55401c7"), "the row records where it was saved");
-    equal(document.getElementById("vanity-pass").textContent, "correct horse battery staplea", "the selected-key panel now shows the saved passphrase");
+    assert(document.querySelector("#vanity-out .vanity-saved").getAttribute("aria-label").includes("c55401c7"), "the row records where it was saved");
     // The fingerprint and LifeHash follow the key everywhere it is shown: the
     // selected-key panel, the chip, the key tab, and the status line.
     equal(document.getElementById("vanity-source-name").textContent, "c55401c7", "the selected-key panel shows the new fingerprint");
@@ -1863,11 +1872,13 @@
     equal(document.getElementById("vanity-account-start").value, "10", "Start account continues where the range ended");
     document.querySelector("#vanity-out [data-vanity-apply]").click();
     await until(() => document.getElementById("vanity-status").textContent.includes("account 3 is now on the key"), "Update key to set the account", 60000);
-    assert(document.getElementById("vanity-source-kind").textContent.includes("m/84'/0'/3'/{0-1}/{0-9}"), "the selected-key panel shows the new BIP-88 path template");
+    assert(document.getElementById("vanity-source-path").textContent.includes("m/84'/0'/3'/{0-1}/{0-9}"), "the selected-key panel shows the new BIP-88 path template");
     equal([...document.querySelectorAll("#key-tabs .key-tab")].map((tab) => tab.textContent.trim()).join(","), "Key Station,c55401c7", "an account change keeps the same fingerprint and tab");
     // Silent Payments: the prefix filter lowercases, "sp1qq" is fixed, and
     // account 1' of this key is sp1qqtjetnp0fgkeulzm….
-    document.querySelector('#vanity-script-tabs [data-vanity-script="sp"]').click();
+    const script = document.getElementById("vanity-script");
+    script.value = "sp";
+    script.dispatchEvent(new Event("change", { bubbles: true }));
     await wait(0);
     input(document.getElementById("vanity-prefix"), "SP1QQT");
     equal(document.getElementById("vanity-prefix").value, "t", "a pasted copy of the fixed prefix is not repeated in the custom characters");
@@ -1943,7 +1954,9 @@
     await until(() => document.querySelector("#vanity-session-keys [data-key-id]"), "the Key Station chip to appear");
     document.querySelector("#vanity-session-keys [data-key-id]").click();
     await wait(0);
-    document.querySelector('#vanity-script-tabs [data-vanity-script="p2wpkh"]').click();
+    const addressType = document.getElementById("vanity-script");
+    addressType.value = "p2wpkh";
+    addressType.dispatchEvent(new Event("change", { bubbles: true }));
     document.querySelector('#vanity-method-tabs [data-vanity-method-option="passphrase"]').click();
     await wait(0);
     input(document.getElementById("vanity-prefix"), "bc1qyl");

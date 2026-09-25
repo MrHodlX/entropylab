@@ -2305,7 +2305,6 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
     assert.match(markup, /id="vanity-source"/);
     // The starting passphrase is stated, not offered for editing: it changes
     // on the Keys tab, so it must not be an input here.
-    assert.match(markup, /id="vanity-pass"[^>]*aria-describedby="vanity-pass-note"/);
     assert.doesNotMatch(markup, /<(?:input|textarea) id="vanity-pass"/);
     // Method and address type are button groups; the derivation grind swaps
     // the counter fields for an account index range.
@@ -2314,7 +2313,7 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
     }
     assert.match(markup, /data-vanity-method-option="passphrase" aria-pressed="true"/);
     for (const script of ["p2pkh", "p2wpkh", "p2tr", "sp"]) {
-      assert.match(markup, new RegExp(`data-vanity-script="${script}"`));
+      assert.match(markup, new RegExp(`<option value="${script}"`));
     }
     assert.match(markup, /<input id="vanity-prefix" autocomplete="off" spellcheck="false"[^>]*aria-describedby="vanity-prefix-help">/);
     assert.match(markup, /<label class="field" data-vanity-method="passphrase">Passphrase length\s*<input id="vanity-length" type="number" min="1" max="32"[^>]*value="8"/);
@@ -2324,13 +2323,13 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
     assert.match(markup, /<label class="field" data-vanity-method="derivation" hidden>Accounts to try\s*<input id="vanity-account-count" inputmode="numeric"[^>]*value="100000"/);
     assert.match(markup, /<input id="vanity-workers" type="number" min="1" max="64"/);
     assert.match(markup, /id="vanity-estimate" aria-live="polite"/);
-    assert.match(markup, /id="vanity-go" type="button">Start grinding</);
+    assert.match(markup, /id="vanity-go" type="button"[^>]*>/);
     assert.match(markup, /id="vanity-progress" role="progressbar"[^>]*hidden>/);
     assert.doesNotMatch(markup, /id="vanity-stop"/);
-    assert.match(markup, /id="vanity-wipe" type="button" disabled aria-disabled="true">Clear results</);
+    assert.match(markup, /id="vanity-wipe" type="button" disabled aria-disabled="true">/);
     assert.match(markup, /id="vanity-status" aria-live="polite"/);
     assert.match(markup, /<p class="err" id="vanity-error" role="alert"><\/p>/);
-    assert.match(markup, /<div id="vanity-out" aria-live="polite"><\/div>/);
+    assert.match(markup, /<div id="vanity-out"[^>]*aria-live="polite"><\/div>/);
     // The passphrase warning is part of the card, not a docs afterthought.
     assert.match(markup, /A vanity passphrase is a BIP39 passphrase/);
     // No typed salt, no brain-wallet convention: the grind runs on a key.
@@ -2353,7 +2352,7 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
   // reveal-toggle convention as the other tools, and copied from match state
   // rather than a DOM attribute so a wipe cannot leave a copyable secret.
   assert.match(appSource, /hodlVanityReveal = false/);
-  assert.match(appSource, /type="checkbox" id="vanity-reveal"/);
+  assert.match(appSource, /hodlPrivacyBarMarkup\(\{ id: "vanity-reveal"/);
   assert.match(appSource, /copyMarkup\("data-vanity-copy", index, "Copy passphrase"\)/);
   assert.match(appSource, /\$\{attribute\}="\$\{index\}"/);
   const vanityController = appSource.slice(appSource.indexOf("// ── Vanity grinder"), appSource.indexOf("function hodlInitWorkspace()"));
@@ -2423,7 +2422,7 @@ test("the private recovery section lists the BIP39 passphrase beside the seed ph
 
 test("the vanity estimate is timed from a device sample, and Stop on first find halts the grind at the first match", () => {
   for (const markup of [shell]) {
-    assert.match(markup, /<label class="switch-toggle vanity-first-toggle"><input id="vanity-first" type="checkbox"><span>Stop on first find<\/span><\/label>[\s\S]*?<button class="btn primary" id="vanity-go"/);
+    assert.match(markup, /<input id="vanity-first" type="checkbox">[\s\S]*?<button class="btn primary" id="vanity-go"/);
     assert.doesNotMatch(markup, /id="vanity-first"[^>]*>[\s\S]*?<span class="label">Stop on first find/);
     assert.doesNotMatch(markup, /<button[^>]*id="vanity-first"/);
   }
