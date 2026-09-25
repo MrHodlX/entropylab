@@ -2662,8 +2662,13 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    of a long session. Its opaque ground lets those results pass underneath. */
 .key-tabs > .key-tab.station-tab {
   position: sticky; left: 0; z-index: 4; background: var(--bg);
-  box-shadow: 9px 0 10px -11px rgb(0 0 0 / .9);
 }
+/* The selected tab in every strip, the main tool strip included, casts a
+   right-edge shadow, lifted so the next tab cannot paint over it (a selected
+   station keeps its higher layer). */
+.key-tabs > .key-tab.active,
+.workspace-tabs > .workspace-tab.active { z-index: 1; box-shadow: 9px 0 10px -11px rgb(0 0 0 / .9); }
+.key-tabs > .key-tab.station-tab.active { z-index: 4; }
 .key-tabs > .key-tab.station-tab.active { background: var(--surface); }
 /* Its opaque ground also hides the panel's top border, which every other
    inactive tab lets show through. Repaint that 1px in the tab's own bottom
@@ -2755,8 +2760,11 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   font-size: 14px; line-height: 1.5;
   /* Lift the ground a little before tinting it: on pure black a mix this
      faint is invisible, and on pure white it has nowhere to go. */
-  background: color-mix(in oklab, var(--edge-note-color, var(--border)) 8%, color-mix(in oklab, var(--fg) 7%, var(--bg)));
+  background: var(--edge-note-ground, color-mix(in oklab, var(--edge-note-color, var(--border)) 8%, color-mix(in oklab, var(--fg) 7%, var(--bg))));
 }
+/* On white the grey lift turns the brownish light-mode orange muddy; the
+   orange note tints the white ground straight from the bright orange. */
+:root[data-theme="light"] .edge-note.is-info { --edge-note-ground: color-mix(in oklab, var(--selection-accent) 10%, var(--bg)); }
 .edge-note.is-private { --edge-note-color: var(--danger-bright); }
 .edge-note.is-public { --edge-note-color: var(--ok-bright); }
 .edge-note.is-info { --edge-note-color: var(--accent); }
