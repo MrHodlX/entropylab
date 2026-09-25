@@ -1661,7 +1661,7 @@ test("virtual keypads never focus the field on touch so the mobile keyboard stay
 });
 
 test("workspace tabs retain the Journal only in test builds", () => {
-  for (const entry of [/\["calc", "Keys", "Keys"\]/, /\["vanity", "Vanity", "Vanity"\]/, /\["bip85", "BIP-85 Child", "BIP-85"\]/,
+  for (const entry of [/\["calc", "Keys", "Keys"\]/, /\["vanity", "Vanity Address", "Vanity"\]/, /\["bip85", "BIP-85 Child", "BIP-85"\]/,
     /\["msig", "Multi Signature", "MultiSig"\]/, /\["sp", "Silent Payments", "SP"\]/, /\["psbt", "PSBT", "PSBT"\]/,
     /\["journal", "Journal", "Journal"\]/]) {
     assert.match(appSource, entry);
@@ -1897,7 +1897,7 @@ test("Key Station keeps derivation actions focused and BIP-85 remains its own wo
   }
   assert.doesNotMatch(appSource, /getElementById\("bip85-open"\)/);
   assert.doesNotMatch(appSource, /getElementById\("journal-open"\)|getElementById\("journal-use-calc"\)|hodlJournalUseActiveKey|hodlJournalApplySnapshot/);
-  for (const entry of [/\["calc", "Keys", "Keys"\]/, /\["vanity", "Vanity", "Vanity"\]/, /\["bip85", "BIP-85 Child", "BIP-85"\]/,
+  for (const entry of [/\["calc", "Keys", "Keys"\]/, /\["vanity", "Vanity Address", "Vanity"\]/, /\["bip85", "BIP-85 Child", "BIP-85"\]/,
     /\["msig", "Multi Signature", "MultiSig"\]/, /\["sp", "Silent Payments", "SP"\]/, /\["psbt", "PSBT", "PSBT"\]/,
     /\["journal", "Journal", "Journal"\]/]) {
     assert.match(appSource, entry);
@@ -1912,7 +1912,7 @@ test("Silent Payments is a registered tool with its own card", () => {
   for (const name of ["Keys", "Multi Signature", "Silent Payments", "PSBT"]) {
     assert.match(shell, new RegExp(`aria-label="${name}"`));
   }
-  for (const entry of [/\["calc", "Keys", "Keys"\]/, /\["vanity", "Vanity", "Vanity"\]/, /\["bip85", "BIP-85 Child", "BIP-85"\]/,
+  for (const entry of [/\["calc", "Keys", "Keys"\]/, /\["vanity", "Vanity Address", "Vanity"\]/, /\["bip85", "BIP-85 Child", "BIP-85"\]/,
     /\["msig", "Multi Signature", "MultiSig"\]/, /\["sp", "Silent Payments", "SP"\]/, /\["psbt", "PSBT", "PSBT"\]/,
     /\["journal", "Journal", "Journal"\]/]) {
     assert.match(appSource, entry);
@@ -1959,7 +1959,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // Every tool with a tab ships in the static markup, each with a full name
   // and the
   // short form narrow screens show instead.
-  for (const [full, short] of [["Keys", "Keys"], ["Vanity", "Vanity"], ["BIP-85 Child", "BIP-85"], ["Multi Signature", "MultiSig"], ["Silent Payments", "SP"], ["PSBT", "PSBT"]]) {
+  for (const [full, short] of [["Keys", "Keys"], ["Vanity Address", "Vanity"], ["BIP-85 Child", "BIP-85"], ["Multi Signature", "MultiSig"], ["Silent Payments", "SP"], ["PSBT", "PSBT"]]) {
     assert.ok(
       shell.includes(`<span class="workspace-tab-full">${full}</span><span class="workspace-tab-short">${short}</span>`),
       `${full} is missing from the workspace strip`,
@@ -1971,7 +1971,7 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   // Hidden text leaves the accessibility tree, so the full name is stated on
   // the tab itself and assistive tech hears it at every width.
   assert.match(appSource, /button\.setAttribute\("aria-label", hodlTText\(label\)\);/);
-  for (const full of ["Keys", "Vanity", "BIP-85 Child", "Multi Signature", "Silent Payments", "PSBT"]) {
+  for (const full of ["Keys", "Vanity Address", "BIP-85 Child", "Multi Signature", "Silent Payments", "PSBT"]) {
     assert.match(shell, new RegExp(`aria-label="${full.replace("/", "\\/")}">[\\s\\S]*?<span class="workspace-tab-full">${full.replace("/", "\\/")}</span>`), `${full} tab needs its accessible name`);
   }
   // A tablist owes arrow keys; the key and multisig strips already answer them.
@@ -2287,7 +2287,7 @@ test("session wallets use folder tabs that merge into the card", () => {
 
 test("the vanity grinder is a workspace tab that ships collapsed and never auto-runs", () => {
   // The tab is registered between Keys and BIP-85 and localized like the rest.
-  assert.match(appSource, /\["vanity", "Vanity", "Vanity"\]/);
+  assert.match(appSource, /\["vanity", "Vanity Address", "Vanity"\]/);
   for (const code of ["de", "es", "fr", "pt"]) {
     const catalog = JSON.parse(read(`src/locales/${code}.json`));
     assert.ok(catalog["Vanity"]?.length, `${code} Vanity`);
@@ -2305,7 +2305,6 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
     assert.match(markup, /id="vanity-source"/);
     // The starting passphrase is stated, not offered for editing: it changes
     // on the Keys tab, so it must not be an input here.
-    assert.match(markup, /id="vanity-pass"[^>]*aria-describedby="vanity-pass-note"/);
     assert.doesNotMatch(markup, /<(?:input|textarea) id="vanity-pass"/);
     // Method and address type are button groups; the derivation grind swaps
     // the counter fields for an account index range.
@@ -2314,7 +2313,7 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
     }
     assert.match(markup, /data-vanity-method-option="passphrase" aria-pressed="true"/);
     for (const script of ["p2pkh", "p2wpkh", "p2tr", "sp"]) {
-      assert.match(markup, new RegExp(`data-vanity-script="${script}"`));
+      assert.match(markup, new RegExp(`<option value="${script}"`));
     }
     assert.match(markup, /<input id="vanity-prefix" autocomplete="off" spellcheck="false"[^>]*aria-describedby="vanity-prefix-help">/);
     assert.match(markup, /<label class="field" data-vanity-method="passphrase">Passphrase length\s*<input id="vanity-length" type="number" min="1" max="32"[^>]*value="8"/);
@@ -2324,13 +2323,13 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
     assert.match(markup, /<label class="field" data-vanity-method="derivation" hidden>Accounts to try\s*<input id="vanity-account-count" inputmode="numeric"[^>]*value="100000"/);
     assert.match(markup, /<input id="vanity-workers" type="number" min="1" max="64"/);
     assert.match(markup, /id="vanity-estimate" aria-live="polite"/);
-    assert.match(markup, /id="vanity-go" type="button">Start grinding</);
+    assert.match(markup, /id="vanity-go" type="button"[^>]*>/);
     assert.match(markup, /id="vanity-progress" role="progressbar"[^>]*hidden>/);
     assert.doesNotMatch(markup, /id="vanity-stop"/);
-    assert.match(markup, /id="vanity-wipe" type="button" disabled aria-disabled="true">Clear results</);
+    assert.match(markup, /id="vanity-wipe" type="button" disabled aria-disabled="true">/);
     assert.match(markup, /id="vanity-status" aria-live="polite"/);
     assert.match(markup, /<p class="err" id="vanity-error" role="alert"><\/p>/);
-    assert.match(markup, /<div id="vanity-out" aria-live="polite"><\/div>/);
+    assert.match(markup, /<div id="vanity-out"[^>]*aria-live="polite"><\/div>/);
     // The passphrase warning is part of the card, not a docs afterthought.
     assert.match(markup, /A vanity passphrase is a BIP39 passphrase/);
     // No typed salt, no brain-wallet convention: the grind runs on a key.
@@ -2353,7 +2352,7 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
   // reveal-toggle convention as the other tools, and copied from match state
   // rather than a DOM attribute so a wipe cannot leave a copyable secret.
   assert.match(appSource, /hodlVanityReveal = false/);
-  assert.match(appSource, /type="checkbox" id="vanity-reveal"/);
+  assert.match(appSource, /hodlPrivacyBarMarkup\(\{ id: "vanity-reveal"/);
   assert.match(appSource, /copyMarkup\("data-vanity-copy", index, "Copy passphrase"\)/);
   assert.match(appSource, /\$\{attribute\}="\$\{index\}"/);
   const vanityController = appSource.slice(appSource.indexOf("// ── Vanity grinder"), appSource.indexOf("function hodlInitWorkspace()"));
@@ -2423,7 +2422,7 @@ test("the private recovery section lists the BIP39 passphrase beside the seed ph
 
 test("the vanity estimate is timed from a device sample, and Stop on first find halts the grind at the first match", () => {
   for (const markup of [shell]) {
-    assert.match(markup, /<label class="switch-toggle vanity-first-toggle"><input id="vanity-first" type="checkbox"><span>Stop on first find<\/span><\/label>[\s\S]*?<button class="btn primary" id="vanity-go"/);
+    assert.match(markup, /<input id="vanity-first" type="checkbox">[\s\S]*?<button class="btn primary" id="vanity-go"/);
     assert.doesNotMatch(markup, /id="vanity-first"[^>]*>[\s\S]*?<span class="label">Stop on first find/);
     assert.doesNotMatch(markup, /<button[^>]*id="vanity-first"/);
   }

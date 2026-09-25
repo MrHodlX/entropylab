@@ -13348,7 +13348,7 @@ async function hodlLoadTestKeys() {
 }
 // Each tool carries a full name and a short one. Narrow screens show the
 // short form so more tools stay on screen instead of off the right edge.
-var hodlWorkspaceTabs = [["calc", "Keys", "Keys"], ["msig", "Multi Signature", "MultiSig"], ["psbt", "PSBT", "PSBT"], ["bip85", "BIP-85 Child", "BIP-85"], ["sp", "Silent Payments", "SP"], ["vanity", "Vanity", "Vanity"], ...(__ENTROPYLAB_TEST_HOOKS__ ? [["journal", "Journal", "Journal"]] : [])];
+var hodlWorkspaceTabs = [["calc", "Keys", "Keys"], ["msig", "Multi Signature", "MultiSig"], ["psbt", "PSBT", "PSBT"], ["bip85", "BIP-85 Child", "BIP-85"], ["sp", "Silent Payments", "SP"], ["vanity", "Vanity Address", "Vanity"], ...(__ENTROPYLAB_TEST_HOOKS__ ? [["journal", "Journal", "Journal"]] : [])];
 // Lightning and Journal are held back from release navigation while their
 // implementations remain in source. Test builds keep Journal reachable so its
 // behavior and backup compatibility stay covered until the UI is ready.
@@ -15042,12 +15042,13 @@ function hodlPickVanitySessionKey(state) {
   let error = document.getElementById("vanity-error");
   if (error) error.textContent = "";
   if (!state) return;
-  if (hodlVanitySource !== "key:" + state.id) {
-    // Results belong to the key they were ground on.
-    hodlVanityCancel();
-    hodlVanityClearResults();
-  }
-  hodlVanitySource = "key:" + state.id;
+  // Vanity has no End Session, so the selected chip toggles: clicking it
+  // again releases the key, as a Multi Signature co-signer chip does.
+  // Either way, results belong to the key they were ground on.
+  let selected = hodlVanitySource === "key:" + state.id;
+  hodlVanityCancel();
+  hodlVanityClearResults();
+  hodlVanitySource = selected ? "" : "key:" + state.id;
   hodlVanitySyncSource();
   hodlRefreshStationKeyPickers();
 }
@@ -15078,21 +15079,15 @@ var hodlVanityScriptSelection = "p2wpkh";
 function hodlVanityScriptId() {
   return VANITY_SCRIPTS[hodlVanityScriptSelection] ? hodlVanityScriptSelection : "p2wpkh";
 }
-// The pressed button is the address type, reported the way the key view's
-// script buttons report theirs.
-function hodlSyncVanityScriptTabs() {
-  let box = document.getElementById("vanity-script-tabs");
-  if (!box) return;
-  box.querySelectorAll("[data-vanity-script]").forEach((button) => {
-    let active = button.dataset.vanityScript === hodlVanityScriptId();
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
+// The address type is a select (five options fit a phone better as a list
+// than as a button row); its styled dropdown follows the native value.
+function hodlSyncVanityScript() {
+  hodlSyncSelect(document.getElementById("vanity-script"), hodlVanityScriptId());
 }
 function hodlSelectVanityScript(id) {
   if (!VANITY_SCRIPTS[id] || id === hodlVanityScriptSelection) return;
   hodlVanityScriptSelection = id;
-  hodlSyncVanityScriptTabs();
+  hodlSyncVanityScript();
   hodlVanityScriptChanged();
 }
 function hodlVanityScript() {
@@ -15154,9 +15149,9 @@ function hodlVanitySyncSource() {
   let state = hodlVanitySourceState();
   if (!state) hodlVanitySource = "";
   if (note) {
-    note.textContent = hodlVanitySourceKeys().length
-      ? hodlTText("Pick a key to grind. Key Station settings come along as set there; BIP-85 children use an empty passphrase and the default account path. A key with seed words supports both methods, a root-xprv key the derivation grind only.")
-      : hodlTText("Derive a key in Key Station or BIP-85 Station first. Seed words support both grind methods; a root xprv supports the derivation grind only.");
+    hodlPaintKeyStationNote("vanity-session-note", true, hodlVanitySourceKeys().length
+      ? hodlTText("Pick a key to grind. {station} settings come along as set there; BIP-85 children use an empty passphrase and the default account path. A key with seed words supports both methods, a root-xprv key the derivation grind only.", { station: hodlKeyStationMarker })
+      : hodlTText("Derive a key in {station} or BIP-85 Station first. Seed words support both grind methods; a root xprv supports the derivation grind only.", { station: hodlKeyStationMarker }));
   }
   panel.hidden = !state;
   let passphraseOption = document.querySelector('#vanity-method-tabs [data-vanity-method-option="passphrase"]');
@@ -15164,7 +15159,9 @@ function hodlVanitySyncSource() {
     let label = hodlVanityKeyLabel(state), pass = String(state.fields?.pass ?? ""), hasMnemonic = Boolean(state.result?.mnemonic);
     let name = document.getElementById("vanity-source-name"), kind = document.getElementById("vanity-source-kind"), image = document.getElementById("vanity-source-lifehash"), field = document.getElementById("vanity-pass"), passNote = document.getElementById("vanity-pass-note");
     if (name) name.textContent = label;
-    if (kind) kind.textContent = `${hasMnemonic ? "BIP39 seed words" : "Root xprv"}${state.name && state.name !== label ? ` · ${state.name}` : ""} · ${hodlDisplayDerivationPath(state.fields?.derivationPath || state.fields?.derivationAccountPath || "")}`;
+    if (kind) kind.textContent = `${hasMnemonic ? "BIP39 seed words" : "Root xprv"}${state.name && state.name !== label ? ` · ${state.name}` : ""}`;
+    let path = document.getElementById("vanity-source-path");
+    if (path) path.textContent = hodlDisplayDerivationPath(state.fields?.derivationPath || state.fields?.derivationAccountPath || "");
     if (image) {
       image.hidden = true;
       hodlFillKeyTabLifehash(image, state.result?.masterFingerprint || "");
@@ -15176,7 +15173,7 @@ function hodlVanitySyncSource() {
         : !hasMnemonic
         ? `Key ${label} was imported as a root xprv: it has no seed words, so its passphrase cannot be extended — only the derivation grind is available.`
         : pass.length
-          ? `Copied verbatim from key ${label}'s Optional BIP39 passphrase on the Keys tab. Passphrase grind: candidates are this text followed by the counter characters. Derivation grind: this exact passphrase, with the account index changing.`
+          ? `Copied verbatim from key ${label}'s Optional BIP39 passphrase on the Keys tab. Passphrase grind: candidates are that passphrase followed by the counter characters. Derivation grind: this exact passphrase, with the account index changing.`
           : `Key ${label} has no passphrase. Passphrase grind: candidates are the counter characters alone. Derivation grind: no passphrase, with the account index changing.`;
     }
     if (passphraseOption) passphraseOption.disabled = !hasMnemonic;
@@ -15308,7 +15305,9 @@ function hodlVanityPlan(state, method, scriptId) {
     root.wipePrivateData();
   }
 }
-function hodlVanityParseInputs() {
+// The typed settings alone: prefix, counters, and ranges. Cheap and free of
+// key material, so the Start button can re-check it on every keystroke.
+function hodlVanityParseFields() {
   let method = hodlVanityMethod(), scriptId = hodlVanityScriptId();
   let prefix = validateVanityPrefix(hodlVanityPrefixValue(), scriptId);
   let parseCounter = (id, label) => {
@@ -15317,13 +15316,30 @@ function hodlVanityParseInputs() {
     return BigInt(raw);
   };
   let workers = Math.max(1, Math.min(64, Number(document.getElementById("vanity-workers").value) || 1));
-  let plan = hodlVanityPlan(hodlVanitySourceState(), method, scriptId);
   if (method === "derivation") {
     let range = validateVanityIndexRange(parseCounter("vanity-account-start", "The start account"), parseCounter("vanity-account-count", "The account range"));
-    return { ...plan, prefix, workers, ...range, passLen: 0 };
+    return { method, scriptId, prefix, workers, ...range, passLen: 0 };
   }
   let passLen = Number(document.getElementById("vanity-length").value);
-  return { ...plan, prefix, workers, ...validateVanityRange(passLen, parseCounter("vanity-start", "The start counter"), parseCounter("vanity-count", "The range size")) };
+  return { method, scriptId, prefix, workers, ...validateVanityRange(passLen, parseCounter("vanity-start", "The start counter"), parseCounter("vanity-count", "The range size")) };
+}
+// The run: the settings plus the key's plan, which for the derivation grind
+// stretches the seed, so it is built only when a grind starts.
+function hodlVanityParseInputs() {
+  let { method, scriptId, ...fields } = hodlVanityParseFields();
+  return { ...hodlVanityPlan(hodlVanitySourceState(), method, scriptId), ...fields };
+}
+// Start waits until a key is picked, the key suits the chosen mode, and the
+// settings parse; anything wrong with the key itself still reports on start.
+function hodlVanityInputsReady() {
+  let state = hodlVanitySourceState();
+  if (!state || (hodlVanityMethod() === "passphrase" && !state.result?.mnemonic)) return false;
+  try {
+    hodlVanityParseFields();
+    return true;
+  } catch {
+    return false;
+  }
 }
 function hodlCopyVanityValue(button, value, label) {
   if (!value || !button || button.disabled) return;
@@ -15386,10 +15402,14 @@ function hodlVanityKeyMarkup(fingerprint) {
   return `<span class="vanity-key"><img class="key-tab-lifehash" width="22" height="22" alt="" hidden data-vanity-lifehash="${hodlEscapeHtml(fingerprint)}"><code>${hodlEscapeHtml(fingerprint)}</code></span>`;
 }
 function hodlRenderVanityOut() {
-  let box = document.getElementById("vanity-out");
+  let box = document.getElementById("vanity-out"), heading = document.getElementById("vanity-matches-heading");
   if (!box) return;
+  let method = hodlVanityRun?.method || hodlVanityMethod();
+  // The heading always shows, naming what the chosen mode finds.
+  if (heading) heading.textContent = method === "derivation" ? hodlTText("Matching accounts") : hodlTText("Matching passphrases");
   if (!hodlVanityMatches.length || !hodlVanityRun) {
-    box.innerHTML = "";
+    // Until there are matches, the frame the table will use holds a prompt.
+    box.innerHTML = `<div class="tool-result"><p class="field-note tool-result-empty">${hodlT("Choose your settings above, then click Start Grinding. Matches appear here.")}</p></div>`;
     return;
   }
   let run = hodlVanityRun, derivation = run.method === "derivation", meta = VANITY_SCRIPTS[run.script] ?? VANITY_SCRIPTS.p2wpkh, label = hodlEscapeHtml(run.sourceLabel);
@@ -15398,8 +15418,10 @@ function hodlRenderVanityOut() {
   let applyMarkup = (match, index) => run.sourceKind === "bip85"
     ? `<span class="vanity-saved">${hodlT("BIP-85 child unchanged")}</span>`
     : match.savedTo
-    ? `<span class="vanity-saved" role="status">${hodlCopiedIconMarkup()}Saved to key ${hodlEscapeHtml(match.savedTo)}</span>`
-    : `<button type="button" class="btn secondary vanity-apply" data-vanity-apply="${index}" ${hodlVanityApplying ? "disabled" : ""} title="Write this ${derivation ? "account index" : "passphrase"} to key ${label} and re-derive it">${hodlVanityApplying ? "Updating…" : "Update key"}</button>`;
+    // Just the confirmation in the row; which key it went to stays on hover,
+    // for screen readers, and in the status line below the table.
+    ? `<span class="vanity-saved" role="status" title="Saved to key ${hodlEscapeHtml(match.savedTo)}" aria-label="Saved to key ${hodlEscapeHtml(match.savedTo)}">${hodlCopiedIconMarkup()}${hodlT("Saved")}</span>`
+    : `<button type="button" class="btn secondary vanity-apply" data-vanity-apply="${index}" ${hodlVanityApplying ? "disabled" : ""} title="Write this ${derivation ? "account index" : "passphrase"} to key ${label} and re-derive it">${hodlVanityApplying ? "Updating…" : "Update Key"}</button>`;
   // Passphrases are private key material: masked until the reveal toggle, and
   // copied from match state (never a DOM attribute) so the wipe drops them.
   let rows = hodlVanityMatches.map((match, index) => {
@@ -15408,8 +15430,8 @@ function hodlRenderVanityOut() {
       return `<tr><th scope="row">${index + 1}</th><td class="mono">${match.index}${run.accountHardened ? "'" : ""}</td><td class="mono">${hodlEscapeHtml(hodlDisplayDerivationPath(match.path))}</td>${address}${keyCell(match)}<td class="vanity-apply-cell">${applyMarkup(match, index)}</td></tr>`;
     }
     let secret = hodlVanityReveal
-      ? `<span class="mono">${hodlEscapeHtml(match.passphrase)}</span>`
-      : `<span class="mono" aria-hidden="true">${hodlEscapeHtml("•".repeat(12))}</span><span class="sr-only">Passphrase hidden — tick Show passphrases to reveal</span>`;
+      ? `<span class="mono vanity-pass-text">${hodlEscapeHtml(match.passphrase)}</span>`
+      : `<span class="mono vanity-pass-text" aria-hidden="true">${hodlEscapeHtml("•".repeat(12))}</span><span class="sr-only">Passphrase hidden — tick Show passphrases to reveal</span>`;
     return `<tr><th scope="row">${index + 1}</th><td class="mono">${match.counter.toString()}</td><td><span class="vanity-secret">${secret}${copyMarkup("data-vanity-copy", index, "Copy passphrase")}</span></td>${address}${keyCell(match)}<td class="vanity-apply-cell">${applyMarkup(match, index)}</td></tr>`;
   }).join("");
   let overflow = hodlVanityFound > hodlVanityMatches.length ? `<p class="muted">Only the first ${hodlVanityMatches.length} matches are listed; ${hodlVanityFormatCount(hodlVanityFound)} found in total.</p>` : "";
@@ -15421,22 +15443,21 @@ function hodlRenderVanityOut() {
     : derivation
     ? `Each row is a BIP32 account index of key ${label} — with its passphrase unchanged, ${where} starts with the prefix. Update key sets that account on the key and re-derives it, so the Keys tab, its exports, and the Journal show this wallet.`
     : `Each row is a new BIP39 passphrase for key ${label}: the starting passphrase followed by the counter characters. With this key's seed words it derives ${where}. Update key writes the passphrase to the key and re-derives it, so the Keys tab, its exports, and the Journal show this wallet. Anyone holding the words and this passphrase holds the coins.`;
-  let reveal = derivation ? "" : `<div class="wallet-data-actions no-print">
-        <label class="reveal-private-toggle">
-          <input type="checkbox" id="vanity-reveal" ${hodlVanityReveal ? "checked" : ""} aria-describedby="vanity-matches-description">
-          <span>Show passphrases <span class="reveal-private-toggle-note">(air-gap only)</span></span>
-        </label>
-      </div>`;
-  let actionHeader = run.sourceKind === "bip85" ? hodlT("Child status") : "Update key";
+  // The same privacy switch as the key view, red while passphrases show.
+  let reveal = derivation ? "" : `<div class="wallet-data-actions no-print">${hodlPrivacyBarMarkup({ id: "vanity-reveal", revealed: hodlVanityReveal, describedBy: "vanity-matches-description" })}</div>`;
+  let actionHeader = run.sourceKind === "bip85" ? hodlT("Child status") : "Update Key";
   let head = derivation
     ? `<th scope="col">#</th><th scope="col">Account</th><th scope="col">Path</th><th scope="col">Address</th><th scope="col">Key</th><th scope="col"><span class="sr-only">${hodlEscapeHtml(actionHeader)}</span></th>`
-    : `<th scope="col">#</th><th scope="col">Counter</th><th scope="col">Passphrase (keep it secret)</th><th scope="col">Address</th><th scope="col">${run.sourceKind === "bip85" ? hodlT("Derived key") : "Key after update"}</th><th scope="col"><span class="sr-only">${hodlEscapeHtml(actionHeader)}</span></th>`;
-  box.innerHTML = `<section class="wallet-data-section wallet-private-section" aria-labelledby="vanity-matches-heading">
-      <div class="wallet-data-section-head"><h3 id="vanity-matches-heading">Matching ${derivation ? "accounts" : "passphrases"}</h3>
-      <p class="muted" id="vanity-matches-description">${description}</p></div>
+    : `<th scope="col">#</th><th scope="col">Counter</th><th scope="col"><span class="private-heading${hodlVanityReveal ? " is-revealed" : ""}">Passphrase${hodlPrivacyEyeMarkup(hodlVanityReveal)}</span></th><th scope="col">Address</th><th scope="col">${run.sourceKind === "bip85" ? hodlT("Derived key") : "Key after update"}</th><th scope="col"><span class="sr-only">${hodlEscapeHtml(actionHeader)}</span></th>`;
+  // The matches sit in the card like its other content, not in a frame.
+  // The passphrase column holds its width through the privacy switch: the
+  // text box is as wide as the longer of the mask and the longest passphrase.
+  let passWidth = Math.max(12, ...hodlVanityMatches.map((match) => Array.from(match.passphrase ?? "").length));
+  box.style.setProperty("--vanity-pass-width", `${passWidth}ch`);
+  box.innerHTML = `<p class="muted label-description" id="vanity-matches-description">${description}</p>
       ${reveal}
       <div class="wallet-address-table"><div class="wallet-table wallet-table-public" role="region" tabindex="0" aria-label="Matching vanity addresses table"><table aria-rowcount="${hodlVanityMatches.length + 1}"><caption class="sr-only">Matching vanity addresses</caption><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></div>
-      ${overflow}</section>`;
+      ${overflow}`;
   // LifeHash images render asynchronously from the fingerprint in the cell.
   box.querySelectorAll("img[data-vanity-lifehash]").forEach((image) => hodlFillKeyTabLifehash(image, image.dataset.vanityLifehash));
 }
@@ -15456,13 +15477,14 @@ function hodlVanitySyncControls() {
       go.dataset.derivationState = "running";
       go.setAttribute("aria-label", hodlTText("Stop grinding"));
     } else {
-      go.textContent = hodlTText("Start grinding");
+      go.textContent = hodlTText("Start Grinding");
       delete go.dataset.derivationState;
       delete go.dataset.derivationWidth;
       go.removeAttribute("aria-label");
       go.style.removeProperty("width");
     }
-    let blocked = hodlVanityApplying || !source;
+    // While running the button is Stop, which is always available.
+    let blocked = hodlVanityApplying || (!hodlVanityRunning && !hodlVanityInputsReady());
     go.disabled = blocked;
     go.setAttribute("aria-disabled", String(blocked));
     go.title = source ? "" : "Pick a Key Station key first";
@@ -15683,10 +15705,18 @@ function hodlInitVanity() {
     hodlVanitySyncPrefixResult();
     hodlVanityEstimate();
   });
-  document.getElementById("vanity-script-tabs")?.querySelectorAll("[data-vanity-script]").forEach((button) => {
-    button.addEventListener("click", () => hodlSelectVanityScript(button.dataset.vanityScript));
-  });
-  hodlSyncVanityScriptTabs();
+  let script = document.getElementById("vanity-script");
+  script?.addEventListener("change", () => hodlSelectVanityScript(script.value));
+  // Start follows the fields as they are typed (hodlVanityInputsReady).
+  // Checkboxes are left to their own handlers: the sync restores each one
+  // from its state, which would undo a click before that handler records it.
+  let card = document.getElementById("vanity-card"), syncFromField = (event) => {
+    if (event.target?.type !== "checkbox") hodlVanitySyncControls();
+  };
+  card?.addEventListener("input", syncFromField);
+  card?.addEventListener("change", syncFromField);
+  hodlSyncVanityScript();
+  hodlRenderVanityOut();
   document.getElementById("vanity-method-tabs")?.querySelectorAll("[data-vanity-method-option]").forEach((button) => {
     button.addEventListener("click", () => hodlSelectVanityMethod(button.dataset.vanityMethodOption));
   });

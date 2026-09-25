@@ -61,7 +61,7 @@
         <button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="PSBT"><span class="workspace-tab-full">PSBT</span><span class="workspace-tab-short">PSBT</span></button>
         <button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="BIP-85 Child"><span class="workspace-tab-full">BIP-85 Child</span><span class="workspace-tab-short">BIP-85</span></button>
         <button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Silent Payments"><span class="workspace-tab-full">Silent Payments</span><span class="workspace-tab-short">SP</span></button>
-        <button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Vanity"><span class="workspace-tab-full">Vanity</span><span class="workspace-tab-short">Vanity</span></button>
+        <button type="button" class="workspace-tab" role="tab" aria-selected="false" aria-label="Vanity Address"><span class="workspace-tab-full">Vanity Address</span><span class="workspace-tab-short">Vanity</span></button>
         <!-- Lightning and Journal are held back; see hodlWorkspaceTabs in app.js. -->
       </div>
     </nav>
@@ -222,6 +222,12 @@ words, pick one of the checksum words.</span></span>
             <li>Matching is Bitcoin mainnet, at the key's first receive address (its own purpose, account, branch, and address index). Update key re-derives Key Station keys; BIP-85 child matches can be copied but do not change the child.</li>
           </ul>
         </div>
+        <p class="label" id="vanity-method-label">Mode</p>
+        <div class="row segmented-control is-wide is-half" id="vanity-method-tabs" role="group" aria-labelledby="vanity-method-label">
+          <button type="button" class="tab active" data-vanity-method-option="passphrase" aria-pressed="true">Passphrase grind</button>
+          <button type="button" class="tab" data-vanity-method-option="derivation" aria-pressed="false">Derivation grind</button>
+        </div>
+        <p class="field-note" id="vanity-method-help">Each candidate is the starting passphrase followed by the counter characters, stretched into a seed (2,048 PBKDF2 rounds) and derived at the key's path. A match is a new passphrase for the same seed words.</p>
         <div class="station-key-source tool-section">
           <p class="label">Use an existing key</p>
           <div class="session-key-picker" id="vanity-session-keys" role="group" aria-label="Compatible existing keys" hidden></div>
@@ -229,29 +235,28 @@ words, pick one of the checksum words.</span></span>
         </div>
         <div class="vanity-source-block tool-section" id="vanity-source-block" hidden>
         <p class="label">Selected key</p>
-        <div class="vanity-source" id="vanity-source">
-          <div class="vanity-source-head">
-            <span class="vanity-source-key"><img class="key-tab-lifehash" id="vanity-source-lifehash" width="22" height="22" alt="" hidden><code id="vanity-source-name"></code></span>
-            <span class="muted" id="vanity-source-kind"></span>
+        <div class="key-summary" id="vanity-source">
+          <img class="key-summary-lifehash" id="vanity-source-lifehash" width="72" height="72" alt="" hidden>
+          <div class="key-summary-text">
+            <code class="key-summary-fingerprint" id="vanity-source-name"></code>
+            <p class="key-summary-meta" id="vanity-source-kind"></p>
+            <p class="key-summary-meta key-summary-path" id="vanity-source-path"></p>
           </div>
-          <p class="label">Starting passphrase</p>
-          <p class="mono" id="vanity-pass" aria-describedby="vanity-pass-note"></p>
-          <span class="field-note" id="vanity-pass-note"></span>
         </div>
+        <p class="edge-note is-muted" id="vanity-pass-note"></p>
         </div>
-        <p class="label" id="vanity-method-label">Method</p>
-        <div class="row segmented-control is-wide is-half" id="vanity-method-tabs" role="group" aria-labelledby="vanity-method-label">
-          <button type="button" class="tab active" data-vanity-method-option="passphrase" aria-pressed="true">Passphrase grind</button>
-          <button type="button" class="tab" data-vanity-method-option="derivation" aria-pressed="false">Derivation grind</button>
-        </div>
-        <p class="field-note" id="vanity-method-help">Each candidate is the starting passphrase followed by the counter characters, stretched into a seed (2,048 PBKDF2 rounds) and derived at the key's path. A match is a new passphrase for the same seed words.</p>
-        <p class="label" id="vanity-script-label">Address type</p>
-        <div class="row segmented-control is-wide" id="vanity-script-tabs" role="group" aria-labelledby="vanity-script-label">
-          <button type="button" class="tab" data-vanity-script="p2pkh" aria-pressed="false">Legacy</button>
-          <button type="button" class="tab" data-vanity-script="p2sh-p2wpkh" aria-pressed="false"><span class="script-label-full">Nested SegWit</span><span class="script-label-short">Nested SW</span></button>
-          <button type="button" class="tab active" data-vanity-script="p2wpkh" aria-pressed="true"><span class="script-label-full">Native SegWit</span><span class="script-label-short">Native SW</span></button>
-          <button type="button" class="tab" data-vanity-script="p2tr" aria-pressed="false">Taproot</button>
-          <button type="button" class="tab" data-vanity-script="sp" aria-pressed="false"><span class="script-label-full">Silent Payments</span><span class="script-label-short">Silent Pay.</span></button>
+        <div class="key-settings">
+          <div class="key-settings-row">
+            <label class="field" id="vanity-script-field">Address type
+              <select id="vanity-script">
+                <option value="p2pkh">Legacy P2PKH · 1…</option>
+                <option value="p2sh-p2wpkh">Nested SegWit P2SH-P2WPKH · 3…</option>
+                <option value="p2wpkh" selected>Native SegWit P2WPKH · bc1q…</option>
+                <option value="p2tr">Taproot P2TR · bc1p…</option>
+                <option value="sp">Silent Payments BIP-352 · sp1qq…</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div class="vanity-grid">
           <div class="field">
@@ -267,7 +272,7 @@ words, pick one of the checksum words.</span></span>
                 <span class="vanity-prefix-plus">+</span>
               </span>
               <span class="vanity-formula-col vanity-formula-input">
-                <span class="label vanity-formula-title">Custom characters</span>
+                <span class="label vanity-formula-title">Custom chars</span>
                 <input id="vanity-prefix" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Enter your vanity characters here" aria-labelledby="vanity-prefix-label" aria-describedby="vanity-prefix-help">
               </span>
               <span class="vanity-formula-col vanity-formula-op" aria-hidden="true">
@@ -308,18 +313,19 @@ words, pick one of the checksum words.</span></span>
           </label>
         </div>
         <p class="field-note" id="vanity-estimate" aria-live="polite"></p>
-        <div class="switch-row vanity-first-row">
-          <label class="switch-toggle vanity-first-toggle"><input id="vanity-first" type="checkbox"><span>Stop on first find</span></label>
-        </div>
-        <div class="row current-item-actions tool-actions">
-          <button class="btn primary" id="vanity-go" type="button">Start grinding</button>
-          <div class="derive-progress" id="vanity-progress" role="progressbar" aria-label="Vanity grinding progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete" hidden><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
-          <button class="btn red clear-current-action" id="vanity-wipe" type="button" disabled aria-disabled="true">Clear results</button>
-        </div>
-        <p class="field-note" id="vanity-status" aria-live="polite">Idle. No range has been ground this session.</p>
-        <p class="err" id="vanity-error" role="alert"></p>
-        <div id="vanity-out" aria-live="polite"></div>
         <p class="edge-note is-public">Found passphrases remain in this page only and are never intentionally stored or sent. Memory clearing is best-effort because browsers may retain internal copies; close the page before reconnecting the computer.</p>
+        <div class="switch-row vanity-first-row">
+          <label class="switch-toggle vanity-first-toggle"><input id="vanity-first" type="checkbox"><span>Stop on first found match</span></label>
+        </div>
+        <p class="label" id="vanity-matches-heading">Matching passphrases</p>
+        <div id="vanity-out" role="region" aria-labelledby="vanity-matches-heading" aria-live="polite"></div>
+        <p class="edge-note is-muted" id="vanity-status" aria-live="polite">Idle. No range has been ground this session.</p>
+        <p class="err" id="vanity-error" role="alert"></p>
+        <div class="row current-item-actions tool-actions">
+          <button class="btn primary" id="vanity-go" type="button">Start Grinding</button>
+          <div class="derive-progress" id="vanity-progress" role="progressbar" aria-label="Vanity grinding progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete" hidden><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
+          <button class="btn red clear-current-action" id="vanity-wipe" type="button" disabled aria-disabled="true">Clear Results</button>
+        </div>
       </section>
       <div class="tool-intro edge-note is-info" id="bip85-tool-intro" hidden>
         <h2>Child seeds from a parent key</h2>
@@ -966,7 +972,9 @@ words, pick one of the checksum words.</span></span>
       <p data-i18n-rich>Die Distribution / Fairness Analysis (Pearson’s χ²): <a href="https://rpg.stackexchange.com/questions/70802/how-can-i-test-whether-a-die-is-fair" target="_blank" rel="noopener noreferrer">How can I test whether a die is fair?</a> — live check while entering rolls, following the <a href="https://dicefairness.johnellmore.com/" target="_blank" rel="noopener noreferrer">Dice Fairness Tester</a> thresholds.</p>
       <p data-i18n-rich>Jade anti-exfil (sign-to-contract): <a href="https://blog.blockstream.com/anti-exfil-stopping-key-exfiltration/" target="_blank" rel="noopener noreferrer">Anti-Exfil: Stopping Key Exfiltration</a> — secp256k1-zkp <code>ecdsa_s2c</code> / <code>anti_exfil_host_verify</code>.</p>
       <p data-i18n-rich>BIP-85 deterministic entropy: <a href="https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki" target="_blank" rel="noopener noreferrer">bip-0085.mediawiki</a> — HMAC-SHA512 of a fully hardened child; English BIP-39 / WIF / XPRV / HEX / password applications match COLDCARD.</p>
+      <!-- Held back with the Journal tab (#511); restore alongside it.
       <p data-i18n-rich>Entropy Journal: AES-256-GCM from an optional typed password (Web Crypto) — PBKDF2-SHA-256, 600,000 rounds, with the salt derived from the password itself; the IV is HMAC-SHA-256 of the plaintext, so the same password and entries always reproduce the same file. An empty password preserves the file format but provides no access protection. No relays, no accounts, no localStorage for secrets.</p>
+      -->
       <p data-i18n-rich>BIP-352 Silent Payments: <a href="https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki" target="_blank" rel="noopener noreferrer">bips/bip-0352</a> — reusable <code>sp1q…</code> addresses and unique taproot outputs. Descriptors: <a href="https://github.com/bitcoin/bips/blob/master/bip-0392.mediawiki" target="_blank" rel="noopener noreferrer">BIP-392</a>. Publish URI: <a href="https://github.com/bitcoin/bips/blob/master/bip-0321.mediawiki" target="_blank" rel="noopener noreferrer">BIP-321</a>. DNS name: <a href="https://github.com/bitcoin/bips/blob/master/bip-0353.mediawiki" target="_blank" rel="noopener noreferrer">BIP-353</a> — this page prints the TXT, it does not resolve names.</p>
       <p data-i18n-rich>Inscription envelopes: <a href="https://docs.ordinals.com/inscriptions.html" target="_blank" rel="noopener noreferrer">docs.ordinals.com/inscriptions</a> — <code>OP_FALSE OP_IF "ord"</code> parser only. This tool does not create inscriptions or number sats.</p>
     </details>
