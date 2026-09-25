@@ -1024,9 +1024,7 @@ test("multisig consistently uses derive for its heading and action", () => {
 
 test("Station tabs stay pinned left while add controls stay pinned right", () => {
   assert.match(appSource, /button\.className = "tab key-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
-  assert.match(appSource, /button\.className = "tab key-tab bip85-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
   assert.match(appSource, /button\.className = "tab key-tab msig-tab" \+ \(state\.isLab \? " is-lab station-tab" : ""\)/);
-  assert.match(appSource, /button\.className = "tab key-tab is-lab station-tab active"/);
   assert.match(appSource, /pinnedWidth = station && tab !== station \? station\.offsetWidth : 0/);
   assert.match(appSource, /start < left \+ pinnedWidth/);
 });
@@ -1857,7 +1855,7 @@ test("Journal gates its five tools behind the local notebook", () => {
   assert.doesNotMatch(appSource, /hodlJournalLog\("capture"|hodlJournalCaptureSession/);
   assert.match(appSource, /hodlJournalLog\("inspect", kind, "psbt"\)[\s\S]*hodlJournalLog\("inspect-error", "", "psbt"\)/);
   assert.doesNotMatch(appSource, /hodlJournalLog\("inspect-nonce-/);
-  assert.match(appSource, /hodlJournalLog\("calculate", hodlSpMode, "sp"\)[\s\S]*hodlJournalLog\("calculate-error", hodlSpMode, "sp"\)/);
+  assert.match(appSource, /hodlJournalLog\("calculate", mode, "sp"\)[\s\S]*hodlJournalLog\("calculate-error", mode, "sp"\)/);
   assert.match(appSource, /hodlJournalLog\("derive-error", "", "bip85"\)/);
   assert.match(appSource, /hodlJournalLog\("note-delete", "", "journal"\)/);
   assert.match(appSource, /hodlJournal\.log\.length = 0;\s*hodlJournalLog\("clear", "session-log", "journal"\)/);
@@ -1942,7 +1940,6 @@ test("Silent Payments has a connected SP Station with a monochrome coin-and-sign
   assert.match(appSource, /ridge\.setAttribute\("data-part", "coin-ridge"\)/);
   assert.doesNotMatch(appSource, /let inset = document\.createElementNS/);
   assert.match(appSource, /function hodlInitSpBench\(\) \{/);
-  assert.match(appSource, /label\.textContent = "SP Station";/);
   assert.match(appSource, /button\.append\(hodlCreateSilentPaymentsIcon\(\), label\);/);
   for (const markup of [shell]) {
     assert.match(markup, /id="sp-manager"/);

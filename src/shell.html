@@ -513,27 +513,31 @@ words, pick one of the checksum words.</span></span>
         <p class="muted tool-intro-note" data-i18n-rich>Get an <code>sp1q…</code> address to reuse. Print the URI and DNS text if you want to publish it. Make a sender output or check pasted outputs against your scan key. No chain. No network.</p>
       </div>
       <section class="key-manager no-print" id="sp-manager" hidden>
-        <div class="key-tab-strip"><div class="key-tabs" id="sp-tabs" role="tablist" aria-label="Silent Payments"></div></div>
+        <div class="key-tab-strip"><div class="key-tabs" id="sp-tabs" role="tablist" aria-label="Silent Payments"></div><div class="add-item-control"><button class="add-key" id="add-sp" type="button" aria-label="Open SP Station to derive another address" aria-describedby="add-sp-tooltip">+</button><span class="add-item-tooltip" id="add-sp-tooltip" role="tooltip">Open SP Station</span></div><div class="add-item-control"><button class="add-key remove-key" id="delete-sp" type="button" aria-label="Delete current silent payment address" aria-describedby="delete-sp-tooltip" disabled>−</button><span class="add-item-tooltip" id="delete-sp-tooltip" role="tooltip">Delete this silent payment address</span></div></div>
       </section>
       <section class="card no-print tool-card" id="sp-card" role="tabpanel" hidden>
-      <div class="row no-print segmented-control" id="sp-modes">
+      <div id="sp-bench">
+      <p class="edge-note is-public">Session keys remain in this page only and are never intentionally stored or sent. Memory clearing is best-effort because browsers may retain internal copies; close the page before reconnecting the computer.</p>
+      <p class="label" id="sp-mode-label">Mode</p>
+      <div class="row no-print segmented-control is-wide" id="sp-modes" role="group" aria-labelledby="sp-mode-label">
         <button class="tab active" type="button" data-sp-mode="receive" aria-pressed="true">Receive</button>
         <button class="tab" type="button" data-sp-mode="send" aria-pressed="false">Send</button>
         <button class="tab" type="button" data-sp-mode="verify" aria-pressed="false">Verify</button>
       </div>
       <div class="station-key-source tool-section">
-        <p class="label">Bring in an existing key</p>
-        <div class="session-key-picker" id="sp-session-keys" role="group" aria-label="Compatible existing keys" hidden></div>
-        <p class="field-note">Choose a compatible HD-root key from this session, or enter a seed phrase or root extended private key below.</p>
+        <p class="label">Use a key from Key Station</p>
+        <div class="session-key-picker" id="sp-session-keys" role="group" aria-label="Compatible Key Station keys" hidden></div>
+        <p class="field-note" id="sp-session-keys-note"></p>
       </div>
-      <div class="psbt-grid">
-        <label class="field">Session key (BIP39 seed phrase or root xprv/tprv)
-          <textarea id="sp-key" placeholder="Enter a seed phrase or root xprv/tprv" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
-        </label>
-        <div>
-          <label class="field">Optional BIP39 passphrase
-            <input id="sp-pass" autocomplete="off" placeholder="Enter a BIP39 passphrase, or leave blank for none">
-          </label>
+      <label class="field">Session key
+        <span class="field-note">BIP39 seed phrase or root xprv/tprv</span>
+        <textarea id="sp-key" placeholder="Enter a seed phrase or root xprv/tprv" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      </label>
+      <label class="field">Passphrase (optional)
+        <input id="sp-pass" autocomplete="off" placeholder="Enter a BIP39 passphrase, or leave blank for none">
+      </label>
+      <div class="key-settings">
+        <div class="key-settings-row">
           <label class="field">Address network
             <select id="sp-network"><option value="mainnet" selected>Bitcoin mainnet</option><option value="testnet">Testnet (practice)</option></select>
           </label>
@@ -542,25 +546,19 @@ words, pick one of the checksum words.</span></span>
           </label>
         </div>
       </div>
-      <div class="row psbt-actions tool-actions">
-        <button class="btn secondary" id="sp-wipe" type="button">End session / clear fields</button>
-      </div>
-      <p class="muted" id="sp-session" aria-live="polite">No session key. Receive and verify need a seed or root xprv.</p>
       <div id="sp-receive">
         <label class="field">Label <code>m</code>
-          <input id="sp-label" type="number" min="0" max="4294967295" step="1" inputmode="numeric" placeholder="blank = unlabeled · 0 = change (do not hand out)">
           <span class="field-note" data-i18n-rich>Unlabeled is the reusable address you publish. <code>m = 0</code> is reserved for change. <code>m ≥ 1</code> is an extra labeled code from the same scan key.</span>
+          <input id="sp-label" type="number" min="0" max="4294967295" step="1" inputmode="numeric" placeholder="blank = unlabeled · 0 = change (do not hand out)">
         </label>
         <label class="field"><span data-i18n-rich>Payment name (optional, <code>you@yourdomain</code>)</span>
-          <input id="sp-payname" autocomplete="off" placeholder="you@example.com" spellcheck="false" autocapitalize="off">
           <span class="field-note" data-i18n-rich>Printed as the BIP-353 lookup to create on <em>your</em> DNS. This page never resolves it.</span>
+          <input id="sp-payname" autocomplete="off" placeholder="you@example.com" spellcheck="false" autocapitalize="off">
         </label>
-        <div class="row psbt-actions tool-actions">
-          <button class="btn primary" id="sp-derive" type="button">Derive silent payment address</button>
-        </div>
       </div>
       <div id="sp-send" hidden>
-        <label class="field"><span data-i18n-rich>Recipients (one <code>sp1q…</code> / <code>tsp1q…</code> or <code>bitcoin:?sp=</code> URI per line; optional count)</span>
+        <label class="field">Recipients
+          <span class="field-note" data-i18n-rich>One <code>sp1q…</code> / <code>tsp1q…</code> or <code>bitcoin:?sp=</code> URI per line; optional count</span>
           <textarea id="sp-recipients" placeholder="sp1qqgste7k9hx0q…&#10;bitcoin:?sp=sp1qqgste7k9hx0q…&#10;sp1qqgste7k9hx0q… 2" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
           <span class="field-note">Paste the code or a BIP-321 URI. Names like you@domain are not resolved here — look the TXT up on an online machine and paste the URI.</span>
         </label>
@@ -568,9 +566,6 @@ words, pick one of the checksum words.</span></span>
           <textarea id="sp-send-vins" placeholder='[{"txid":"…","vout":0,"scriptSig":"…","txinwitness":"","prevout":{"scriptPubKey":{"hex":"…"}},"path":"m/86&#39;/1&#39;/0&#39;/0/0"}]' spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
           <span class="field-note">Same shape as the published BIP-352 send vectors, minus the keys: each eligible input's key is derived from the loaded session key. An input outside the session's known addresses needs a "path" field ("m/…", optional "fingerprint"). P2TR / P2WPKH / P2SH-P2WPKH / P2PKH only.</span>
         </label>
-        <div class="row psbt-actions tool-actions">
-          <button class="btn primary" id="sp-send-go" type="button">Compute taproot outputs</button>
-        </div>
       </div>
       <div id="sp-verify" hidden>
         <label class="field">Inputs (BIP-352 vin JSON, private keys optional)
@@ -583,13 +578,24 @@ words, pick one of the checksum words.</span></span>
           <input id="sp-verify-labels" placeholder="0, 1, 2" value="0">
           <span class="field-note" data-i18n-rich><code>m = 0</code> is change and should stay in this list. Add any labeled codes you handed out.</span>
         </label>
-        <div class="row psbt-actions tool-actions">
-          <button class="btn primary" id="sp-verify-go" type="button">Scan pasted outputs</button>
+      </div>
+      <div id="sp-results" hidden>
+        <p class="label" id="sp-result-label">Results</p>
+        <div class="tool-result" role="region" aria-labelledby="sp-result-label">
+          <p class="field-note tool-result-empty">Fill in the fields above and run the calculation to see the results here.</p>
+          <div class="tool-result-body" id="sp-out" aria-live="polite"></div>
         </div>
       </div>
       <p class="err" id="sp-error" role="alert"></p>
-      <div id="sp-out" aria-live="polite"></div>
-      <p class="muted">Session keys remain in this page only and are never intentionally stored or sent. Memory clearing is best-effort because browsers may retain internal copies; close the page before reconnecting the computer.</p>
+      <p class="edge-note is-muted" id="sp-session" aria-live="polite">No session key. Receive and verify need a seed or root xprv.</p>
+      <div class="row psbt-actions tool-actions">
+        <button class="btn primary" id="sp-derive" type="button" disabled aria-disabled="true" data-sp-action="receive">Derive silent payment address</button>
+        <button class="btn primary" id="sp-send-go" type="button" disabled aria-disabled="true" data-sp-action="send" hidden>Compute taproot outputs</button>
+        <button class="btn primary" id="sp-verify-go" type="button" disabled aria-disabled="true" data-sp-action="verify" hidden>Scan pasted outputs</button>
+        <button class="btn secondary" id="sp-wipe" type="button" disabled aria-disabled="true">End session / clear fields</button>
+      </div>
+      </div>
+      <div id="sp-address-view" hidden></div>
     </section>
     <div class="tool-intro-stack" id="psbt-tool-intros" hidden>
     <div class="tool-intro edge-note is-info active" id="psbt-tool-intro" aria-hidden="false">
