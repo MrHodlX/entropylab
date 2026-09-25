@@ -41,6 +41,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 mod sanitize;
+mod scriptcode;
 mod verify;
 
 // Keep the inspector bounded like the JS side (src/js/app.js): 5 MB of PSBT,

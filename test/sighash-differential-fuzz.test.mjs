@@ -19,11 +19,18 @@
 //     byte for byte.
 //
 // Both sides hash the same scriptCode: the P2SH redeem script, P2WSH witness
-// script, or tapleaf script the PSBT carries (neither side executes it).
-// Scripts are generated opcode soups, OP_CODESEPARATOR included, so they
-// reach the scriptCode rules the published vectors never touch: legacy
-// sighash skips OP_CODESEPARATOR when it serializes the scriptCode (Bitcoin
-// Core's SerializeScriptCode), BIP143 and BIP341 do not. SIGHASH_SINGLE on a
+// script, or tapleaf script the PSBT carries. Scripts are generated opcode
+// soups, OP_CODESEPARATOR included, so they reach the scriptCode rules the
+// published vectors never touch: legacy sighash skips OP_CODESEPARATOR when
+// it serializes the scriptCode (Bitcoin Core's SerializeScriptCode), BIP143
+// and BIP341 do not. scure hashes the whole script it is given; consensus
+// hashes from the last OP_CODESEPARATOR executed before the signature check
+// (psbt-consensus-scriptcode.test.mjs pins that). So the P2SH and P2WSH soups
+// open with an OP_CHECKSIG, which checks a signature before any separator
+// runs: the whole script is then a scriptCode consensus really hashes, and
+// the two digests are comparable. (The tapleaf soups need no prefix: their
+// PSBTs carry no leaf script, so the app can only verify the default
+// no-separator position, which is what scure computes.) SIGHASH_SINGLE on a
 // BIP341 input always has a matching output: BIP341 defines no digest
 // otherwise (scure refuses to make one, and the app does not accuse what it
 // cannot compute). Legacy and BIP143 SINGLE without a matching output are
@@ -93,6 +100,8 @@ const randomScript = () => {
   }
   return Uint8Array.from(out);
 };
+// A soup whose whole script is a scriptCode: see the header.
+const signableScript = () => Uint8Array.of(0xac, ...randomScript());
 const randomOutputScript = () => (rint(2) ? p2wpkh(secp256k1.getPublicKey(randomKey(), true)) : randomScript());
 
 const FAMILIES = {
@@ -114,7 +123,7 @@ const spendFor = (kind, key) => {
       return { legacy: true, script, amount, fields: {}, digest: (tx, idx, type) => tx.preimageLegacy(idx, script, type) };
     }
     case "p2sh": {
-      const redeem = randomScript();
+      const redeem = signableScript();
       return { legacy: true, script: p2sh(redeem), amount, fields: { redeemScript: redeem }, digest: (tx, idx, type) => tx.preimageLegacy(idx, redeem, type) };
     }
     case "p2wpkh":
@@ -122,11 +131,11 @@ const spendFor = (kind, key) => {
     case "p2sh-p2wpkh":
       return { script: p2sh(p2wpkh(pub)), amount, fields: { redeemScript: p2wpkh(pub) }, scriptCode: p2pkh(pub) };
     case "p2wsh": {
-      const witnessScript = randomScript();
+      const witnessScript = signableScript();
       return { script: p2wsh(witnessScript), amount, fields: { witnessScript }, scriptCode: witnessScript };
     }
     case "p2sh-p2wsh": {
-      const witnessScript = randomScript();
+      const witnessScript = signableScript();
       return { script: p2sh(p2wsh(witnessScript)), amount, fields: { redeemScript: p2wsh(witnessScript), witnessScript }, scriptCode: witnessScript };
     }
     case "key path":

@@ -19,12 +19,13 @@
 
 use bitcoin::blockdata::script::{Instruction, Script};
 use bitcoin::consensus::{encode, Decodable};
-use bitcoin::hashes::{hash160, sha256, Hash};
+use bitcoin::hashes::{hash160, sha256, sha256d, Hash};
 use bitcoin::secp256k1::{self, Message, PublicKey, Secp256k1, XOnlyPublicKey};
 use bitcoin::sighash::{EcdsaSighashType, Prevouts, SighashCache, TapSighashType};
-use bitcoin::taproot::{ControlBlock, TapLeafHash};
-use bitcoin::{ScriptBuf, Transaction, TxOut, Witness};
+use bitcoin::taproot::{ControlBlock, LeafVersion, TapLeafHash};
+use bitcoin::{Amount, ScriptBuf, TapSighash, Transaction, TxOut, Witness};
 
+use crate::scriptcode;
 use crate::{hex_encode, pair_utxo_claim, tx_sanity_error, RawPair};
 
 pub(crate) const ERROR: &str = "error";
@@ -184,80 +185,54 @@ fn classify(index: usize, map: &[RawPair], claim: &TxOut, problems: &mut Vec<Pro
     Spend::Legacy
 }
 
-/// The legacy scriptCode with OP_CODESEPARATOR opcodes removed, the way
-/// Bitcoin Core's SignatureHash serializes it
-/// (CTransactionSignatureSerializer::SerializeScriptCode). Pushed data is
-/// copied verbatim, separators inside it included. A truncated push ends the
-/// walk; Core's preimage differs in that case, but a script with a truncated
-/// push fails EvalScript, so no signature over it is ever valid.
-/// rust-bitcoin's legacy_signature_hash documents that it does NOT attempt
-/// to support OP_CODESEPARATOR, so the stripping happens here.
-///
-/// The verifier does not execute scripts, so a separator that would execute
-/// before the signature's CHECKSIG is stripped too, where Core hashes only
-/// the suffix after the last executed separator. For those scripts the
-/// verdict can still differ from Core; that is a property of verifying
-/// without execution, not of this function.
-fn strip_codeseparators(script: &[u8]) -> Vec<u8> {
-    const OP_CODESEPARATOR: u8 = 0xab;
-    let mut out = Vec::with_capacity(script.len());
-    let mut pc = 0;
-    while pc < script.len() {
-        let op = script[pc];
-        let (data_len, header) = match op {
-            0x01..=0x4b => (op as usize, 1),
-            0x4c if pc + 2 <= script.len() => (script[pc + 1] as usize, 2),
-            0x4d if pc + 3 <= script.len() => (u16::from_le_bytes([script[pc + 1], script[pc + 2]]) as usize, 3),
-            0x4e if pc + 5 <= script.len() => (u32::from_le_bytes(script[pc + 1..pc + 5].try_into().unwrap()) as usize, 5),
-            0x4c | 0x4d | 0x4e => break, // truncated PUSHDATA header
-            _ => (0, 1),
-        };
-        // Compare against the bytes left instead of summing: on wasm32 a
-        // PUSHDATA4 length near 2^32 would wrap pc + header + data_len and
-        // hang or trap the module. The guards above give pc + header <= len.
-        if data_len > script.len() - pc - header {
-            break; // truncated push
-        }
-        let end = pc + header + data_len;
-        if op != OP_CODESEPARATOR {
-            out.extend_from_slice(&script[pc..end]);
-        }
-        pc = end;
-    }
-    out
+/// Signature versions that hash an ECDSA scriptCode.
+#[derive(Clone, Copy)]
+enum SigVersion {
+    Legacy,
+    WitnessV0,
 }
 
-/// The BIP-143 or legacy sighash one ECDSA signature commits to, by spend
-/// kind. `script_code`/`amount` come from the claim (or the redeem/witness
-/// script inside it). None when the sighash cannot be computed (a P2WSH spend
-/// without its witness script, SIGHASH_SINGLE past the outputs).
-fn ecdsa_sighash(
+/// The legacy or BIP-143 digest for one scriptCode. `hash_type` is the
+/// signature's last byte as Core reads it (an int, committed as all four
+/// bytes): rust-bitcoin's typed BIP-143 API only takes the six defined
+/// types, whose flags it derives from the same bits Core masks, so the
+/// preimage is built with that type and its final nHashType field then
+/// overwritten with the byte actually signed. `code` is already the
+/// serialized scriptCode (legacy: separators stripped).
+fn ecdsa_digest(
     cache: &mut SighashCache<&Transaction>,
     index: usize,
-    spend: &Spend,
-    claim: &TxOut,
-    sighash_type: EcdsaSighashType,
+    version: SigVersion,
+    code: &[u8],
+    value: Amount,
+    hash_type: u32,
 ) -> Option<[u8; 32]> {
-    let value = claim.value;
-    let hash = match spend {
-        Spend::P2wpkh => cache.p2wpkh_signature_hash(index, &claim.script_pubkey, value, sighash_type).ok()?.to_byte_array(),
-        Spend::WrappedP2wpkh(redeem) => cache.p2wpkh_signature_hash(index, redeem, value, sighash_type).ok()?.to_byte_array(),
-        Spend::P2wsh(Some(ws)) => cache.p2wsh_signature_hash(index, ws, value, sighash_type).ok()?.to_byte_array(),
-        Spend::WrappedP2wsh(_, Some(ws)) => cache.p2wsh_signature_hash(index, ws, value, sighash_type).ok()?.to_byte_array(),
-        Spend::P2wsh(None) | Spend::WrappedP2wsh(_, None) => return None,
-        Spend::LegacyP2sh(redeem) => cache.legacy_signature_hash(index, Script::from_bytes(&strip_codeseparators(redeem.as_bytes())), sighash_type.to_u32()).ok()?.to_byte_array(),
-        Spend::Legacy => cache.legacy_signature_hash(index, Script::from_bytes(&strip_codeseparators(claim.script_pubkey.as_bytes())), sighash_type.to_u32()).ok()?.to_byte_array(),
-        // Taproot inputs sign with Schnorr; an ECDSA partial signature there
-        // is reported by the caller instead of hashed. Future witness
-        // versions have no sighash here yet.
-        Spend::P2tr(_) | Spend::Unknown | Spend::UnknownWitness => return None,
-    };
-    Some(hash)
+    match version {
+        SigVersion::Legacy => Some(cache.legacy_signature_hash(index, Script::from_bytes(code), hash_type).ok()?.to_byte_array()),
+        SigVersion::WitnessV0 => {
+            let mut preimage = Vec::new();
+            cache
+                .segwit_v0_encode_signing_data_to(&mut preimage, index, Script::from_bytes(code), value, EcdsaSighashType::from_consensus(hash_type))
+                .ok()?;
+            let tail = preimage.len() - 4;
+            preimage[tail..].copy_from_slice(&hash_type.to_le_bytes());
+            Some(sha256d::Hash::hash(&preimage).to_byte_array())
+        }
+    }
 }
 
-/// Verifies one DER-encoded ECDSA signature plus sighash byte against the
-/// spend's digest. Returns the verdict text on failure; None when it
-/// verifies or cannot be computed (uncomputable is reported separately).
+/// Verifies one ECDSA signature (DER plus hash type byte) the way Core's
+/// OP_CHECKSIG does for a partial or final signature whose execution path
+/// is still open: accepted when it verifies under some scriptCode an
+/// execution of the spend's script could hash (see scriptcode.rs), refused
+/// when it verifies under none. Returns the verdict text on failure; None
+/// when it cannot be computed (a P2WSH spend without its witness script) or
+/// the budget ran out between candidates.
+///
+/// Consensus, not policy: strict DER (BIP66) is required, S may be high
+/// (LOW_S is policy; Core normalizes before verifying), any hash type byte
+/// is committed as given (STRICTENC is policy), and the public key is
+/// parsed as libsecp256k1 does.
 fn check_ecdsa(
     cache: &mut SighashCache<&Transaction>,
     index: usize,
@@ -265,24 +240,80 @@ fn check_ecdsa(
     claim: &TxOut,
     pubkey: &[u8],
     sig: &[u8],
+    budget: &mut Budget,
+    problems: &mut Vec<Problem>,
 ) -> Option<Result<(), String>> {
-    let (&sighash_byte, der) = sig.split_last()?;
-    let sighash_type = EcdsaSighashType::from_consensus(sighash_byte as u32);
-    let digest = ecdsa_sighash(cache, index, spend, claim, sighash_type)?;
+    let hash_type = *sig.last()? as u32;
+    let p2wpkh_code;
+    let (version, script): (SigVersion, &[u8]) = match spend {
+        Spend::P2wpkh => {
+            p2wpkh_code = claim.script_pubkey.p2wpkh_script_code()?;
+            (SigVersion::WitnessV0, p2wpkh_code.as_bytes())
+        }
+        Spend::WrappedP2wpkh(redeem) => {
+            p2wpkh_code = redeem.p2wpkh_script_code()?;
+            (SigVersion::WitnessV0, p2wpkh_code.as_bytes())
+        }
+        Spend::P2wsh(Some(ws)) | Spend::WrappedP2wsh(_, Some(ws)) => (SigVersion::WitnessV0, ws.as_bytes()),
+        Spend::LegacyP2sh(redeem) => (SigVersion::Legacy, redeem.as_bytes()),
+        Spend::Legacy => (SigVersion::Legacy, claim.script_pubkey.as_bytes()),
+        // No witness script, or taproot (Schnorr; reported by the caller),
+        // or a future witness version: nothing to hash.
+        Spend::P2wsh(None) | Spend::WrappedP2wsh(_, None) | Spend::P2tr(_) | Spend::Unknown | Spend::UnknownWitness => return None,
+    };
+    let starts = match scriptcode::code_starts(script, false) {
+        scriptcode::Shape::Starts(starts) if starts.is_empty() => {
+            // No opcode in the script checks a signature: none it carries is
+            // ever consumed. Hash the whole script, what a signer would.
+            vec![scriptcode::CodeStart { offset: 0, position: scriptcode::NO_CODESEPARATOR, multisig: false }]
+        }
+        scriptcode::Shape::Starts(starts) => starts,
+        scriptcode::Shape::Truncated => {
+            return Some(Err("cannot be valid: its script has a push running past the end, so it never executes".into()))
+        }
+        scriptcode::Shape::Unbalanced => {
+            return Some(Err("cannot be valid: its script's IF/ELSE/ENDIF do not balance, so it never executes".into()))
+        }
+    };
+    if !scriptcode::is_valid_signature_encoding(sig) {
+        return Some(Err("signature is not valid DER".into()));
+    }
     let pubkey = match PublicKey::from_slice(pubkey) {
         Ok(key) => key,
         Err(_) => return Some(Err("public key is not a valid secp256k1 key".into())),
     };
-    let signature = match secp256k1::ecdsa::Signature::from_der(der) {
+    let mut signature = match secp256k1::ecdsa::Signature::from_der_lax(&sig[..sig.len() - 1]) {
         Ok(sig) => sig,
         Err(_) => return Some(Err("signature is not valid DER".into())),
     };
-    let message = Message::from_digest_slice(&digest).expect("a sighash is 32 bytes");
-    Some(
-        Secp256k1::verification_only()
-            .verify_ecdsa(&message, &signature, &pubkey)
-            .map_err(|_| "signature does not verify against the claimed previous output".into()),
-    )
+    signature.normalize_s();
+    let secp = Secp256k1::verification_only();
+    // The caller took one unit of budget for this signature; every further
+    // distinct scriptCode is another digest and takes its own.
+    let mut seen: Vec<[u8; 32]> = Vec::new();
+    for start in starts {
+        let tail = &script[start.offset..];
+        let codes = match version {
+            SigVersion::Legacy => scriptcode::legacy_script_codes(tail, sig, start.multisig),
+            SigVersion::WitnessV0 => vec![tail.to_vec()],
+        };
+        for code in codes {
+            let id = sha256::Hash::hash(&code).to_byte_array();
+            if seen.contains(&id) {
+                continue;
+            }
+            if !seen.is_empty() && !budget.take(problems) {
+                return None;
+            }
+            seen.push(id);
+            let digest = ecdsa_digest(cache, index, version, &code, claim.value, hash_type)?;
+            let message = Message::from_digest_slice(&digest).expect("a sighash is 32 bytes");
+            if secp.verify_ecdsa(&message, &signature, &pubkey).is_ok() {
+                return Some(Ok(()));
+            }
+        }
+    }
+    Some(Err("signature does not verify against the claimed previous output".into()))
 }
 
 /// BIP-341 sighash for a taproot input. Every input needs a resolved claim —
@@ -302,19 +333,42 @@ fn taproot_sighash_key_spend(
         .map(|h| h.to_byte_array())
 }
 
+/// BIP-342 sighash for a script-path signature that committed to
+/// `codesep_pos`, the opcode position of the last OP_CODESEPARATOR its
+/// execution ran (NO_CODESEPARATOR when none did).
 fn taproot_sighash_script_spend(
     cache: &mut SighashCache<&Transaction>,
     index: usize,
     prevouts: &Option<Vec<TxOut>>,
-    leaf_hash: &[u8],
+    leaf_hash: TapLeafHash,
+    codesep_pos: u32,
     sighash_type: TapSighashType,
 ) -> Option<[u8; 32]> {
     let prevouts = prevouts.as_ref()?;
-    let leaf_hash = TapLeafHash::from_slice(leaf_hash).ok()?;
+    let mut engine = TapSighash::engine();
     cache
-        .taproot_script_spend_signature_hash(index, &Prevouts::All(prevouts), leaf_hash, sighash_type)
-        .ok()
-        .map(|h| h.to_byte_array())
+        .taproot_encode_signing_data_to(&mut engine, index, &Prevouts::All(prevouts), None, Some((leaf_hash, codesep_pos)), sighash_type)
+        .ok()?;
+    Some(TapSighash::from_engine(engine).to_byte_array())
+}
+
+/// The codesep_pos values a script-path signature under `leaf_hash` can have
+/// committed to: from the leaf's script when the input declares it
+/// (PSBT_IN_TAP_LEAF_SCRIPT, 0x15, tapscript leaf version 0xc0), the
+/// positions of the separators an execution can run last before a
+/// signature check, no-separator first when it is one. Without the script,
+/// only the no-separator default — what a signer uses absent a script.
+fn tapscript_codesep_positions(map: &[RawPair], leaf_hash: TapLeafHash) -> Vec<u32> {
+    let script = map.iter().filter(|pair| pair.key[0] == 0x15).find_map(|pair| {
+        let (&version, script) = pair.value.split_last()?;
+        let version = LeafVersion::from_consensus(version).ok()?;
+        (version == LeafVersion::TapScript && TapLeafHash::from_script(Script::from_bytes(script), version) == leaf_hash)
+            .then_some(script)
+    });
+    match script.map(|script| scriptcode::code_starts(script, true)) {
+        Some(scriptcode::Shape::Starts(starts)) if !starts.is_empty() => starts.into_iter().map(|start| start.position).collect(),
+        _ => vec![scriptcode::NO_CODESEPARATOR],
+    }
 }
 
 /// Parses a 64/65-byte BIP-340 signature into (signature, sighash type);
@@ -386,7 +440,7 @@ fn check_partial_sigs(
         if !budget.take(problems) {
             continue;
         }
-        match check_ecdsa(cache, index, spend, claim, pubkey, &pair.value) {
+        match check_ecdsa(cache, index, spend, claim, pubkey, &pair.value, budget, problems) {
             Some(Ok(())) => {}
             Some(Err(why)) => problems.push(Problem::warning(
                 scope.clone(),
@@ -443,20 +497,34 @@ fn check_tap_sigs(
         if !budget.take(problems) {
             continue;
         }
-        match read_tap_sig(&pair.value, "script-path signature") {
-            Err(why) => problems.push(Problem::warning(scope.clone(), "tap_sig_invalid", why)),
-            Ok((sig, ty)) => match taproot_sighash_script_spend(cache, index, prevouts, leaf_hash, ty) {
-                None => {}
-                Some(digest) => {
-                    if let Err(why) = check_schnorr(digest, &sig, &key) {
-                        problems.push(Problem::warning(
-                            scope.clone(),
-                            "tap_sig_invalid",
-                            format!("script-path signature (xonly {short}…) {why}"),
-                        ));
-                    }
-                }
-            },
+        let (sig, ty) = match read_tap_sig(&pair.value, "script-path signature") {
+            Err(why) => {
+                problems.push(Problem::warning(scope.clone(), "tap_sig_invalid", why));
+                continue;
+            }
+            Ok(parsed) => parsed,
+        };
+        let leaf_hash = TapLeafHash::from_slice(leaf_hash).expect("32 bytes");
+        // Valid when it verifies at some position; each position past the
+        // first is another digest and takes its own budget.
+        let mut verdict = None;
+        for (n, position) in tapscript_codesep_positions(map, leaf_hash).into_iter().enumerate() {
+            if n > 0 && !budget.take(problems) {
+                verdict = None;
+                break;
+            }
+            let Some(digest) = taproot_sighash_script_spend(cache, index, prevouts, leaf_hash, position, ty) else { break };
+            verdict = Some(check_schnorr(digest, &sig, &key));
+            if matches!(verdict, Some(Ok(()))) {
+                break;
+            }
+        }
+        if let Some(Err(why)) = verdict {
+            problems.push(Problem::warning(
+                scope.clone(),
+                "tap_sig_invalid",
+                format!("script-path signature (xonly {short}…) {why}"),
+            ));
         }
     }
 }
@@ -568,7 +636,7 @@ fn check_final_scriptsig(
     if !budget.take(problems) {
         return;
     }
-    match check_ecdsa(cache, index, &Spend::Legacy, claim, pubkey, sig) {
+    match check_ecdsa(cache, index, &Spend::Legacy, claim, pubkey, sig, budget, problems) {
         Some(Ok(())) => {}
         Some(Err(why)) => problems.push(Problem::error(scope, "final_scriptsig_bad", format!("final scriptSig {why}"))),
         None => problems.push(Problem::error(scope, "final_scriptsig_bad", "final scriptSig sighash cannot be computed")),
@@ -616,7 +684,7 @@ fn check_final_witness(
             if !budget.take(problems) {
                 return;
             }
-            match check_ecdsa(cache, index, spend, claim, items[1], items[0]) {
+            match check_ecdsa(cache, index, spend, claim, items[1], items[0], budget, problems) {
                 Some(Ok(())) => {}
                 Some(Err(why)) => problems.push(Problem::error(scope, "final_witness_bad", format!("final witness {why}"))),
                 None => problems.push(Problem::error(scope, "final_witness_bad", "final witness sighash cannot be computed")),
@@ -905,7 +973,7 @@ pub(crate) fn gate_error(tx: &Transaction, inputs: &[Vec<RawPair>]) -> Option<St
 mod tests {
     use super::*;
     use bitcoin::secp256k1::SecretKey;
-    use bitcoin::{Amount, OutPoint, Sequence, TxIn, Txid};
+    use bitcoin::{OutPoint, Sequence, TxIn, Txid};
 
     fn hex(text: &str) -> Vec<u8> {
         crate::hex_decode(text).unwrap()
@@ -913,6 +981,68 @@ mod tests {
 
     fn pair(key: &str, value: &str) -> RawPair {
         RawPair { key: hex(key), value: hex(value) }
+    }
+
+    /// Bitcoin Core's src/test/data/sighash.json (v31.1, copied verbatim to
+    /// test/fixtures/core/): 500 legacy digests over random transactions,
+    /// scripts (210 with OP_CODESEPARATOR opcodes) and 32-bit hash types.
+    /// Core's SignatureHash takes the scriptCode as given and skips its
+    /// separators when serializing; the verifier's legacy digest must be that
+    /// function, fed the stripped code it hashes with.
+    #[test]
+    fn legacy_digests_match_bitcoin_core_sighash_json() {
+        let vectors: serde_json::Value =
+            serde_json::from_str(include_str!("../../test/fixtures/core/sighash.json")).unwrap();
+        let vectors = vectors.as_array().unwrap();
+        assert_eq!(vectors.len(), 501, "a header row and 500 vectors");
+        let mut with_separators = 0;
+        for (n, vector) in vectors.iter().skip(1).enumerate() {
+            let [tx, script, index, hash_type, expected] = vector.as_array().unwrap().as_slice() else { panic!("vector {n}") };
+            let tx: Transaction = encode::deserialize(&hex(tx.as_str().unwrap())).unwrap();
+            let script = hex(script.as_str().unwrap());
+            let index = index.as_u64().unwrap() as usize;
+            let hash_type = hash_type.as_i64().unwrap() as i32 as u32;
+            let mut expected = hex(expected.as_str().unwrap());
+            expected.reverse(); // Core prints uint256 byte-reversed
+            assert!(matches!(scriptcode::code_starts(&script, false), scriptcode::Shape::Starts(_) | scriptcode::Shape::Unbalanced), "vector {n} parses");
+            let code = scriptcode::strip_codeseparators(&script);
+            if code.len() < script.len() {
+                with_separators += 1;
+            }
+            let mut cache = SighashCache::new(&tx);
+            let digest = ecdsa_digest(&mut cache, index, SigVersion::Legacy, &code, Amount::ZERO, hash_type).unwrap();
+            assert_eq!(digest.to_vec(), expected, "sighash.json vector {n}");
+        }
+        assert_eq!(with_separators, 210);
+    }
+
+    /// BIP-143's own examples (native P2WPKH SIGHASH_ALL, P2SH-P2WSH 6-of-6
+    /// with all six types), as digests: ecdsa_digest's typed-then-patched
+    /// preimage must equal the published sighash for every defined type.
+    #[test]
+    fn witness_v0_digests_match_bip143_examples() {
+        // BIP-143 "Native P2WPKH": input 1, scriptCode for key hash
+        // 1d0f172a0ecb48aee1be1f2687d2963ae33f71a1, 6 BTC, SIGHASH_ALL.
+        let tx: Transaction = encode::deserialize(&hex("0100000002fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f0000000000eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac11000000")).unwrap();
+        let code = hex("76a9141d0f172a0ecb48aee1be1f2687d2963ae33f71a188ac");
+        let mut cache = SighashCache::new(&tx);
+        let digest = ecdsa_digest(&mut cache, 1, SigVersion::WitnessV0, &code, Amount::from_sat(600_000_000), 0x01).unwrap();
+        assert_eq!(crate::hex_encode(&digest), "c37af31116d1b27caf68aae9e3ac82f1477929014d5b917657d0eb49478cb670");
+        // BIP-143 "P2SH-P2WSH": 6-of-6, 987654321 sats, one digest per type.
+        let tx: Transaction = encode::deserialize(&hex("010000000136641869ca081e70f394c6948e8af409e18b619df2ed74aa106c1ca29787b96e0100000000ffffffff0200e9a435000000001976a914389ffce9cd9ae88dcc0631e88a821ffdbe9bfe2688acc0832f05000000001976a9147480a33f950689af511e6e84c138dbbd3c3ee41588ac00000000")).unwrap();
+        let code = hex("56210307b8ae49ac90a048e9b53357a2354b3334e9c8bee813ecb98e99a7e07e8c3ba32103b28f0c28bfab54554ae8c658ac5c3e0ce6e79ad336331f78c428dd43eea8449b21034b8113d703413d57761b8b9781957b8c0ac1dfe69f492580ca4195f50376ba4a21033400f6afecb833092a9a21cfdf1ed1376e58c5d1f47de74683123987e967a8f42103a6d48b1131e94ba04d9737d61acdaa1322008af9602b3b14862c07a1789aac162102d8b661b0b3302ee2f162b09e07a55ad5dfbe673a9f01d9f0c19617681024306b56ae");
+        for (hash_type, expected) in [
+            (0x01, "185c0be5263dce5b4bb50a047973c1b6272bfbd0103a89444597dc40b248ee7c"),
+            (0x02, "e9733bc60ea13c95c6527066bb975a2ff29a925e80aa14c213f686cbae5d2f36"),
+            (0x03, "1e1f1c303dc025bd664acb72e583e933fae4cff9148bf78c157d1e8f78530aea"),
+            (0x81, "2a67f03e63a6a422125878b40b82da593be8d4efaafe88ee528af6e5a9955c6e"),
+            (0x82, "781ba15f3779d5542ce8ecb5c18716733a5ee42a6f51488ec96154934e2c890a"),
+            (0x83, "511e8e52ed574121fc1b654970395502128263f62662e076dc6baf05c2e6a99b"),
+        ] {
+            let mut cache = SighashCache::new(&tx);
+            let digest = ecdsa_digest(&mut cache, 0, SigVersion::WitnessV0, &code, Amount::from_sat(987_654_321), hash_type).unwrap();
+            assert_eq!(crate::hex_encode(&digest), expected, "hash type 0x{hash_type:02x}");
+        }
     }
 
     // A one-input transaction spending a made-up prevout, paying 1000 sats
@@ -1037,27 +1167,6 @@ mod tests {
         let badmap = vec![pair("01", &witness_utxo_value(&claim)), pair(&format!("02{key_hex}"), &hex_encode(&bad))];
         let problems = analyze(&tx, &[badmap]);
         assert!(problems.iter().any(|p| p.code == "partial_sig_invalid" && p.severity == WARNING));
-    }
-
-    #[test]
-    fn strip_codeseparators_removes_opcodes_but_keeps_pushed_data() {
-        // Bare opcodes go, everything else stays.
-        assert_eq!(strip_codeseparators(&[0x51, 0xab, 0x52]), vec![0x51, 0x52]);
-        // Separators inside a push are data, not opcodes: the push is copied
-        // verbatim, and only the trailing real opcode is removed.
-        assert_eq!(strip_codeseparators(&[0x02, 0xab, 0xab, 0xab]), vec![0x02, 0xab, 0xab]);
-        // PUSHDATA1 payloads are copied with their header.
-        assert_eq!(
-            strip_codeseparators(&[0x4c, 0x03, 0xab, 0x51, 0xab, 0x51]),
-            vec![0x4c, 0x03, 0xab, 0x51, 0xab, 0x51]
-        );
-        // A truncated push ends the walk, as Core's GetOp failure does.
-        assert_eq!(strip_codeseparators(&[0x51, 0x05, 0x52]), vec![0x51]);
-        // No separators: a real P2PKH scriptPubKey comes back unchanged.
-        let mut plain = vec![0x76, 0xa9, 0x14];
-        plain.extend_from_slice(&[0x11; 20]);
-        plain.extend_from_slice(&[0x88, 0xac]);
-        assert_eq!(strip_codeseparators(&plain), plain);
     }
 
     #[test]
