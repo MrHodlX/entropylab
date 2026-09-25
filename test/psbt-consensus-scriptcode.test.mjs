@@ -640,3 +640,123 @@ test("the Core fixture is intact and self-describing", () => {
     }
   }
 });
+
+// --- 6. hostile scale: the separator analysis stays bounded (#535) ----------
+//
+// A crafted PSBT could freeze the editor: the separator analysis behind the
+// signature verdicts held one full bitset per IF arm and per separator —
+// quadratic in both shapes below, about a minute for a 240 KB PSBT. Now the
+// pre-tapscript versions stop at Core's own execution limits (a legacy or
+// P2WSH script over 10,000 bytes or with more than 201 counted opcodes never
+// runs, so its signatures are moot), tapscript walks a union-DAG in linear
+// time, and one script is analysed once, not once per signature. Each test
+// also asserts the verdict the shape must produce; the ceilings only catch a
+// regression (the pre-fix walk needed >10s per shape at these sizes).
+
+const HOSTILE_MS = 8_000;
+const GEN_X = unhex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
+const MINIMAL_DER = unhex("30060201010201010101");
+// Iterative builders: the megabyte-scale shapes below blow the call stack
+// with the spread-style kv()/varBytes() helpers used on the small vectors.
+const putCompactSize = (out, n) => {
+  if (n < 0xfd) out.push(n);
+  else if (n <= 0xffff) out.push(0xfd, n & 255, n >>> 8);
+  else out.push(0xfe, n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255);
+};
+const barePsbt = (inputPairs) => {
+  // version 2, one input (zero prevout, empty scriptSig, final sequence),
+  // one OP_RETURN output, locktime 0.
+  const tx = [
+    2, 0, 0, 0,
+    1,
+    ...new Array(36).fill(0),
+    0, 0xff, 0xff, 0xff, 0xff,
+    1,
+    ...le64(1000),
+    1, 0x6a,
+    0, 0, 0, 0,
+  ];
+  const out = [0x70, 0x73, 0x62, 0x74, 0xff];
+  const pair = (key, value) => {
+    putCompactSize(out, key.length);
+    for (const b of key) out.push(b);
+    putCompactSize(out, value.length);
+    for (const b of value) out.push(b);
+  };
+  pair([0x00], [...tx]);
+  out.push(0x00);
+  for (const [key, value] of inputPairs) pair(key, value);
+  out.push(0x00, 0x00); // input map terminator, one empty output map
+  return Uint8Array.from(out);
+};
+const witnessUtxo = (scriptPubKey) => {
+  const out = [...le64(60_000)];
+  putCompactSize(out, scriptPubKey.length);
+  for (const b of scriptPubKey) out.push(b);
+  return out;
+};
+const taggedTapHash = (tag, msg) => {
+  const th = sha256(new TextEncoder().encode(tag));
+  return sha256(cat(th, th, msg));
+};
+const tapLeafHashOf = (leaf) => {
+  const prefixed = [...[0xc0]];
+  putCompactSize(prefixed, leaf.length);
+  return taggedTapHash("TapLeaf", cat(prefixed, leaf));
+};
+const timed = (psbt) => {
+  const started = performance.now();
+  const problems = psbtInspectDoc(psbt).problems;
+  return { problems, ms: performance.now() - started };
+};
+
+test("2.56M separators in a row: a P2WSH script over the size limit is refused, not analysed (#535 row shape)", () => {
+  const witnessScript = Uint8Array.from({ length: 2_560_001 }, (_, i) => (i === 2_560_000 ? 0x51 : 0xab));
+  const program = sha256(witnessScript);
+  const psbt = barePsbt([
+    [[0x01], witnessUtxo(cat([0x00, 0x20], program))],
+    [[0x05], witnessScript],
+    [[0x02, 0x02, ...GEN_X], MINIMAL_DER],
+  ]);
+  const { problems, ms } = timed(psbt);
+  assert.ok(ms < HOSTILE_MS, `psbtInspectDoc took ${(ms / 1000).toFixed(1)}s for 2.56M separators`);
+  const flagged = problems.filter((p) => p.code === "partial_sig_invalid");
+  assert.equal(flagged.length, 1);
+  assert.match(flagged[0].message, /never executes/, "over the consensus size limit, the script's signatures are moot");
+});
+
+test("150k nested IF+separator blocks in a tapscript leaf: analysed linearly, not quadratically (#535 nested shape)", () => {
+  const depth = 150_000;
+  const leaf = new Uint8Array(3 * depth + 35);
+  for (let i = 0; i < depth; i++) {
+    leaf[i * 2] = 0x63; // IF
+    leaf[i * 2 + 1] = 0xab; // CODESEPARATOR
+  }
+  leaf.set([0x20, ...GEN_X, 0xac], depth * 2); // <x> CHECKSIG at the bottom
+  leaf.fill(0x68, depth * 2 + 35); // ENDIFs
+  const leafHash = tapLeafHashOf(leaf);
+  const psbt = barePsbt([
+    [[0x01], witnessUtxo(cat([0x51, 0x20], GEN_X))],
+    [[0x15], cat(leaf, [0xc0])],
+    [[0x14, ...GEN_X, ...leafHash], new Uint8Array(64).fill(1)],
+  ]);
+  const { problems, ms } = timed(psbt);
+  assert.ok(ms < HOSTILE_MS, `psbtInspectDoc took ${(ms / 1000).toFixed(1)}s for 150k nested IF+separator`);
+  assert.equal(problems.filter((p) => p.code === "tap_sig_invalid").length, 1, "the junk signature is still judged");
+});
+
+test("one script, many signatures: the separator analysis runs once per script, not per signature", () => {
+  // 400k separators in a tapscript leaf, signed 24 times. One analysis plus
+  // cheap memo hits; without the memo each signature pays the walk again.
+  const leaf = Uint8Array.from({ length: 400_002 }, (_, i) => (i >= 400_000 ? [0x51, 0xac][i - 400_000] : 0xab));
+  const leafHash = tapLeafHashOf(leaf);
+  const sigKey = [0x14, ...GEN_X, ...leafHash];
+  const pairs = [
+    [[0x01], witnessUtxo(cat([0x51, 0x20], GEN_X))],
+    [[0x15], cat(leaf, [0xc0])],
+  ];
+  for (let n = 0; n < 24; n++) pairs.push([sigKey, new Uint8Array(64).fill(n + 1)]);
+  const { problems, ms } = timed(barePsbt(pairs));
+  assert.ok(ms < HOSTILE_MS, `psbtInspectDoc took ${(ms / 1000).toFixed(1)}s for 24 signatures over one 400k-separator script`);
+  assert.equal(problems.filter((p) => p.code === "tap_sig_invalid").length, 24, "every signature is still judged");
+});
