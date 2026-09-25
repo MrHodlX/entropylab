@@ -577,6 +577,53 @@ test("limit: scripts that fail for other reasons are not used to accuse", () => 
   }
 });
 
+// Legacy CHECKMULTISIG removes every signature on its stack from the
+// scriptCode (FindAndDelete of each), so a script that embeds signature-shaped
+// pushes can be hashed with any subset of them gone: which ones a spend
+// deletes is fixed by the scriptSig that does not exist yet. The case below
+// is spendable: <c_i> DROP ... 3 <K> <K2> <K3> 3 CHECKMULTISIG NOT, with the
+// stack signatures <ours> <c2> <c4> — ours verifies against K, c2 then fails
+// against K2 with too few keys left, CHECKMULTISIG pushes false, NOT flips it
+// (NULLFAIL is policy). Core hashes the script with c2 and c4 deleted.
+const multisigWithCompanions = (count) => {
+  const key = randomKey(), pub = secp256k1.getPublicKey(key, true);
+  const companions = Array.from({ length: count }, () => cat(secp256k1.sign(randomBytes(32), randomKey(), { prehash: false, format: "der" }), [0x01]));
+  const push = (data) => [data.length, ...data];
+  const keys = [pub, secp256k1.getPublicKey(randomKey(), true), secp256k1.getPublicKey(randomKey(), true)];
+  const tail = [0x53, ...keys.flatMap(push), 0x53, 0xae, 0x91];
+  const scriptWithout = (deleted) => Uint8Array.from([...companions.flatMap((c, i) => (deleted.includes(i) ? [OP.DROP] : [...push(c), OP.DROP])), ...tail]);
+  const script = scriptWithout([]);
+  const spend = buildSpend(true, pub, script, 0x01);
+  const problems = (code) => psbtInspectDoc(signedPsbt(spend, key, spend.tx.preimageLegacy(spend.idx, code, 0x01), 0x01)).problems.filter((p) => p.scope === `input ${spend.idx}`);
+  return { scriptWithout, problems };
+};
+
+test("legacy CHECKMULTISIG: any subset of embedded signatures may be deleted, not only none, one, or all", () => {
+  for (const count of [5, 8]) {
+    const { scriptWithout, problems } = multisigWithCompanions(count);
+    // Intermediate subsets: two of them, and all but one.
+    for (const deleted of [[1, 3], Array.from({ length: count - 1 }, (_, i) => i)]) {
+      const flagged = problems(scriptWithout(deleted)).filter((p) => p.code === "partial_sig_invalid" || p.severity === "error");
+      assert.deepEqual(flagged.map((p) => p.message), [], `${count} companions, deleted ${deleted}`);
+    }
+    // Control: a scriptCode no deletion produces (the trailing NOT gone) is refused.
+    const code = scriptWithout([1]).slice(0, -1);
+    assert.equal(problems(code).filter((p) => p.code === "partial_sig_invalid").length, 1, `${count} companions, bogus scriptCode`);
+  }
+});
+
+test("legacy CHECKMULTISIG: too many embedded signatures to enumerate is unchecked, never invalid", () => {
+  // Nine companions: 512 subsets, more than the verification budget. The
+  // signature is reported unchecked at error severity, so the build gate fails
+  // closed, and is not accused.
+  const { scriptWithout, problems } = multisigWithCompanions(9);
+  for (const deleted of [[1, 3], [0, 2, 4, 6, 8]]) {
+    const found = problems(scriptWithout(deleted));
+    assert.equal(found.filter((p) => p.code === "partial_sig_invalid").length, 0, `deleted ${deleted}`);
+    assert.equal(found.filter((p) => p.code === "verification_incomplete" && p.severity === "error").length, 1, `deleted ${deleted}`);
+  }
+});
+
 test("the Core fixture is intact and self-describing", () => {
   assert.match(VECTORS.source.commit, /^[0-9a-f]{40}$/);
   for (const name of ["tx_valid.json", "tx_invalid.json"]) assert.match(VECTORS.source.sha256[name], /^[0-9a-f]{64}$/);

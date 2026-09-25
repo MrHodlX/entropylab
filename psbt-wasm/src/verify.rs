@@ -37,6 +37,7 @@ pub(crate) const WARNING: &str = "warning";
 // signatures are reported unchecked instead — the same budgeted shape the
 // sanitize pass uses (a 5 MB hostile PSBT must not freeze the editor).
 const MAX_SIGNATURE_CHECKS: usize = 256;
+const _: () = assert!(1 << scriptcode::MAX_MULTISIG_COMPANIONS <= MAX_SIGNATURE_CHECKS);
 
 /// The verification budget: `take()` returns false once exhausted, and the
 /// caller notes the exhaustion in the problem list exactly once.
@@ -226,8 +227,9 @@ fn ecdsa_digest(
 /// is still open: accepted when it verifies under some scriptCode an
 /// execution of the spend's script could hash (see scriptcode.rs), refused
 /// when it verifies under none. Returns the verdict text on failure; None
-/// when it cannot be computed (a P2WSH spend without its witness script) or
-/// the budget ran out between candidates.
+/// when it cannot be computed (a P2WSH spend without its witness script),
+/// the budget ran out between candidates, or a multisig embeds too many
+/// signatures to try every deletion (noted as `verification_incomplete`).
 ///
 /// Consensus, not policy: strict DER (BIP66) is required, S may be high
 /// (LOW_S is policy; Core normalizes before verifying), any hash type byte
@@ -294,7 +296,22 @@ fn check_ecdsa(
     for start in starts {
         let tail = &script[start.offset..];
         let codes = match version {
-            SigVersion::Legacy => scriptcode::legacy_script_codes(tail, sig, start.multisig),
+            SigVersion::Legacy => match scriptcode::legacy_script_codes(tail, sig, start.multisig) {
+                Some(codes) => codes,
+                None => {
+                    // Too many subsets to try: unchecked, and an error so
+                    // the gate fails closed — never reported invalid.
+                    problems.push(Problem::error(
+                        format!("input {index}"),
+                        "verification_incomplete",
+                        format!(
+                            "a signature is unchecked: its multisig script embeds more than {} signature-shaped pushes, too many combinations to try",
+                            scriptcode::MAX_MULTISIG_COMPANIONS
+                        ),
+                    ));
+                    return None;
+                }
+            },
             SigVersion::WitnessV0 => vec![tail.to_vec()],
         };
         for code in codes {

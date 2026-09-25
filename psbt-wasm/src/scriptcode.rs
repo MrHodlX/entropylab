@@ -292,19 +292,24 @@ pub(crate) fn code_starts(script: &[u8], tapscript: bool) -> Shape {
     Shape::Starts((0..bits).filter(|&index| reached.contains(index)).map(start).collect())
 }
 
+/// The most signature-shaped pushes a legacy multisig scriptCode may embed
+/// and still be checked: every subset of them is a candidate scriptCode, and
+/// 2^8 is the whole verification budget.
+pub(crate) const MAX_MULTISIG_COMPANIONS: usize = 8;
+
 /// The legacy scriptCodes one signature can be hashed with from `start`:
 /// FindAndDelete of the signature's own push, and — when a CHECKMULTISIG
 /// hashes from here — of the other signatures that multisig could be given.
 /// Those are the canonical pushes left in the scriptCode that could be a
-/// signature on its stack: strict-DER ones, and the empty push. Every
-/// subset is tried up to four of them; past that, none, each alone, and all
-/// (a script embedding five signature-shaped pushes for one multisig is a
-/// construction no signer produces). Separators are stripped last, as the
-/// serializer does.
-pub(crate) fn legacy_script_codes(script_code: &[u8], sig: &[u8], multisig: bool) -> Vec<Vec<u8>> {
+/// signature on its stack: strict-DER ones, and the empty push. Which of
+/// them a spend deletes is fixed by the scriptSig, so every subset is a
+/// candidate; None when there are more than MAX_MULTISIG_COMPANIONS, too
+/// many subsets to try — the signature is then unchecked, not invalid.
+/// Separators are stripped last, as the serializer does.
+pub(crate) fn legacy_script_codes(script_code: &[u8], sig: &[u8], multisig: bool) -> Option<Vec<Vec<u8>>> {
     let own = find_and_delete(script_code, &push_encoding(sig));
     if !multisig {
-        return vec![strip_codeseparators(&own)];
+        return Some(vec![strip_codeseparators(&own)]);
     }
     let mut others: Vec<Vec<u8>> = Vec::new();
     let mut pc = 0;
@@ -320,21 +325,14 @@ pub(crate) fn legacy_script_codes(script_code: &[u8], sig: &[u8], multisig: bool
         }
         pc = end;
     }
-    let subsets: Vec<Vec<usize>> = if others.len() <= 4 {
-        (0u32..1 << others.len()).map(|mask| (0..others.len()).filter(|i| mask & (1 << i) != 0).collect()).collect()
-    } else {
-        let mut subsets = vec![Vec::new()];
-        subsets.extend((0..others.len()).map(|i| vec![i]));
-        subsets.push((0..others.len()).collect());
-        subsets
-    };
-    subsets
-        .into_iter()
-        .map(|subset| {
-            let code = subset.into_iter().fold(own.clone(), |code, i| find_and_delete(&code, &others[i]));
-            strip_codeseparators(&code)
-        })
-        .collect()
+    if others.len() > MAX_MULTISIG_COMPANIONS {
+        return None;
+    }
+    let codes = (0u32..1 << others.len()).map(|mask| {
+        let code = (0..others.len()).filter(|i| mask & (1 << i) != 0).fold(own.clone(), |code, i| find_and_delete(&code, &others[i]));
+        strip_codeseparators(&code)
+    });
+    Some(codes.collect())
 }
 
 #[cfg(test)]
@@ -514,21 +512,30 @@ mod tests {
     }
 
     #[test]
-    fn multisig_companion_subsets_are_bounded() {
+    fn every_multisig_companion_subset_is_a_candidate_up_to_the_cap() {
         let sig = h("300602010102010101");
         // Distinct strict-DER pushes differing in S.
         let companion = |n: u8| push_encoding(&[0x30, 0x06, 0x02, 0x01, 0x02, 0x02, 0x01, n, 0x01]);
-        let script = |count: u8| [vec![0x52], (1..=count).flat_map(|n| companion(n + 1)).collect(), h("52ae")].concat();
-        // Up to four: every subset.
-        assert_eq!(legacy_script_codes(&script(4), &sig, true).len(), 16);
-        // Five or more: none, each alone, all.
-        let codes = legacy_script_codes(&script(5), &sig, true);
-        assert_eq!(codes.len(), 7);
-        assert_eq!(codes[0], script(5));
-        assert_eq!(codes[6], h("5252ae"));
+        let script_without = |count: u8, deleted: &[u8]| {
+            [vec![0x52], (1..=count).filter(|n| !deleted.contains(n)).flat_map(|n| companion(n + 1)).collect(), h("52ae")].concat()
+        };
+        let script = |count: u8| script_without(count, &[]);
+        assert_eq!(legacy_script_codes(&script(4), &sig, true).unwrap().len(), 16);
+        // Five: all 32 subsets, intermediate ones included (a spend that
+        // gives CHECKMULTISIG two of them deletes exactly those two).
+        let codes = legacy_script_codes(&script(5), &sig, true).unwrap();
+        assert_eq!(codes.len(), 32);
+        for deleted in [&[][..], &[2, 4], &[1, 3, 5], &[1, 2, 3, 4], &[1, 2, 3, 4, 5]] {
+            assert!(codes.contains(&script_without(5, deleted)), "{deleted:?}");
+        }
+        assert_eq!(legacy_script_codes(&script(MAX_MULTISIG_COMPANIONS as u8), &sig, true).unwrap().len(), 1 << MAX_MULTISIG_COMPANIONS);
+        // Past the cap: not a partial list, no list.
+        assert_eq!(legacy_script_codes(&script(MAX_MULTISIG_COMPANIONS as u8 + 1), &sig, true), None);
+        // Without a multisig the companions are not deleted, however many.
+        assert_eq!(legacy_script_codes(&script(9), &sig, false), Some(vec![script(9)]));
         // A non-DER push is never a companion; a repeated one counts once.
         let junk = [h("52"), push_encoding(&[0x30, 0x01]), companion(2), companion(2), h("52ae")].concat();
-        assert_eq!(legacy_script_codes(&junk, &sig, true).len(), 2);
+        assert_eq!(legacy_script_codes(&junk, &sig, true).unwrap().len(), 2);
     }
 
     #[test]
@@ -536,25 +543,25 @@ mod tests {
         // An empty signature on the multisig stack makes FindAndDelete remove
         // every OP_0 on an opcode boundary (Core pushes it as the byte 0x00).
         let sig = h("300602010102010101");
-        assert_eq!(legacy_script_codes(&h("0051ae"), &sig, true), vec![h("0051ae"), h("51ae")]);
+        assert_eq!(legacy_script_codes(&h("0051ae"), &sig, true), Some(vec![h("0051ae"), h("51ae")]));
         // Without a multisig nothing but the own signature is removed.
-        assert_eq!(legacy_script_codes(&h("0051ac"), &sig, false), vec![h("0051ac")]);
+        assert_eq!(legacy_script_codes(&h("0051ac"), &sig, false), Some(vec![h("0051ac")]));
     }
 
     #[test]
     fn legacy_codes_delete_own_signature_and_multisig_companions() {
         let sig = h("300602010102010101");
         // <sig> SWAP CHECKSIG (Core tx_valid, shortest DER): the push goes.
-        assert_eq!(legacy_script_codes(&h("093006020101020101017cac"), &sig, false), vec![h("7cac")]);
+        assert_eq!(legacy_script_codes(&h("093006020101020101017cac"), &sig, false), Some(vec![h("7cac")]));
         // A copy with another push prefix or hash type stays (Core tx_invalid).
-        assert_eq!(legacy_script_codes(&h("ac4c09300602010102010101"), &sig, false), vec![h("ac4c09300602010102010101")]);
-        assert_eq!(legacy_script_codes(&h("ac09300602010102010181"), &sig, false), vec![h("ac09300602010102010181")]);
+        assert_eq!(legacy_script_codes(&h("ac4c09300602010102010101"), &sig, false), Some(vec![h("ac4c09300602010102010101")]));
+        assert_eq!(legacy_script_codes(&h("ac09300602010102010181"), &sig, false), Some(vec![h("ac09300602010102010181")]));
         // Multisig: the other embedded signature may or may not be removed.
         let other = h("300602010202010201");
         let script = [h("52"), push_encoding(&other), h(&format!("{K}53ae"))].concat();
-        let codes = legacy_script_codes(&script, &sig, true);
+        let codes = legacy_script_codes(&script, &sig, true).unwrap();
         assert_eq!(codes, vec![script.clone(), [h("52"), h(&format!("{K}53ae"))].concat()]);
         // Separators are stripped after deletion.
-        assert_eq!(legacy_script_codes(&h("ab093006020101020101017cac"), &sig, false), vec![h("7cac")]);
+        assert_eq!(legacy_script_codes(&h("ab093006020101020101017cac"), &sig, false), Some(vec![h("7cac")]));
     }
 }
