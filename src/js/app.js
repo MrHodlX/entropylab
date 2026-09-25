@@ -10591,7 +10591,12 @@ function hodlDeriveSpAddress() {
   let m = labeled ? Number(labelField) : null;
   if (labeled && (!Number.isInteger(m) || m < 0 || m > 0xffffffff)) throw new Error("Label m must be an integer between 0 and 4294967295.");
   let fingerprint = hodlSpKeys.fingerprint, account = hodlSpAccount(), network = hodlSpNetwork();
-  let index = hodlSpAddresses.findIndex((state) => !state.isLab && state.fingerprint === fingerprint && state.account === account && state.network === network && state.label === m);
+  // "This address" means these scan/spend keys on this network with this
+  // label — never the root fingerprint, which is 4 display bytes and can be
+  // shared by two different wallets (GHSA-6rr2-5r82-grwc). A collision then
+  // showed the first wallet's address for the second and wiped its keys.
+  let index = hodlSpAddresses.findIndex((state) => !state.isLab && state.network === network && state.label === m
+    && hodlEq(state.keys.scanPub, hodlSpKeys.scanPub) && hodlEq(state.keys.spendPub, hodlSpKeys.spendPub));
   if (index < 0) {
     // The tab takes ownership of the derived keys; the station reset below
     // then wipes only its root.
