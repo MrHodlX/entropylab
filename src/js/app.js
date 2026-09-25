@@ -810,12 +810,15 @@ function hodlDescriptorQrSvg(payload) {
 }
 // A descriptor copies by clicking its text, confirming beside its QR button
 // rather than replacing anything: the value stays readable while it confirms.
+// Other controls can copy the same value (a QR, a Copy button) by carrying it
+// in data-copy-value; a data-copy-group wrapper routes their confirmation to
+// the group's one status slot.
 function hodlInitDescriptorCopy() {
   document.addEventListener("click", (event) => {
     let button = event.target.closest?.("[data-copy-field]");
     if (!button) return;
-    let value = button.textContent.trim(),
-      note = button.parentElement?.querySelector(":scope > .copy-field-status") || button.previousElementSibling?.querySelector(".copy-field-status");
+    let value = (button.dataset.copyValue ?? button.textContent).trim(),
+      note = button.closest("[data-copy-group]")?.querySelector(".copy-field-status") || button.parentElement?.querySelector(":scope > .copy-field-status") || button.previousElementSibling?.querySelector(".copy-field-status");
     if (!value || value === "\u2014") return;
     let done = () => {
       if (!note) return;
@@ -1385,9 +1388,9 @@ function hodlPublicFieldHtml(label, value, vars, labelClass = "label", copyable 
   if (copyable) return hodlCopyFieldHtml(text, value, labelClass);
   return `<p><span class="${labelClass}">${hodlEscapeHtml(text)}</span><br><span class="mono">${hodlEscapeHtml(value ?? "\u2014")}</span></p>`;
 }
-function hodlPrivateValue(value, className = "secret private-field-value") {
+function hodlPrivateValue(value, className = "secret private-field-value", revealed = hodlRevealPrivate) {
   let mask = "************", text = String(value ?? "\u2014");
-  if (hodlRevealPrivate) return `<span class="${className}">${hodlEscapeHtml(text)}</span>`;
+  if (revealed) return `<span class="${className}">${hodlEscapeHtml(text)}</span>`;
   let bullets = "\u2022".repeat(Math.max(Array.from(text).length, mask.length));
   return `<span class="${className} secret-placeholder"><span class="secret-placeholder-mask" aria-hidden="true">${bullets}</span><span class="secret-placeholder-message" aria-hidden="true">${mask}</span><span class="secret-placeholder-label">${hodlT("Private value hidden")}</span></span>`;
 }
@@ -1456,10 +1459,11 @@ function hodlWalletMessages(wallet, idPrefix) {
 // The privacy bar: one switch for every masked value in the key view, kept in
 // sight while the reader scrolls. A checkbox underneath, announced as a
 // switch, so the existing reveal wiring and its tests keep working.
-function hodlPrivacyBarMarkup() {
-  let revealed = hodlRevealPrivate;
+// Other views with their own reveal state (an SP address tab) pass it in with
+// their own switch id and description.
+function hodlPrivacyBarMarkup({ id = "reveal", revealed = hodlRevealPrivate, describedBy = "recovery-sheet-disclosure" } = {}) {
   return `<label class="privacy-bar${revealed ? " is-revealed" : ""}">
-    <input type="checkbox" role="switch" id="reveal" ${revealed ? "checked" : ""} aria-describedby="recovery-sheet-disclosure" />
+    <input type="checkbox" role="switch" id="${id}" ${revealed ? "checked" : ""}${describedBy ? ` aria-describedby="${describedBy}"` : ""} />
     <span class="privacy-bar-state">${revealed ? hodlT("Private data visible") : hodlT("Private data hidden")}</span>
     <span class="privacy-bar-hint">${revealed ? hodlT("Hide it before sharing your screen or stepping away") : hodlT("Reveal only offline, on an air-gapped computer")}</span>
   </label>`;
@@ -10295,6 +10299,7 @@ function hodlSpWipeKeys() {
 function hodlSpWipeMem() {
   hodlSpWipeKeys();
   hodlSpReveal = false;
+  hodlSpVerifyMatches = null;
   // Address tabs hold their own scan and spend keys: a page-wide clear takes
   // them too, back to the bare station.
   for (let state of hodlSpAddresses) if (!state.isLab) hodlSpWipeAddress(state);
@@ -10319,6 +10324,7 @@ function hodlSpResetStation(message) {
   let account = document.getElementById("sp-account");
   if (account) account.value = "0";
   document.getElementById("sp-out").innerHTML = "";
+  hodlSpVerifyMatches = null;
   document.getElementById("sp-error").textContent = "";
   document.getElementById("sp-session").textContent = message;
   hodlRefreshStationKeyPickers();
@@ -10544,6 +10550,10 @@ function hodlSpSetMode(mode) {
     let panel = document.getElementById(`sp-${id}`);
     if (panel) panel.hidden = id !== mode;
   });
+  // Receive files its result in a new address tab, so the Results frame is
+  // for Send and Verify only.
+  let results = document.getElementById("sp-results");
+  if (results) results.hidden = mode === "receive";
   // The action row is shared: only the current mode's run button shows.
   document.querySelectorAll("#sp-card [data-sp-action]").forEach((button) => {
     button.hidden = button.dataset.spAction !== mode;
@@ -10563,8 +10573,15 @@ function hodlSpEscape(value) {
     return "&#39;";
   });
 }
-function hodlSpCopyButton(id, label) {
-  return `<button type="button" class="btn secondary sp-copy" data-sp-copy="${id}">${label}</button>`;
+// One copy group per value: the value itself copies (orange on hover) and
+// confirms beside the group's label; `extra` follows the value, `afterLabel`
+// sits between the label and the value.
+function hodlSpCopyGroupHtml(label, id, value, extra = "", options = null) {
+  let className = options?.className || "", afterLabel = options?.afterLabel || "";
+  return `<div class="sp-copy${className ? " " + className : ""}" data-copy-group>
+        <p class="label copy-field-label">${label}<span class="copy-status copy-field-status" aria-live="polite"></span></p>${afterLabel}
+        <button type="button" class="mono copy-field-value"${id ? ` id="${id}"` : ""} data-copy-field title="${hodlTAttr("Copy")}">${hodlSpEscape(value)}</button>${extra}
+      </div>`;
 }
 function hodlDeriveSpAddress() {
   hodlSpDeriveSessionKeys();
@@ -10597,35 +10614,38 @@ function hodlRenderSpAddress(state) {
   let coinType = state.network === "mainnet" ? 0 : 1;
   let origin = `${state.fingerprint}/352h/${coinType}h/${state.account}h`;
   let secrets = state.reveal;
-  let spscan = secrets ? encodeSpscan(keys.scanPriv, keys.spendPub, state.network) : "";
-  let spspend = secrets ? encodeSpspend(keys.scanPriv, keys.spendPriv, state.network) : "";
+  // Private strings are only built while revealed; hidden, the placeholders
+  // stand in without the secret ever reaching the page.
+  let spscan = secrets ? formatSpDescriptor(encodeSpscan(keys.scanPriv, keys.spendPub, state.network), origin) : "";
+  let spspend = secrets ? formatSpDescriptor(encodeSpspend(keys.scanPriv, keys.spendPriv, state.network), origin) : "";
+  let privateField = (label, id, value) => `<p class="private-field${secrets ? " is-revealed" : ""}" id="${id}"><span class="label">${label}${hodlPrivacyEyeMarkup(secrets)}</span>${hodlPrivateValue(value, undefined, secrets)}</p>`;
+  let copyGroup = hodlSpCopyGroupHtml;
   view.innerHTML = `
     <div class="sp-result">
-      <p class="label">Reusable silent payment address${labeled ? ` · label m = ${m}${m === 0 ? " (change)" : ""}` : ""}</p>
-      <div class="sp-qr">${hodlQrSvg(address)}</div>
-      <p class="psbt-kv" id="sp-address-value">${hodlSpEscape(address)}</p>
-      ${hodlSpCopyButton("sp-address-value", "Copy address")}
-      <p class="label">BIP-321 URI</p>
-      <p class="psbt-kv" id="sp-bip321-uri">${hodlSpEscape(uri)}</p>
-      ${hodlSpCopyButton("sp-bip321-uri", "Copy URI")}
-      <p class="label">BIP-353 DNS TXT</p>
-      <p class="psbt-kv" id="sp-bip353-txt">${hodlSpEscape(txt)}</p>
-      ${hodlSpCopyButton("sp-bip353-txt", "Copy TXT")}
-      <p class="muted">${named ? `Create a TXT record at <code>${hodlSpEscape(named.lookup)}</code> for <code>${hodlSpEscape(named.name)}</code>.` : "Name the record <code>you@yourdomain</code> above and this prints its lookup, e.g. <code>you.user._bitcoin-payment.yourdomain</code>."} This page does not resolve DNS.</p>
-      <p class="muted">Scan path <code>${keys.scanPath}</code> · Spend path <code>${keys.spendPath}</code></p>
-      <p class="label">Scan public key</p>
-      <p class="psbt-kv" id="sp-scan-pub">${hodlSpBytesToHex(keys.scanPub)}</p>
-      <p class="label">Spend public key</p>
-      <p class="psbt-kv" id="sp-spend-pub">${hodlSpBytesToHex(keys.spendPub)}</p>
-      <label class="choice"><input type="checkbox" id="sp-reveal" ${secrets ? "checked" : ""}> <span>Reveal scan/spend private material and BIP-392 descriptors</span></label>
-      ${secrets ? `<p class="label">BIP-392 watch-only <code>spscan</code></p><p class="psbt-kv" id="sp-spscan">${hodlSpEscape(formatSpDescriptor(spscan, origin))}</p>
-        <p class="label">BIP-392 spend <code>spspend</code></p><p class="psbt-kv" id="sp-spspend">${hodlSpEscape(formatSpDescriptor(spspend, origin))}</p>
-        <p class="label">Scan private key</p><p class="psbt-kv" id="sp-scan-priv">${hodlSpBytesToHex(keys.scanPriv)}</p>
-        <p class="label">Spend private key</p><p class="psbt-kv" id="sp-spend-priv">${hodlSpBytesToHex(keys.spendPriv)}</p>` : `<p class="muted">Private scan/spend material stays hidden until you reveal it.</p>`}
+      <div class="sp-copy sp-address" data-copy-group>
+        <p class="label copy-field-label">${hodlT("Your new Silent Payment address")}${labeled ? ` · label m = ${m}${m === 0 ? " (change)" : ""}` : ""}<span class="copy-status copy-field-status" aria-live="polite"></span></p>
+        <button type="button" class="mono copy-field-value sp-address-value" id="sp-address-value" data-copy-field title="${hodlTAttr("Copy")}">${hodlSpEscape(address)}</button>
+        <button type="button" class="sp-qr" data-copy-field data-copy-value="${hodlSpEscape(address)}" aria-label="${hodlTAttr("Copy address")}" title="${hodlTAttr("Copy")}">${hodlQrSvg(address)}</button>
+        <button type="button" class="btn secondary" data-copy-field data-copy-value="${hodlSpEscape(address)}">${hodlT("Copy Address")}</button>
+      </div>
+      ${copyGroup(hodlT("BIP-321 URI"), "sp-bip321-uri", uri)}
+      ${copyGroup(hodlT("BIP-353 DNS TXT"), "sp-bip353-txt", txt)}
+      <p class="edge-note is-public">${named ? `Create a TXT record at <code>${hodlSpEscape(named.lookup)}</code> for <code>${hodlSpEscape(named.name)}</code>.` : "Name the record <code>you@yourdomain</code> above and this prints its lookup, e.g. <code>you.user._bitcoin-payment.yourdomain</code>."} This page does not resolve DNS.</p>
+      ${copyGroup(hodlT("Scan public key"), "sp-scan-pub", hodlSpBytesToHex(keys.scanPub))}
+      ${copyGroup(hodlT("Spend public key"), "sp-spend-pub", hodlSpBytesToHex(keys.spendPub))}
+      <p class="edge-note is-muted">Scan path <code>${keys.scanPath}</code> · Spend path <code>${keys.spendPath}</code></p>
+      <div class="wallet-data-actions no-print">${hodlPrivacyBarMarkup({ id: "sp-reveal", revealed: secrets, describedBy: "" })}</div>
+      <div class="wallet-data-fields">
+        ${privateField(`${hodlT("BIP-392 watch-only")}\u00a0<code>spscan</code>`, "sp-spscan", spscan)}
+        ${privateField(`${hodlT("BIP-392 spend")}\u00a0<code>spspend</code>`, "sp-spspend", spspend)}
+        ${privateField(hodlT("Scan private key"), "sp-scan-priv", secrets ? hodlSpBytesToHex(keys.scanPriv) : "")}
+        ${privateField(hodlT("Spend private key"), "sp-spend-priv", secrets ? hodlSpBytesToHex(keys.spendPriv) : "")}
+      </div>
     </div>`;
   document.getElementById("sp-reveal")?.addEventListener("change", (event) => {
     state.reveal = event.target.checked;
     hodlRenderSpAddress(state);
+    requestAnimationFrame(() => document.getElementById("sp-reveal")?.focus({ preventScroll: true }));
   });
 }
 // Resolve every eligible vin's input key from the loaded SP session root —
@@ -10748,9 +10768,12 @@ function hodlRenderSpSend() {
   const repeated = result.outputs.length - new Set(result.outputs).size;
   document.getElementById("sp-out").innerHTML = `<p class="psbt-ok">${result.outputs.length} taproot output${result.outputs.length === 1 ? "" : "s"}.</p>` + (repeated ? `<p class="muted">${repeated} repeated output${repeated === 1 ? "" : "s"} kept on purpose: every generated BIP352 output belongs in the transaction.</p>` : "") + notes + (parsed.lightning ? `<p class="muted">Lightning parameters in the URI were ignored. This page does not pay invoices or offers.</p>` : "") + result.outputs.map((xonly, index) => {
     let address = p2trAddressFromXonly(xonly, network);
-    return `<div class="sp-output"><p class="label">Output ${index + 1}</p><p class="psbt-kv" id="sp-out-addr-${index}">${hodlSpEscape(address)}</p><p class="psbt-kv" id="sp-out-xonly-${index}">${hodlSpEscape(xonly)}</p>${hodlSpCopyButton(`sp-out-addr-${index}`, "Copy P2TR")}</div>`;
+    return hodlSpCopyGroupHtml(hodlT("Output {n}", { n: index + 1 }), `sp-out-addr-${index}`, address, `<p class="psbt-kv" id="sp-out-xonly-${index}">${hodlSpEscape(xonly)}</p>`);
   }).join("");
 }
+// The last scan's matches, kept so the reveal switch repaints without
+// scanning again; cleared with the results. One switch covers every match.
+var hodlSpVerifyMatches = null;
 function hodlRenderSpVerify() {
   hodlSpDeriveSessionKeys();
   let labels = hodlSpParseLabels(document.getElementById("sp-verify-labels")?.value);
@@ -10765,32 +10788,55 @@ function hodlRenderSpVerify() {
     document.getElementById("sp-out").innerHTML = `<p class="muted">No matching silent payment outputs for this scan key and label set.</p>`;
     return;
   }
-  let network = hodlSpNetwork();
-  document.getElementById("sp-out").innerHTML = `<p class="psbt-ok">${result.outputs.length} matching output${result.outputs.length === 1 ? "" : "s"}.</p>` + result.outputs.map((row, index) => {
-    let address = p2trAddressFromXonly(row.pub_key, network);
-    let spend = hodlSpReveal ? hodlSpBytesToHex(spendPrivForOutput(hodlSpKeys.spendPriv, row.priv_key_tweak)) : "";
+  hodlSpVerifyMatches = { network: hodlSpNetwork(), rows: result.outputs, reveal: false };
+  hodlPaintSpVerify();
+}
+function hodlPaintSpVerify() {
+  let out = document.getElementById("sp-out"), matches = hodlSpVerifyMatches;
+  if (!out || !matches) return;
+  let revealed = matches.reveal;
+  // The switch sits between the status line and the matches it controls.
+  let bar = `<div class="wallet-data-actions no-print">${hodlPrivacyBarMarkup({ id: "sp-verify-reveal", revealed, describedBy: "" })}</div>`;
+  out.innerHTML = `<p class="psbt-ok">${matches.rows.length} matching output${matches.rows.length === 1 ? "" : "s"}.</p>${bar}` + matches.rows.map((row, index) => {
+    let address = p2trAddressFromXonly(row.pub_key, matches.network);
+    // The spend key is only computed while revealed.
+    let spend = revealed && hodlSpKeys ? hodlSpBytesToHex(spendPrivForOutput(hodlSpKeys.spendPriv, row.priv_key_tweak)) : "";
     let labelNote = row.label === null ? "" : ` · label m = ${row.label}${row.label === 0 ? " (change)" : ""}`;
-    return `<div class="sp-output"><p class="label">Match ${index + 1}${labelNote}</p><p class="psbt-kv">${hodlSpEscape(address)}</p><p class="psbt-kv">tweak ${hodlSpEscape(row.priv_key_tweak)}</p>${hodlSpReveal ? `<p class="psbt-kv">spend key ${hodlSpEscape(spend)}</p>` : ""}</div>`;
-  }).join("") + `<label class="choice"><input type="checkbox" id="sp-reveal" ${hodlSpReveal ? "checked" : ""}> <span>Reveal spend private keys for matches</span></label>`;
-  document.getElementById("sp-reveal")?.addEventListener("change", (event) => {
-    hodlSpReveal = event.target.checked;
-    try { hodlRenderSpVerify(); } catch (error) { document.getElementById("sp-error").textContent = error.message || String(error); }
+    return hodlSpCopyGroupHtml(hodlT("Matched output {n}", { n: index + 1 }) + labelNote, "", address,
+      `<p class="label">${hodlT("BIP-352 tweak")}</p><p class="psbt-kv">${hodlSpEscape(row.priv_key_tweak)}</p><p class="private-field${revealed ? " is-revealed" : ""}"><span class="label">${hodlT("Spend private key")}${hodlPrivacyEyeMarkup(revealed)}</span>${hodlPrivateValue(spend, undefined, revealed)}</p>`);
+  }).join("");
+  document.getElementById("sp-verify-reveal")?.addEventListener("change", (event) => {
+    matches.reveal = event.target.checked;
+    hodlPaintSpVerify();
+    requestAnimationFrame(() => document.getElementById("sp-verify-reveal")?.focus({ preventScroll: true }));
   });
 }
 function hodlRunSp() {
-  let error = document.getElementById("sp-error"), output = document.getElementById("sp-out");
+  let error = document.getElementById("sp-error"), output = document.getElementById("sp-out"), mode = hodlSpMode;
   error.textContent = "";
   output.innerHTML = "";
-  try {
-    if (hodlSpMode === "send") hodlRenderSpSend();
-    else if (hodlSpMode === "verify") hodlRenderSpVerify();
-    else hodlDeriveSpAddress();
-    hodlJournalLog("calculate", hodlSpMode, "sp");
-  } catch (exception) {
-    error.textContent = exception instanceof Error ? exception.message : String(exception);
-    hodlJournalLog("calculate-error", hodlSpMode, "sp");
-  }
-  hodlSyncSpControls();
+  hodlSpVerifyMatches = null;
+  let run = () => {
+    try {
+      if (mode === "send") hodlRenderSpSend();
+      else if (mode === "verify") hodlRenderSpVerify();
+      else hodlDeriveSpAddress();
+      hodlJournalLog("calculate", mode, "sp");
+    } catch (exception) {
+      output.innerHTML = "";
+      error.textContent = exception instanceof Error ? exception.message : String(exception);
+      hodlJournalLog("calculate-error", mode, "sp");
+    }
+    output.removeAttribute("aria-busy");
+    hodlSyncSpControls();
+  };
+  if (mode === "receive") return run();
+  // Send and Verify block the page for a moment: say so in the Results frame
+  // and let it paint before the work starts. The run button waits meanwhile.
+  output.innerHTML = `<p class="field-note">${hodlT("Computing…")}</p>`;
+  output.setAttribute("aria-busy", "true");
+  hodlSetButtonEnabled(mode === "send" ? "sp-send-go" : "sp-verify-go", false);
+  requestAnimationFrame(() => setTimeout(run, 0));
 }
 function hodlInitSp() {
   if (!document.getElementById("sp-card")) return;
@@ -10805,7 +10851,7 @@ function hodlInitSp() {
   document.getElementById("sp-key").addEventListener("input", detachStationKey);
   document.getElementById("sp-pass").addEventListener("input", detachStationKey);
   document.querySelectorAll("#sp-modes [data-sp-mode]").forEach((button) => {
-    button.onclick = () => { hodlSpSetMode(button.dataset.spMode); document.getElementById("sp-out").innerHTML = ""; document.getElementById("sp-error").textContent = ""; hodlSyncSpControls(); };
+    button.onclick = () => { hodlSpSetMode(button.dataset.spMode); hodlSpVerifyMatches = null; document.getElementById("sp-out").innerHTML = ""; document.getElementById("sp-error").textContent = ""; hodlSyncSpControls(); };
   });
   document.getElementById("sp-derive").onclick = () => { hodlSpMode = "receive"; hodlRunSp(); };
   document.getElementById("sp-send-go").onclick = () => { hodlSpMode = "send"; hodlRunSp(); };

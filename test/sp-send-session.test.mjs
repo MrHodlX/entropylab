@@ -30,7 +30,7 @@ import {
 import { secp256k1 } from "../src/js/secp256k1.js";
 import { parseRecipientLines } from "../src/js/bip321.js";
 import { decodeSilentPaymentAddress, p2trAddressFromXonly } from "../src/js/bip352.js";
-import { tHtml } from "../src/js/i18n.js";
+import { tHtml, tAttr } from "../src/js/i18n.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const app = readFileSync(join(root, "src/js/app.js"), "utf8");
@@ -247,8 +247,8 @@ test("SP send discloses unused fallback text safely and keeps the published outp
   const render = new Function(
     "document", "hodlSpParseRecipients", "hodlSpHrp", "hodlSpNetwork", "decodeSilentPaymentAddress",
     "hodlSpParseVins", "hodlSpDeriveVinKeys", "hodlSpWipeVinKeys", "createSilentPaymentOutputs",
-    "p2trAddressFromXonly", "hodlT",
-    `${loadSlice("hodlSpEscape")}; ${loadSlice("hodlSpCopyButton")}; ${loadSlice("hodlRenderSpSend")}; return hodlRenderSpSend;`,
+    "p2trAddressFromXonly", "hodlT", "hodlTAttr",
+    `${loadSlice("hodlSpEscape")}; ${loadSlice("hodlSpCopyGroupHtml")}; ${loadSlice("hodlRenderSpSend")}; return hodlRenderSpSend;`,
   )(
     document, parseRecipientLines, () => "sp", () => "mainnet", decodeSilentPaymentAddress,
     () => vector.given.vin, (vins) => vins, hodlSpWipeVinKeys,
@@ -257,7 +257,7 @@ test("SP send discloses unused fallback text safely and keeps the published outp
       actualOutputs = result.outputs;
       return result;
     },
-    p2trAddressFromXonly, tHtml,
+    p2trAddressFromXonly, tHtml, tAttr,
   );
   for (const path of ["", fallback, '<img src=x onerror="alert(1)">']) {
     recipients.value = `bitcoin:${path}?sp=${sp}`;

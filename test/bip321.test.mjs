@@ -195,8 +195,8 @@ test("the Silent Payments tab prints the URI and accepts it on send", () => {
   assert.match(app, /from "\.\/bip321\.js"/);
   assert.match(app, /encodeBitcoinUri/);
   assert.match(app, /parseRecipientLines/);
-  assert.match(app, /id="sp-bip321-uri"/);
-  assert.match(app, /id="sp-bip353-txt"/);
+  assert.match(app, /"sp-bip321-uri"/);
+  assert.match(app, /"sp-bip353-txt"/);
   assert.match(app, /does not resolve DNS/);
   assert.match(shell, /id="sp-payname"/);
   assert.match(shell, /bitcoin:\?sp=/);

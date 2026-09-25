@@ -2454,6 +2454,56 @@
     await until(() => tabs().length === start, "second address tab deletion");
     assert(document.getElementById("delete-sp").disabled, "Minus stayed available on the station tab");
   });
+  await test("An SP address tab copies its address from the text, the QR, and the button", async () => {
+    document.querySelector('#workspace [data-workspace="sp"]').click();
+    await until(() => !document.getElementById("sp-card").hidden, "Silent Payments workspace");
+    document.getElementById("sp-tab-bench").click();
+    input(document.getElementById("sp-key"), "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+    input(document.getElementById("sp-label"), "7");
+    document.getElementById("sp-derive").click();
+    const value = await until(() => document.getElementById("sp-address-value"), "SP address tab");
+    const address = value.textContent.trim();
+    const group = value.closest("[data-copy-group]");
+    const status = group.querySelector(".copy-field-status");
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    let copied = null;
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { copied = text; } } });
+    try {
+      for (const target of [value, ...group.querySelectorAll("[data-copy-value]")]) {
+        copied = null;
+        status.textContent = "";
+        target.click();
+        await until(() => status.textContent, "copy confirmation");
+        equal(copied, address, "a copy target copied the wrong value");
+        assert(status.querySelector("svg"), "the copy confirmation lost its check mark");
+      }
+      equal(group.querySelectorAll("[data-copy-value]").length, 2, "the QR and the button should both copy the address");
+    } finally {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else delete navigator.clipboard;
+    }
+    document.getElementById("delete-sp").click();
+  });
+  await test("An SP address tab keeps its private keys out of the page until revealed", async () => {
+    document.querySelector('#workspace [data-workspace="sp"]').click();
+    await until(() => !document.getElementById("sp-card").hidden, "Silent Payments workspace");
+    document.getElementById("sp-tab-bench").click();
+    input(document.getElementById("sp-key"), "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+    input(document.getElementById("sp-label"), "9");
+    document.getElementById("sp-derive").click();
+    await until(() => document.getElementById("sp-reveal"), "SP address tab");
+    const view = document.getElementById("sp-address-view");
+    const privateIds = ["sp-spscan", "sp-spspend", "sp-scan-priv", "sp-spend-priv"];
+    for (const id of privateIds) assert(document.getElementById(id), `${id} is missing while hidden`);
+    assert(!/spscan1|spspend1/.test(view.textContent), "a private descriptor reached the page while hidden");
+    for (const id of ["sp-scan-priv", "sp-spend-priv"]) assert(!/[0-9a-f]{64}/.test(document.getElementById(id).textContent), `${id} reached the page while hidden`);
+    document.getElementById("sp-reveal").click();
+    await until(() => /[0-9a-f]{64}/.test(document.getElementById("sp-scan-priv")?.textContent || ""), "revealed scan private key");
+    assert(/spscan1/.test(document.getElementById("sp-spscan").textContent) && /spspend1/.test(document.getElementById("sp-spspend").textContent), "revealing did not show the descriptors");
+    document.getElementById("sp-reveal").click();
+    await until(() => !/[0-9a-f]{64}/.test(document.getElementById("sp-scan-priv")?.textContent || "x".repeat(64)), "hidden again");
+    document.getElementById("delete-sp").click();
+  });
   await test("Session log audits meaningful dashboard actions without secret input values", async () => {
     const theme = document.getElementById("theme-toggle");
     theme.click();
@@ -2469,6 +2519,8 @@
     input(document.getElementById("sp-recipients"), "sp1q");
     input(document.getElementById("sp-send-vins"), "[]");
     document.getElementById("sp-send-go").click();
+    // Send computes after the Results frame paints; wait for its failure.
+    await until(() => document.getElementById("sp-error").textContent, "Silent Payments send failure");
     document.getElementById("sp-wipe").click();
     document.querySelector('#workspace [data-workspace="psbt"]').click();
     await until(() => !document.getElementById("psbt-manager").hidden, "PSBT audit workspace");
@@ -4495,7 +4547,10 @@
     input(document.getElementById("sp-recipients"), recipient);
     input(document.getElementById("sp-send-vins"), JSON.stringify(ownedVin));
     document.getElementById("sp-send-go").click();
+    // The Results frame says it is working before the blocking computation.
+    assert(document.getElementById("sp-out").textContent.includes("Computing"), "Send did not show Computing while it worked");
     await until(() => document.getElementById("sp-out").textContent.includes("taproot output") || document.getElementById("sp-error").textContent, "SP send computes");
+    assert(document.getElementById("sp-out-addr-0")?.matches("[data-copy-field]"), "the output address is not a copy target");
     assert(document.getElementById("sp-out").textContent.includes("1 taproot output"), "session-resolved send did not compute the output");
     assert(document.getElementById("sp-out").textContent.includes("tb1p"), "the output did not render as testnet P2TR");
     // A pasted scalar is refused.

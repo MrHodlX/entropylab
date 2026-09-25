@@ -2060,8 +2060,25 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 /* The shortfall states the numbers plainly; the warning beside it is what
    carries the note treatment. */
 .low-entropy-message { margin: 0 0 var(--space-section); color: var(--fg); font-size: 14px; line-height: 1.5; text-align: center; }
-.sp-result, .sp-output { margin-top: var(--space-component); }
-.sp-qr { width: min(220px, 100%); margin: var(--space-control) 0; }
+.sp-result { margin-top: var(--space-component); }
+/* The address tab opens flush with the card like the other result views. */
+#sp-address-view > .sp-result, #sp-address-view > .sp-result > :first-child > .label:first-child { margin-top: 0; }
+.sp-address-value { padding: 10px; border: 1px solid var(--border); background: var(--bg); font-size: 16px; }
+/* The QR is a copy target too: a bare button around the code. */
+.sp-qr { display: block; width: min(220px, 100%); margin: var(--space-control) 0; padding: 0; border: 0; background: none; cursor: pointer; }
+.sp-copy > .btn { margin-top: var(--space-control); }
+/* Result status lines stay on the 14px body step. */
+#sp-out > p { font-size: 14px; }
+/* A plain value under its own label inside a match sits at the same step as
+   the copyable address above it. */
+.sp-copy > .label + .psbt-kv { margin-top: var(--space-control); }
+/* The Verify reveal switch sits between the status line and the matches with
+   the same step on either side. */
+#sp-out > .wallet-data-actions { margin: var(--space-section) 0; }
+/* The DNS note closes the publishing block, and the privacy switch opens the
+   private one: each seam gets the wider step. */
+.sp-result > .edge-note.is-public { margin-bottom: var(--space-major); }
+.sp-result > .wallet-data-actions { margin-top: var(--space-major); }
 .sp-qr svg { width: 100%; height: auto; display: block; background: #fff; border-radius: 8px; }
 .key-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .key-panel-head #modes { flex: 1 1 auto; min-width: 0; }

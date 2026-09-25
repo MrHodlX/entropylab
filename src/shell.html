@@ -533,7 +533,7 @@ words, pick one of the checksum words.</span></span>
         <span class="field-note">BIP39 seed phrase or root xprv/tprv</span>
         <textarea id="sp-key" placeholder="Enter a seed phrase or root xprv/tprv" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
-      <label class="field">Optional BIP39 passphrase
+      <label class="field">Passphrase (optional)
         <input id="sp-pass" autocomplete="off" placeholder="Enter a BIP39 passphrase, or leave blank for none">
       </label>
       <div class="key-settings">
@@ -557,7 +557,8 @@ words, pick one of the checksum words.</span></span>
         </label>
       </div>
       <div id="sp-send" hidden>
-        <label class="field"><span data-i18n-rich>Recipients (one <code>sp1q…</code> / <code>tsp1q…</code> or <code>bitcoin:?sp=</code> URI per line; optional count)</span>
+        <label class="field">Recipients
+          <span class="field-note" data-i18n-rich>One <code>sp1q…</code> / <code>tsp1q…</code> or <code>bitcoin:?sp=</code> URI per line; optional count</span>
           <textarea id="sp-recipients" placeholder="sp1qqgste7k9hx0q…&#10;bitcoin:?sp=sp1qqgste7k9hx0q…&#10;sp1qqgste7k9hx0q… 2" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
           <span class="field-note">Paste the code or a BIP-321 URI. Names like you@domain are not resolved here — look the TXT up on an online machine and paste the URI.</span>
         </label>
@@ -578,6 +579,14 @@ words, pick one of the checksum words.</span></span>
           <span class="field-note" data-i18n-rich><code>m = 0</code> is change and should stay in this list. Add any labeled codes you handed out.</span>
         </label>
       </div>
+      <div id="sp-results" hidden>
+        <p class="label" id="sp-result-label">Results</p>
+        <div class="tool-result" role="region" aria-labelledby="sp-result-label">
+          <p class="field-note tool-result-empty">Fill in the fields above and run the calculation to see the results here.</p>
+          <div class="tool-result-body" id="sp-out" aria-live="polite"></div>
+        </div>
+      </div>
+      <p class="err" id="sp-error" role="alert"></p>
       <p class="edge-note is-muted" id="sp-session" aria-live="polite">No session key. Receive and verify need a seed or root xprv.</p>
       <div class="row psbt-actions tool-actions">
         <button class="btn primary" id="sp-derive" type="button" disabled aria-disabled="true" data-sp-action="receive">Derive silent payment address</button>
@@ -585,8 +594,6 @@ words, pick one of the checksum words.</span></span>
         <button class="btn primary" id="sp-verify-go" type="button" disabled aria-disabled="true" data-sp-action="verify" hidden>Scan pasted outputs</button>
         <button class="btn secondary" id="sp-wipe" type="button" disabled aria-disabled="true">End session / clear fields</button>
       </div>
-      <p class="err" id="sp-error" role="alert"></p>
-      <div id="sp-out" aria-live="polite"></div>
       </div>
       <div id="sp-address-view" hidden></div>
     </section>
