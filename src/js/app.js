@@ -15409,6 +15409,8 @@ function hodlRenderVanityOut() {
   if (heading) heading.textContent = method === "derivation" ? hodlTText("Matching accounts") : hodlTText("Matching passphrases");
   if (!hodlVanityMatches.length || !hodlVanityRun) {
     // Until there are matches, the frame the table will use holds a prompt.
+    // Drop the last run's passphrase width with its matches.
+    box.style.removeProperty("--vanity-pass-width");
     box.innerHTML = `<div class="tool-result"><p class="field-note tool-result-empty">${hodlT("Choose your settings above, then click Start Grinding. Matches appear here.")}</p></div>`;
     return;
   }
@@ -15431,7 +15433,7 @@ function hodlRenderVanityOut() {
     }
     let secret = hodlVanityReveal
       ? `<span class="mono vanity-pass-text">${hodlEscapeHtml(match.passphrase)}</span>`
-      : `<span class="mono vanity-pass-text" aria-hidden="true">${hodlEscapeHtml("•".repeat(12))}</span><span class="sr-only">Passphrase hidden — tick Show passphrases to reveal</span>`;
+      : `<span class="mono vanity-pass-text" aria-hidden="true">${hodlEscapeHtml("•".repeat(12))}</span><span class="sr-only">Passphrase hidden — turn on the privacy switch to reveal</span>`;
     return `<tr><th scope="row">${index + 1}</th><td class="mono">${match.counter.toString()}</td><td><span class="vanity-secret">${secret}${copyMarkup("data-vanity-copy", index, "Copy passphrase")}</span></td>${address}${keyCell(match)}<td class="vanity-apply-cell">${applyMarkup(match, index)}</td></tr>`;
   }).join("");
   let overflow = hodlVanityFound > hodlVanityMatches.length ? `<p class="muted">Only the first ${hodlVanityMatches.length} matches are listed; ${hodlVanityFormatCount(hodlVanityFound)} found in total.</p>` : "";
