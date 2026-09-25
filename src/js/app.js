@@ -70,6 +70,7 @@ import {
 import { initQrReferences } from "./qr-references.js";
 import { addressQrButtonHtml as hodlAddressQrButton, initAddressQr as hodlInitAddressQr } from "./address-qr.js";
 import { initLowEntropyConfirm } from "./low-entropy-confirm.js";
+import { initFingerprintCollisionConfirm } from "./fingerprint-collision-confirm.js";
 import { NONCE_HISTORY_MAX_TEXT, compareNonceHistory, mergeNonceHistory, nonceHistoryRecord, parseNonceHistory, serializeNonceHistory } from "./nonce-history.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
@@ -669,6 +670,8 @@ function hodlRenderKeyResult() {
     }), hodlShowAccount(r.def.id);
     hodlWatchKeyGroups();
   }
+  let active = hodlKeys[hodlActiveKey];
+  if (hodlKeyTabCollides(active)) hodlOutEl.insertAdjacentHTML("afterbegin", hodlKeyCollisionNote(active));
   let e = document.getElementById("reveal");
   e && (e.onchange = () => {
     hodlRevealPrivate = e.checked, hodlRefreshKeyResult();
@@ -6445,7 +6448,7 @@ function hodlCanDeriveCurrentKey() {
     return false;
   }
 }
-var hodlLowEntropyConfirm = null;
+var hodlLowEntropyConfirm = null, hodlFingerprintCollisionConfirm = null;
 // The below-recommendation check for the Derive Key confirmation (#416), kept
 // pure so the unit suite drives it without a DOM. Only the fresh-entropy
 // sources that can actually derive below their recommendation can warn:
@@ -6791,6 +6794,11 @@ async function hodlCalculateKey(progress) {
       if (kind === "brain") result.brainWalletOutput = hodlBrainWalletOutput();
     }
     if (hodlNetworkFamily(result?.network) !== hodlNetworkFamily(chain)) throw hodlError("The supplied key is for {have}, but Network is set to {want}.", { have: result.network, want: chain });
+    hodlAssertDerivationActive(generation, control);
+    // A different wallet already open with this fingerprint: confirm before
+    // committing a second, identical-looking tab. Cancel discards this
+    // derivation and leaves the station as it was.
+    if (!(await hodlConfirmKeyFingerprint(result))) return false;
     hodlAssertDerivationActive(generation, control);
     hodlWalletResult = result;
     hodlRevealPrivate = false;
@@ -10368,7 +10376,8 @@ function hodlCreateSpTab(index) {
     hodlAppendSessionKeyLifehashes(button, state, state.fingerprint);
     button.append(label);
     let lineage = state.parentFingerprint ? " " + hodlTText("child of parent {fingerprint}", { fingerprint: state.parentFingerprint }) : "";
-    button.setAttribute("aria-label", `Silent payment address ${name}` + lineage + `${state.network === "mainnet" ? "" : ", testnet"}${active ? ", selected" : ". Activate to select."}`);
+    let shared = hodlSpTabCollides(state) ? hodlTText(", shares its fingerprint with another wallet") : "";
+    button.setAttribute("aria-label", `Silent payment address ${name}` + lineage + shared + `${state.network === "mainnet" ? "" : ", testnet"}${active ? ", selected" : ". Activate to select."}`);
     button.title = `Account ${state.account}${state.label === null ? " · unlabeled" : ` · label m = ${state.label}`}`;
   }
   return button;
@@ -10604,7 +10613,10 @@ function hodlDeriveSpAddress() {
   if (index < 0) {
     // The tab takes ownership of the derived keys; the station reset below
     // then wipes only its root.
-    hodlSpAddresses.push({ isLab: false, id: hodlNextSpAddressId++, fingerprint, account, network, label: m, payname: document.getElementById("sp-payname")?.value || "", source: hodlSpSource || "manual", parentFingerprint: hodlSpParentFingerprint, keys: hodlSpKeys, reveal: false });
+    hodlSpAddresses.push({ isLab: false, id: hodlNextSpAddressId++, fingerprint, account, network, label: m, payname: document.getElementById("sp-payname")?.value || "", source: hodlSpSource || "manual", parentFingerprint: hodlSpParentFingerprint,
+      // The root's identity, as Key Station records it: tells a wallet that
+      // merely shares this fingerprint apart from this one.
+      walletIdentity: hodlHex.encode(hodlSpHd.chainCode) + ":" + hodlHex.encode(hodlSpHd.publicKey), keys: hodlSpKeys, reveal: false });
     hodlSpKeys = null;
     index = hodlSpAddresses.length - 1;
   }
@@ -10630,8 +10642,10 @@ function hodlRenderSpAddress(state) {
   let spspend = secrets ? formatSpDescriptor(encodeSpspend(keys.scanPriv, keys.spendPriv, state.network), origin) : "";
   let privateField = (label, id, value) => `<p class="private-field${secrets ? " is-revealed" : ""}" id="${id}"><span class="label">${label}${hodlPrivacyEyeMarkup(secrets)}</span>${hodlPrivateValue(value, undefined, secrets)}</p>`;
   let copyGroup = hodlSpCopyGroupHtml;
+  let collision = hodlSpTabCollides(state) ? hodlFingerprintCollisionNote(state.fingerprint, hodlT("Check the address itself before sharing it.")) : "";
   view.innerHTML = `
     <div class="sp-result">
+      ${collision}
       <div class="sp-copy sp-address" data-copy-group>
         <p class="label copy-field-label">${hodlT("Your new Silent Payment address")}${labeled ? ` · label m = ${m}${m === 0 ? " (change)" : ""}` : ""}<span class="copy-status copy-field-status" aria-live="polite"></span></p>
         <button type="button" class="mono copy-field-value sp-address-value" id="sp-address-value" data-copy-field title="${hodlTAttr("Copy")}">${hodlSpEscape(address)}</button>
@@ -11850,6 +11864,56 @@ function hodlCloneDerivedKey(source, existing) {
 // overwriting another wallet's — a duplicate tab is harmless, an overwrite
 // loses a wallet. Imported account keys carry no master material, so they
 // land here, as they did before.
+// A fingerprint is 4 display bytes, so two different wallets open in one
+// session can show the same one (GHSA-6rr2-5r82-grwc): their tabs are then
+// correct but identical. True when another item shows this item's
+// fingerprint but belongs to a different, known wallet; items without a
+// known identity never count, since they cannot be told apart anyway.
+function hodlFingerprintCollides(items, state, fingerprintOf, identityOf) {
+  let fingerprint = fingerprintOf(state), identity = identityOf(state);
+  if (!fingerprint || !identity) return false;
+  return items.some((other) => other !== state && fingerprintOf(other) === fingerprint && identityOf(other) && identityOf(other) !== identity);
+}
+function hodlFingerprintCollisionNote(fingerprint, advice) {
+  return `<p class="edge-note is-private" data-fingerprint-collision>${hodlT("Another wallet open in this session also has fingerprint {fingerprint}. A fingerprint is only 4 bytes, so different wallets can share one: these are separate wallets.", { fingerprint })} ${advice}</p>`;
+}
+function hodlKeyTabCollides(state) {
+  return !state?.isLab && hodlFingerprintCollides(hodlKeys, state, (item) => item.isLab ? "" : item.result?.masterFingerprint, (item) => item.isLab ? null : hodlKeyWalletIdentity(item.result));
+}
+// The label a key tab shows (hodlCreateKeyTab): its name, else its fingerprint.
+function hodlKeyTabName(state) {
+  return state.name || state.result?.masterFingerprint || hodlT("Key {n}", { n: state.number });
+}
+// True while another wallet sharing this tab's fingerprint also shows the
+// same label, so renaming is still needed to tell the two apart.
+function hodlKeyTabNameClashes(state) {
+  let name = hodlKeyTabName(state), identity = hodlKeyWalletIdentity(state.result);
+  return hodlKeys.some((other) => other !== state && !other.isLab && other.result?.masterFingerprint === state.result?.masterFingerprint
+    && hodlKeyWalletIdentity(other.result) && hodlKeyWalletIdentity(other.result) !== identity && hodlKeyTabName(other) === name);
+}
+function hodlKeyCollisionNote(state) {
+  return hodlFingerprintCollisionNote(state.result.masterFingerprint, `<span data-collision-advice${hodlKeyTabNameClashes(state) ? "" : " hidden"}>${hodlT("Rename one of the tabs to tell them apart by clicking on the tab label.")}</span>`);
+}
+// After a rename the label may no longer match its twin: drop the advice.
+function hodlSyncKeyCollisionAdvice() {
+  let advice = hodlOutEl?.querySelector("[data-fingerprint-collision] [data-collision-advice]"), state = hodlKeys[hodlActiveKey];
+  if (advice && state) advice.hidden = !hodlKeyTabNameClashes(state);
+}
+// Resolves true to commit the derived wallet, false to discard it. Only a
+// different, known wallet already open with the same fingerprint asks.
+function hodlConfirmKeyFingerprint(result) {
+  let fingerprint = result?.masterFingerprint, identity = hodlKeyWalletIdentity(result);
+  if (!hodlFingerprintCollisionConfirm || !fingerprint || !identity) return Promise.resolve(true);
+  // Re-deriving a wallet that already has a tab updates that tab in place:
+  // no new look-alike tab, so nothing to confirm.
+  if (hodlKeys.some((state) => !state.isLab && hodlKeyWalletIdentity(state.result) === identity)) return Promise.resolve(true);
+  let shared = hodlKeys.some((state) => !state.isLab && state.result?.masterFingerprint === fingerprint && hodlKeyWalletIdentity(state.result) && hodlKeyWalletIdentity(state.result) !== identity);
+  if (!shared) return Promise.resolve(true);
+  return new Promise((resolve) => hodlFingerprintCollisionConfirm.open(fingerprint, () => resolve(true), () => resolve(false)));
+}
+function hodlSpTabCollides(state) {
+  return !state?.isLab && hodlFingerprintCollides(hodlSpAddresses, state, (item) => item.isLab ? "" : item.fingerprint, (item) => item.isLab ? null : item.walletIdentity);
+}
 function hodlKeyWalletIdentity(result) {
   return result?.masterIdentity || result?.rootXpub || null;
 }
@@ -12444,7 +12508,8 @@ function hodlCreateKeyTab(index) {
     button.title = "Derive a key";
     button.onclick = () => hodlSelectKey(index);
   } else {
-    button.setAttribute("aria-label", name + (active ? ", selected. Activate or press F2 to rename." : ". Activate to select."));
+    let shared = hodlKeyTabCollides(state) ? hodlTText(", shares its fingerprint with another wallet") : "";
+    button.setAttribute("aria-label", name + shared + (active ? ", selected. Activate or press F2 to rename." : ". Activate to select."));
     button.title = active ? "Click again or press F2 to rename" : "Click to select";
     button.onclick = () => index === hodlActiveKey ? hodlBeginKeyRename(index) : hodlSelectKey(index);
   }
@@ -12505,6 +12570,7 @@ function hodlBeginKeyRename(index) {
     if (renamed) {
       state.name = name;
       hodlJournalLog("station-rename", `key-${state.number}`, "calc");
+      hodlSyncKeyCollisionAdvice();
     }
     let button = hodlCreateKeyTab(index);
     editor.replaceWith(button);
@@ -16206,6 +16272,7 @@ async function hodlBoot() {
   hodlInitWorkspace();
   hodlInitAddressQr(hodlQrSvg, { copy: hodlClipboardIconMarkup, copied: hodlCopiedIconMarkup }, { frames: hodlPsbtQrFrames });
   hodlLowEntropyConfirm = initLowEntropyConfirm();
+  hodlFingerprintCollisionConfirm = initFingerprintCollisionConfirm();
   hodlInitDefaultTabStates();
   if (__ENTROPYLAB_TEST_HOOKS__) await hodlLoadTestKeys();
   hodlInitKeyManager();

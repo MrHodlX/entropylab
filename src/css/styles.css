@@ -2050,19 +2050,20 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    private note, the counts are help text, and the actions close it as a split
    row. Only the title's top margin is the card's own, since a .label opens
    the card rather than following a block. */
-.low-entropy-card .edge-note { margin-bottom: var(--space-section); }
+.low-entropy-card .edge-note, .fingerprint-collision-card .edge-note { margin-bottom: var(--space-section); }
 .low-entropy-card .switch-row { display: flex; justify-content: center; margin-bottom: var(--space-section); }
 .low-entropy-card .switch-toggle { width: auto; }
 /* The two answers carry equal weight in the row, the way the key view's own
    pair of download actions splits its footer. */
-.low-entropy-actions > .btn { flex: 1 1 0; }
+.low-entropy-actions > .btn, .fingerprint-collision-actions > .btn { flex: 1 1 0; }
 .low-entropy-recommended { display: block; }
 /* The shortfall states the numbers plainly; the warning beside it is what
    carries the note treatment. */
-.low-entropy-message { margin: 0 0 var(--space-section); color: var(--fg); font-size: 14px; line-height: 1.5; text-align: center; }
+.low-entropy-message, .fingerprint-collision-message { margin: 0 0 var(--space-section); color: var(--fg); font-size: 14px; line-height: 1.5; text-align: center; }
 .sp-result { margin-top: var(--space-component); }
 /* The address tab opens flush with the card like the other result views. */
-#sp-address-view > .sp-result, #sp-address-view > .sp-result > :first-child > .label:first-child { margin-top: 0; }
+#sp-address-view > .sp-result, #sp-address-view > .sp-result > :first-child > .label:first-child,
+#sp-address-view > .sp-result > .edge-note:first-child { margin-top: 0; }
 .sp-address-value { padding: 10px; border: 1px solid var(--border); background: var(--bg); font-size: 16px; }
 /* The QR is a copy target too: a bare button around the code. */
 .sp-qr { display: block; width: min(220px, 100%); margin: var(--space-control) 0; padding: 0; border: 0; background: none; cursor: pointer; }

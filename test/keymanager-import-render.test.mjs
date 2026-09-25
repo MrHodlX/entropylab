@@ -136,6 +136,9 @@ function enableDerivation(c) {
     },
     hodlThrowIfFailed() {}, hodlSetWorkspaceError() {}, hodlSetSelectedScriptType() {},
     hodlSnapshotKeySummary() {}, hodlJournalCaptureDerivedKey() {}, hodlFocusWalletResult() {},
+    // The shared-fingerprint confirmation is a modal; the browser suite
+    // drives it. Here the user proceeds, so the commit logic runs.
+    hodlConfirmKeyFingerprint: () => Promise.resolve(true),
     hodlErrorSpecFrom: error => error.message,
     // The real controller drives an independent BIP39/BIP32 implementation.
     // Its existing wallet-engine vector tests separately cover production crypto.

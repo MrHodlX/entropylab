@@ -49,6 +49,7 @@ function raceHarness() {
     hodlNewKeyState: () => ({ fields: {}, result: null }),
     hodlRestoreKey: () => { context.hodlWalletResult = null; },
     hodlJournalUnlocked: () => true,
+    hodlConfirmKeyFingerprint: () => Promise.resolve(true),
     hodlJournalOpenExport: () => { decryptStarted.resolve(); return pending.promise; },
     hodlJournalWipeMem: () => { context.hodlJournalGeneration++; },
     hodlErrorSpecFrom: error => error.message,

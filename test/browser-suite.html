@@ -2485,6 +2485,8 @@
     equal(nameA, nameB, "the seeds do not actually share a fingerprint");
     equal(tabs().length, start + 2, "two wallets sharing a fingerprint did not get two address tabs");
     assert(addressA !== addressB, "both wallets show the same address — the second wallet's keys were dropped");
+    assert(document.querySelector("#sp-address-view [data-fingerprint-collision]"), "the colliding SP tab carries no shared-fingerprint warning");
+    assert(/shares its fingerprint/.test(selected().getAttribute("aria-label")), "the colliding SP tab's accessible name does not mention the shared fingerprint");
     // Deriving the first wallet again still reuses its tab, with its address.
     const again = await derive(seedA);
     equal(tabs().length, start + 2, "re-deriving an existing address added a duplicate tab");
@@ -2518,14 +2520,49 @@
       input(await until(() => document.getElementById("seed"), "seed input"), seed);
       (await until(() => !document.getElementById("go").disabled && document.getElementById("go"), "Derive Key")).click();
       await until(() => document.getElementById("out").textContent.trim(), "derived key result");
-      return document.getElementById("out").textContent;
+      return keyViewText();
+    };
+    // The key view's text, less the shared-fingerprint note, which appears
+    // on wallet A's view once wallet B is open.
+    const keyViewText = () => {
+      const view = document.getElementById("out").cloneNode(true);
+      view.querySelector("[data-fingerprint-collision]")?.remove();
+      return view.textContent;
     };
     const start = committed();
     const resultA = await derive(seedA);
     equal(committed(), start + 1, "the first seed did not commit a tab");
-    const resultB = await derive(seedB);
+    // The second wallet shares the fingerprint: a modal asks before a second,
+    // identical-looking tab is committed. Cancel discards the derivation.
+    const overlay = () => document.getElementById("fingerprint-collision-overlay");
+    await derive(seedB).catch(() => {});
+    await until(() => overlay() && !overlay().hidden, "shared-fingerprint confirmation");
+    document.getElementById("fingerprint-collision-cancel").click();
+    await wait(50);
+    equal(committed(), start + 1, "Cancel still committed the colliding wallet");
+    assert(overlay().hidden, "the confirmation stayed open after Cancel");
+    // I Understand commits it as its own tab, with the warning in its view.
+    await derive(seedB).catch(() => {});
+    await until(() => !overlay().hidden, "shared-fingerprint confirmation again");
+    document.getElementById("fingerprint-collision-proceed").click();
+    await until(() => committed() === start + 2, "the confirmed wallet's tab");
+    const resultB = await until(() => keyViewText() !== resultA && keyViewText(), "second wallet result");
     equal(committed(), start + 2, "a second wallet sharing the fingerprint did not get its own tab");
     assert(resultA !== resultB, "the second wallet shows the first wallet's result");
+    const note = () => document.querySelector("#out [data-fingerprint-collision]");
+    const advice = () => note()?.querySelector("[data-collision-advice]");
+    assert(note(), "the colliding wallet's view carries no shared-fingerprint warning");
+    assert(advice() && !advice().hidden, "identical tab labels did not ask for a rename");
+    const active = keyTabs.querySelector(".key-tab.active");
+    assert(/shares its fingerprint/.test(active.getAttribute("aria-label")), "the colliding tab's accessible name does not mention the shared fingerprint");
+    // Renaming either tab tells them apart: the rename advice goes, the
+    // warning itself stays.
+    active.click();
+    const nameInput = await until(() => keyTabs.querySelector(".key-tab-name-input"), "tab rename field");
+    nameInput.value = "Second wallet";
+    nameInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await until(() => advice()?.hidden, "rename advice removed after a rename");
+    assert(note(), "the shared-fingerprint warning disappeared after a rename");
     // Committing the first wallet again updates its tab in place: still two.
     const againA = await derive(seedA);
     equal(committed(), start + 2, "re-deriving an existing wallet added a duplicate tab");
