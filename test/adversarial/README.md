@@ -1,8 +1,8 @@
 # jev-adversarial
 
 Adversarial browser-testing harness for the EntropyLab app judged by Jev
-(TypeSafe System One). **Scratch/exploratory tooling — it lives outside the
-repo (entropylab-scratch/jev-adversarial) and the repo must not be modified.**
+(TypeSafe System One). It runs nightly in `.github/workflows/jev-adversarial.yml`
+against a fresh build of the page.
 
 ## How it works
 
@@ -10,8 +10,8 @@ repo (entropylab-scratch/jev-adversarial) and the repo must not be modified.**
    --remote-debugging-port=0`, temp profile) and connects to the browser
    over CDP using Node's built-in WebSocket (Node 22+; developed on 24).
 2. For each scenario in `scenarios.mjs` it opens a separate target (isolated
-   page) — all of them in **parallel** by default — navigates to
-   `file:///C:/Users/steve/entropylab/entropylab.html`, and:
+   page) — all of them in **parallel** by default — navigates to the
+   checkout's built `entropylab.html` (or `--app=<path>`), and:
    - installs a tap script before any page JS that records
      fetch/XHR/sendBeacon/WebSocket/EventSource attempts, uncaught errors,
      and unhandled rejections (the app "must never network");
@@ -27,8 +27,9 @@ repo (entropylab-scratch/jev-adversarial) and the repo must not be modified.**
    `response.answers`, types `noul` / `choice` / `score`). Jev returns
    **ok / suspect / broken** plus severity, network-egress, and
    hang-or-freeze scores.
-4. A plain-text table is printed, along with per-scenario action logs and
-   any invariant failures.
+4. A Markdown table is printed, along with per-scenario action logs and
+   any invariant failures, then the run's result. The harness exits 1 when
+   the run fails (see below), so the workflow's status means something.
 
 The API key comes from `TYPESAFE_API_KEY` (process env first, then the
 Windows User-scoped registry value via PowerShell — same as the ps1). It
@@ -73,6 +74,11 @@ Also: `node --check harness.mjs` for a syntax check without launching.
 - The page remains alive/responsive after each scenario.
 - Scenario-specific: error/status UI actually reports the bad input
   (PSBT garbage, nonce-history junk).
+
+Any of those fails the run, and so does a Jev verdict of **broken**
+(`outcome.mjs`, tested in `test/adversarial-outcome.test.mjs`). A
+**suspect**, or no verdict at all (no API key, or the API is down), does
+not: a suspect is for a person to read in the table.
 
 ## Notes
 
