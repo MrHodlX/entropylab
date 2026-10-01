@@ -321,6 +321,37 @@ struct RawPsbt {
 /// The BIP-125-style threshold separating height- from time-based locktimes.
 const LOCKTIME_THRESHOLD: u32 = 500_000_000;
 
+/// BIP-370 fields whose key is the type byte alone. BIP-174 says a key with
+/// no data except the type specifier must contain only that specifier; a
+/// longer key is not that field, and the PSBT is invalid.
+const BIP370_SINGLETON_GLOBAL: [u8; 5] = [0x02, 0x03, 0x04, 0x05, 0x06];
+const BIP370_SINGLETON_INPUT: [u8; 5] = [0x0e, 0x0f, 0x10, 0x11, 0x12];
+const BIP370_SINGLETON_OUTPUT: [u8; 2] = [0x03, 0x04];
+
+fn reject_singleton_keydata(kind: &str, pairs: &[RawPair], types: &[u8]) -> Result<(), String> {
+    for pair in pairs {
+        if pair.key.len() > 1 && types.contains(&pair.key[0]) {
+            return Err(format!("{} must not carry key data", pair_type_name(kind, pair.key[0])));
+        }
+    }
+    Ok(())
+}
+
+fn reject_bip370_singleton_keydata(
+    globals: &[RawPair],
+    inputs: &[Vec<RawPair>],
+    outputs: &[Vec<RawPair>],
+) -> Result<(), String> {
+    reject_singleton_keydata("global", globals, &BIP370_SINGLETON_GLOBAL)?;
+    for map in inputs {
+        reject_singleton_keydata("input", map, &BIP370_SINGLETON_INPUT)?;
+    }
+    for map in outputs {
+        reject_singleton_keydata("output", map, &BIP370_SINGLETON_OUTPUT)?;
+    }
+    Ok(())
+}
+
 /// The one occurrence of a keyless-data typed field in a v2 map; duplicates
 /// of a typed field are a format error, not an ambiguity to resolve.
 fn v2_field<'a>(pairs: &'a [RawPair], type_byte: u8, what: &str) -> Result<Option<&'a [u8]>, String> {
@@ -498,7 +529,13 @@ fn parse_raw(bytes: &[u8]) -> Result<RawPsbt, String> {
     let mut unsigned: Option<Vec<u8>> = None;
     for pair in &globals {
         let (kind, keydata) = (pair.key[0], &pair.key[1..]);
-        if kind == 0xfb && keydata.is_empty() {
+        if kind == 0xfb {
+            // BIP-174 defines this key as the type byte alone. A longer key
+            // is not a version field: ignoring it made a v2 file look like v0
+            // and left a second version key unread.
+            if !keydata.is_empty() {
+                return Err("PSBT_GLOBAL_VERSION must not carry key data".into());
+            }
             if pair.value.len() != 4 {
                 return Err("PSBT_GLOBAL_VERSION must be a 4-byte value".into());
             }
@@ -565,27 +602,24 @@ fn parse_raw(bytes: &[u8]) -> Result<RawPsbt, String> {
     // unsigned tx; nothing rejected a v0 file that also carries these v2
     // fields, so it decoded — and rebuilt — as if it were valid.
     if v0_tx.is_some() {
-        const V2_ONLY_GLOBAL: [u8; 5] = [0x02, 0x03, 0x04, 0x05, 0x06];
-        const V2_ONLY_INPUT: [u8; 5] = [0x0e, 0x0f, 0x10, 0x11, 0x12];
-        const V2_ONLY_OUTPUT: [u8; 2] = [0x03, 0x04];
         let reject = |kind: &str, type_byte: u8| -> String {
             format!("{} is a PSBT v2 field and must not appear in a PSBT v0", pair_type_name(kind, type_byte))
         };
         for pair in &globals {
-            if V2_ONLY_GLOBAL.contains(&pair.key[0]) {
+            if BIP370_SINGLETON_GLOBAL.contains(&pair.key[0]) {
                 return Err(reject("global", pair.key[0]));
             }
         }
         for map in &inputs {
             for pair in map {
-                if V2_ONLY_INPUT.contains(&pair.key[0]) {
+                if BIP370_SINGLETON_INPUT.contains(&pair.key[0]) {
                     return Err(reject("input", pair.key[0]));
                 }
             }
         }
         for map in &outputs {
             for pair in map {
-                if V2_ONLY_OUTPUT.contains(&pair.key[0]) {
+                if BIP370_SINGLETON_OUTPUT.contains(&pair.key[0]) {
                     return Err(reject("output", pair.key[0]));
                 }
             }
@@ -594,6 +628,7 @@ fn parse_raw(bytes: &[u8]) -> Result<RawPsbt, String> {
     let unsigned_tx = match v0_tx {
         Some(tx) => tx,
         None => {
+            reject_bip370_singleton_keydata(&globals, &inputs, &outputs)?;
             let tx_version = v2_u32(&globals, 0x02, "PSBT_GLOBAL_TX_VERSION")?
                 .ok_or("a PSBT v2 is missing PSBT_GLOBAL_TX_VERSION")? as i32;
             let fallback_locktime = v2_u32(&globals, 0x03, "PSBT_GLOBAL_FALLBACK_LOCKTIME")?;
@@ -1463,6 +1498,9 @@ fn build(json_bytes: &[u8]) -> Result<Vec<u8>, String> {
     let global_pairs = build_map(&doc["globals"], "`globals`")?;
     let mut version = 0u32;
     for pair in &global_pairs {
+        if pair.key.first() == Some(&0xfb) && pair.key.len() != 1 {
+            return Err("PSBT_GLOBAL_VERSION must not carry key data".into());
+        }
         if pair.key == [0xfb] {
             if pair.value.len() != 4 {
                 return Err("PSBT_GLOBAL_VERSION must be a 4-byte value".into());
@@ -1557,6 +1595,10 @@ fn build_v2(doc: &Value, tx: &Transaction, global_pairs: Vec<RawPair>, insane: b
             tx.output.len()
         ));
     }
+    // A non-exact singleton key is passed through below (only the one-byte
+    // key is regenerated). Refuse it here so the editor cannot emit a file
+    // whose reader would have to ignore that key.
+    reject_bip370_singleton_keydata(&global_pairs, &inputs, &outputs)?;
 
     // Same export gate as the v0 path: BIP-370 changes the container, not
     // the consensus rules the transaction and its signing claims are held to.
@@ -1740,6 +1782,130 @@ mod tests {
         if let Err(e) = res {
             assert_ne!(e, "PSBT map has too many entries to inspect safely");
         }
+    }
+
+    // BIP-174: a key defined with no key data "must only have the type
+    // specifier in the key." BIP-370 marks every new field that way, and
+    // BIP-174 does the same for PSBT_GLOBAL_VERSION. Matching only a
+    // one-byte key used to ignore the long key and accept the file.
+    fn unhex(hex: &str) -> Vec<u8> {
+        (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    fn read_compact(bytes: &[u8], at: &mut usize) -> usize {
+        let first = bytes[*at] as usize;
+        *at += 1;
+        if first < 0xfd {
+            return first;
+        }
+        assert_eq!(first, 0xfd);
+        let n = bytes[*at] as usize | ((bytes[*at + 1] as usize) << 8);
+        *at += 2;
+        n
+    }
+
+    fn push_compact(out: &mut Vec<u8>, n: usize) {
+        if n < 0xfd {
+            out.push(n as u8);
+        } else {
+            out.push(0xfd);
+            out.push(n as u8);
+            out.push((n >> 8) as u8);
+        }
+    }
+
+    fn split_maps(bytes: &[u8]) -> Vec<Vec<(Vec<u8>, Vec<u8>)>> {
+        let mut at = 5;
+        let mut maps = Vec::new();
+        while at < bytes.len() {
+            let mut pairs = Vec::new();
+            loop {
+                let key_len = read_compact(bytes, &mut at);
+                if key_len == 0 {
+                    break;
+                }
+                let key = bytes[at..at + key_len].to_vec();
+                at += key_len;
+                let val_len = read_compact(bytes, &mut at);
+                let val = bytes[at..at + val_len].to_vec();
+                at += val_len;
+                pairs.push((key, val));
+            }
+            maps.push(pairs);
+        }
+        maps
+    }
+
+    fn join_maps(maps: &[Vec<(Vec<u8>, Vec<u8>)>]) -> Vec<u8> {
+        let mut out = b"psbt\xff".to_vec();
+        for pairs in maps {
+            for (key, val) in pairs {
+                push_compact(&mut out, key.len());
+                out.extend_from_slice(key);
+                push_compact(&mut out, val.len());
+                out.extend_from_slice(val);
+            }
+            out.push(0);
+        }
+        out
+    }
+
+    fn with_keydata(bytes: &[u8], map_index: usize, type_byte: u8, value: &[u8]) -> Vec<u8> {
+        let mut maps = split_maps(bytes);
+        maps[map_index].push((vec![type_byte, 0x00], value.to_vec()));
+        join_maps(&maps)
+    }
+
+    #[test]
+    fn bip370_singleton_keydata_is_refused() {
+        // BIP-370's own minimal valid vector.
+        let minimal = unhex(
+            "70736274ff01020402000000010401010105010201fb040200000000010e200b0ad921419c1c8719735d72dc739f9ea9e0638d1fe4c1eef0f9944084815fc8010f0400000000000103080008af2f000000000104160014c430f64c4756da310dbd1a085572ef299926272c000103088bbdeb0b0000000001041600144dd193ac964a56ac1b9e1cca8454fe2f474f851300",
+        );
+        let cases: &[(&str, usize, u8, &[u8])] = &[
+            ("PSBT_GLOBAL_TX_VERSION", 0, 0x02, &[1, 0, 0, 0][..]),
+            ("PSBT_GLOBAL_FALLBACK_LOCKTIME", 0, 0x03, &[0x10, 0x27, 0, 0][..]),
+            ("PSBT_GLOBAL_INPUT_COUNT", 0, 0x04, &[2][..]),
+            ("PSBT_GLOBAL_OUTPUT_COUNT", 0, 0x05, &[2][..]),
+            ("PSBT_GLOBAL_TX_MODIFIABLE", 0, 0x06, &[0x07][..]),
+            ("PSBT_GLOBAL_VERSION", 0, 0xfb, &[2, 0, 0, 0][..]),
+            ("PSBT_IN_PREVIOUS_TXID", 1, 0x0e, &[0x11; 32][..]),
+            ("PSBT_IN_OUTPUT_INDEX", 1, 0x0f, &[1, 0, 0, 0][..]),
+            ("PSBT_IN_SEQUENCE", 1, 0x10, &[0xfd, 0xff, 0xff, 0xff][..]),
+            ("PSBT_IN_REQUIRED_TIME_LOCKTIME", 1, 0x11, &[0x00, 0x65, 0xcd, 0x1d][..]),
+            ("PSBT_IN_REQUIRED_HEIGHT_LOCKTIME", 1, 0x12, &[0x10, 0x27, 0, 0][..]),
+            ("PSBT_OUT_AMOUNT", 2, 0x03, &[0; 8][..]),
+            ("PSBT_OUT_SCRIPT", 2, 0x04, &[0x51][..]),
+        ];
+        for (name, map_index, type_byte, value) in cases {
+            let err = parse_raw(&with_keydata(&minimal, *map_index, *type_byte, value))
+                .expect_err(name);
+            assert!(
+                err.contains(&format!("{name} must not carry key data")),
+                "{name}: {err}"
+            );
+        }
+        // A proprietary key is defined to carry key data.
+        let mut maps = split_maps(&minimal);
+        maps[0].push((vec![0xfc, 0x00, 0x00], vec![0x01]));
+        assert!(parse_raw(&join_maps(&maps)).is_ok());
+        // An input partial signature's pubkey is key data, not a singleton.
+        let mut maps = split_maps(&minimal);
+        let mut key = vec![0x02, 0x02];
+        key.extend(std::iter::repeat(0x11).take(32));
+        maps[1].push((key, vec![0x01]));
+        assert!(parse_raw(&join_maps(&maps)).is_ok());
+
+        // The only version key is the long one. It must not be dropped and
+        // the rest of the file read as v0.
+        let mut maps = split_maps(&minimal);
+        let version = maps[0].iter_mut().find(|(key, _)| key.as_slice() == [0xfb]).unwrap();
+        version.0 = vec![0xfb, 0x00];
+        let err = parse_raw(&join_maps(&maps)).expect_err("malformed version key");
+        assert!(err.contains("PSBT_GLOBAL_VERSION must not carry key data"), "{err}");
     }
 
 }
