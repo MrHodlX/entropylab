@@ -648,6 +648,110 @@ test("PSBT v2: BIP-370's invalid cases are refused (issue #358)", () => {
   assert.throws(() => psbtInspectDoc(unhex(v3)), /only PSBT v0 and v2/);
 });
 
+// BIP-174: "any key that has no data except for the type specifier must only
+// have the type specifier in the key." BIP-370 marks every new field "No key
+// data", and BIP-174 does the same for PSBT_GLOBAL_VERSION. A reader that
+// matches only a one-byte key ignores the malformed sibling and accepts the
+// file: a required height or an RBF sequence sitting in that sibling never
+// reaches the transaction.
+const readCompact = (bytes, at) => {
+  const first = bytes[at.i++];
+  if (first < 0xfd) return first;
+  if (first === 0xfd) {
+    const n = bytes[at.i] | (bytes[at.i + 1] << 8);
+    at.i += 2;
+    return n;
+  }
+  throw new Error("this fixture builder does not use compact sizes over 16 bits");
+};
+const writeCompact = (n) => (n < 0xfd ? [n] : [0xfd, n & 255, (n >>> 8) & 255]);
+const splitPsbtMaps = (bytes) => {
+  const at = { i: 5 };
+  const maps = [];
+  while (at.i < bytes.length) {
+    const pairs = [];
+    for (;;) {
+      const keyLen = readCompact(bytes, at);
+      if (keyLen === 0) break;
+      const key = bytes.slice(at.i, at.i + keyLen);
+      at.i += keyLen;
+      const valLen = readCompact(bytes, at);
+      const val = bytes.slice(at.i, at.i + valLen);
+      at.i += valLen;
+      pairs.push([key, val]);
+    }
+    maps.push(pairs);
+  }
+  if (at.i !== bytes.length) throw new Error("fixture PSBT did not end on a map boundary");
+  return maps;
+};
+const joinPsbtMaps = (maps) => {
+  const out = [0x70, 0x73, 0x62, 0x74, 0xff];
+  for (const pairs of maps) {
+    for (const [key, val] of pairs) out.push(...writeCompact(key.length), ...key, ...writeCompact(val.length), ...val);
+    out.push(0x00);
+  }
+  return Uint8Array.from(out);
+};
+const le32 = (n) => Uint8Array.of(n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255);
+const withSingletonKeyData = (bytes, mapIndex, type, value) => {
+  const maps = splitPsbtMaps(bytes);
+  maps[mapIndex].push([Uint8Array.of(type, 0x00), value]);
+  return joinPsbtMaps(maps);
+};
+
+test("BIP-370 singleton fields and PSBT_GLOBAL_VERSION must not carry key data", () => {
+  const minimal = unhex(V2_MINIMAL_HEX);
+  const maps = splitPsbtMaps(minimal);
+  assert.equal(maps.length, 4, "minimal BIP-370 vector is global, one input, two outputs");
+  // Each value would be meaningful if a reader treated the long key as the field.
+  const refused = [
+    ["PSBT_GLOBAL_TX_VERSION", 0, 0x02, le32(1)],
+    ["PSBT_GLOBAL_FALLBACK_LOCKTIME", 0, 0x03, le32(10000)],
+    ["PSBT_GLOBAL_INPUT_COUNT", 0, 0x04, Uint8Array.of(2)],
+    ["PSBT_GLOBAL_OUTPUT_COUNT", 0, 0x05, Uint8Array.of(2)],
+    ["PSBT_GLOBAL_TX_MODIFIABLE", 0, 0x06, Uint8Array.of(0x07)],
+    ["PSBT_GLOBAL_VERSION", 0, 0xfb, le32(2)],
+    ["PSBT_IN_PREVIOUS_TXID", 1, 0x0e, new Uint8Array(32).fill(0x11)],
+    ["PSBT_IN_OUTPUT_INDEX", 1, 0x0f, le32(1)],
+    ["PSBT_IN_SEQUENCE", 1, 0x10, le32(0xfffffffd)],
+    ["PSBT_IN_REQUIRED_TIME_LOCKTIME", 1, 0x11, le32(500000000)],
+    ["PSBT_IN_REQUIRED_HEIGHT_LOCKTIME", 1, 0x12, le32(10000)],
+    ["PSBT_OUT_AMOUNT", 2, 0x03, new Uint8Array(8).fill(0)],
+    ["PSBT_OUT_SCRIPT", 2, 0x04, Uint8Array.of(0x51)],
+  ];
+  for (const [name, mapIndex, type, value] of refused) {
+    const file = withSingletonKeyData(minimal, mapIndex, type, value);
+    assert.throws(() => psbtInspectDoc(file), new RegExp(`${name} must not carry key data`), name);
+  }
+  // The only version key is the malformed one, so it must not be dropped and
+  // the file re-read as v0.
+  const versionOnly = splitPsbtMaps(minimal);
+  const versionPair = versionOnly[0].find(([key]) => key.length === 1 && key[0] === 0xfb);
+  versionPair[0] = Uint8Array.of(0xfb, 0x00);
+  assert.throws(() => psbtInspectDoc(joinPsbtMaps(versionOnly)), /PSBT_GLOBAL_VERSION must not carry key data/);
+  // A v0 file whose version key claims "2" behind an extra key byte.
+  const v0BadVersion = unhex("70736274ff" + minimalGlobal + "02fb000402000000" + "00" + "00" + "00");
+  assert.throws(() => psbtInspectDoc(v0BadVersion), /PSBT_GLOBAL_VERSION must not carry key data/);
+
+  // Key data is the defined shape of a proprietary field and of a partial
+  // signature. An input type 0x02 is a pubkey, not PSBT_GLOBAL_TX_VERSION.
+  const propMaps = splitPsbtMaps(minimal);
+  propMaps[0].push([Uint8Array.of(0xfc, 0x00, 0x00), Uint8Array.of(0x01)]);
+  const propDoc = psbtInspectDoc(joinPsbtMaps(propMaps));
+  assert.equal(propDoc.psbtVersion, 2);
+  assert.equal(propDoc.tx.locktime, 0);
+  const partialMaps = splitPsbtMaps(minimal);
+  partialMaps[1].push([Uint8Array.of(0x02, 0x02, ...new Uint8Array(32).fill(0x11)), Uint8Array.of(0x01)]);
+  assert.equal(psbtInspectDoc(joinPsbtMaps(partialMaps)).psbtVersion, 2);
+
+  // The builder passes a non-exact key through. It must not emit a file the
+  // reader would then accept.
+  const doc = inspectB64(V2_MINIMAL_B64);
+  doc.globals.push({ key: "0200", value: "01000000" });
+  assert.throws(() => rebuild(doc), /PSBT_GLOBAL_TX_VERSION must not carry key data/);
+});
+
 test("PSBT v2: builds from the tx section, and a locktime edit must go through the requirement fields (issue #337)", () => {
   // An amount edit regenerates the PSBT_OUT_AMOUNT pair and stays parseable.
   const doc = inspectB64(V2_MINIMAL_B64);
