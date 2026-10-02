@@ -271,6 +271,7 @@ fn span_end(off: usize, len: u64, total: usize) -> Option<usize> {
 
 // ── Raw map parsing ─────────────────────────────────────────────────────────
 
+#[cfg_attr(test, derive(Debug))]
 pub(crate) struct RawPair {
     pub(crate) key: Vec<u8>,     // type byte + keydata, exactly as serialized
     pub(crate) value: Vec<u8>,
@@ -301,6 +302,7 @@ fn read_map(bytes: &[u8], off: &mut usize) -> Result<Vec<RawPair>, String> {
     }
 }
 
+#[cfg_attr(test, derive(Debug))]
 struct RawPsbt {
     globals: Vec<RawPair>,
     inputs: Vec<Vec<RawPair>>,
