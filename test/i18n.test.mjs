@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { hodlLocaleCodes, hodlSelectableLocales, hodlNormalizeLocale, t, tHtml, hodlSetLocale, hodlGetLocale } from "../src/js/i18n.js";
 import * as labelTables from "../src/js/i18n-labels.js";
+import { collectSources } from "../scripts/i18n-sources.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,12 +33,66 @@ test("catalog content is valid and drift is report-only", () => {
 // translate it inside, so a literal label at any of their call sites must be
 // a translation source, or i18n:sync prunes its translations as dead.
 test("labels passed to the field helpers are translation sources", async () => {
-  const { collectSources } = await import(join(root, "scripts/i18n-sources.mjs"));
   const sources = await collectSources(root), known = new Set(sources instanceof Map ? sources.keys() : sources);
   const app = execFileSync("cat", [join(root, "src/js/app.js")], { encoding: "utf8" });
   const labels = [...app.matchAll(/\bhodl(?:Public|Private|PrivateKey)FieldHtml\("((?:[^"\\]|\\.)*)"/g)].map((match) => JSON.parse(`"${match[1]}"`));
   assert.ok(labels.length > 10, "fixture: the field helpers have literal labels");
   assert.deepEqual(labels.filter((label) => !known.has(label)), []);
+});
+
+test("module translator imports and aliases are translation sources", async (context) => {
+  const fixture = mkdtempSync(join(tmpdir(), "entropylab-i18n-sources-"));
+  context.after(() => rmSync(fixture, { recursive: true, force: true }));
+  mkdirSync(join(fixture, "src/js"), { recursive: true });
+  const files = {
+    "package.json": '{"type":"module"}',
+    "src/index.html": "",
+    "src/shell.html": "",
+    "src/js/i18n-labels.js": "export {};",
+    "src/js/module.js": `
+      import { t, tHtml, tAttr, hodlGetLocale } from "./i18n.js";
+      t("Plain {n}", { n: "Not a source" });
+      tHtml("<strong>Rich</strong>");
+      tAttr("Attribute");
+      hodlGetLocale("Not a translator");
+      object.t("Not a direct call");
+      not_t("Not a translator suffix");
+    `,
+    "src/js/aliases.js": `
+      import {
+        t as text, tHtml as html, tAttr as $attr,
+      } from './i18n.js';
+      text("Aliased text");
+      html("Aliased HTML");
+      $attr("Aliased attribute");
+    `,
+    "src/js/unrelated.js": `
+      import { t, tHtml, tAttr } from "./other.js";
+      t("Unrelated text");
+      tHtml("Unrelated HTML");
+      tAttr("Unrelated attribute");
+    `,
+    "src/js/local.js": 'const t = (value) => value; t("Local function");',
+    "src/js/network-check.js": 't("Pre-boot network");',
+    "src/js/wallet-export.js": 't("Pre-boot wallet");',
+  };
+  for (const [name, source] of Object.entries(files)) writeFileSync(join(fixture, name), source);
+  assert.deepEqual([...await collectSources(fixture)].sort(), [
+    "Plain {n}", "<strong>Rich</strong>", "Attribute",
+    "Aliased text", "Aliased HTML", "Aliased attribute",
+    "Pre-boot network", "Pre-boot wallet",
+  ].sort());
+});
+
+test("warning and address QR translator literals are translation sources", async () => {
+  const sources = await collectSources(root);
+  for (const name of ["low-entropy-confirm.js", "fingerprint-collision-confirm.js", "address-qr.js"]) {
+    const module = readFileSync(join(root, "src/js", name), "utf8");
+    const labels = [...module.matchAll(/\bt(?:Html|Attr)?\("((?:[^"\\]|\\.)*)"/g)]
+      .map((match) => JSON.parse(`"${match[1]}"`));
+    assert.ok(labels.length > 0, `${name} must supply translator literals`);
+    assert.deepEqual(labels.filter((label) => !sources.has(label)), [], `${name} has uncollected translation sources`);
+  }
 });
 
 test("every locale stays selectable, translated or not", () => {
