@@ -5906,6 +5906,45 @@
     document.querySelector('#workspace [data-workspace="calc"]').click();
   });
 
+  // Third-party text services read fields, not the page: Grammarly sends
+  // field text to its servers, password managers offer to save a field into
+  // a synced vault, Edge's text prediction sends typing to Microsoft, and
+  // Chrome's session restore writes field contents to disk unless a field
+  // says autocomplete="off". Every field the page has built by now, and one
+  // added or focused later, must carry the vendors' documented opt-outs.
+  await test("every text field the page builds opts out of third-party text services", async () => {
+    const grammarly = { "data-gramm": "false", "data-gramm_editor": "false", "data-enable-grammarly": "false" };
+    const managers = { "data-1p-ignore": "", "data-lpignore": "true", "data-bwignore": "", "data-form-type": "other" };
+    const nonText = new Set(["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"]);
+    const problems = (field) => {
+      const expected = { ...grammarly, ...(field.hasAttribute("data-password-manager") ? {} : managers) };
+      const missing = Object.entries(expected).filter(([name, value]) => field.getAttribute(name) !== value).map(([name]) => name);
+      if (!field.getAttribute("autocomplete")) missing.push("autocomplete");
+      return missing;
+    };
+    equal(document.documentElement.getAttribute("writingsuggestions"), "false");
+    const fields = [...document.querySelectorAll("input, textarea")].filter((field) => field.tagName === "TEXTAREA" || !nonText.has(field.type));
+    assert(fields.length > 40, `only ${fields.length} text fields found`);
+    const bad = fields.map((field) => [field, problems(field)]).filter(([, missing]) => missing.length);
+    assert(bad.length === 0, "fields missing opt-outs: " + bad.map(([field, missing]) => `#${field.id || field.className}: ${missing.join(" ")}`).join("; "));
+
+    const added = document.createElement("textarea");
+    document.body.append(added);
+    await wait(0);
+    const missingLater = problems(added);
+    added.remove();
+    assert(missingLater.length === 0, `a field added later is missing ${missingLater.join(" ")}`);
+    // Inserted and focused in one task: the focus listener stamps it before
+    // the observer runs. The event is dispatched, because a headless window
+    // without system focus does not fire focus events for focus().
+    const focused = document.createElement("input");
+    document.body.append(focused);
+    focused.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    const missingOnFocus = problems(focused);
+    focused.remove();
+    assert(missingOnFocus.length === 0, `a field focused as it is added is missing ${missingOnFocus.join(" ")}`);
+  });
+
   await test("hosted application makes only expected same-origin connections", () => {
     const resources = performance.getEntriesByType("resource").map((entry) => entry.name);
     const observed = [...state.network.map((entry) => entry.url), ...resources];

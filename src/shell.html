@@ -817,11 +817,11 @@ words, pick one of the checksum words.</span></span>
         </div>
         <div id="journal-create-panel">
           <label class="field"><span class="journal-password-label"><span>Journal password (optional)</span><span class="journal-password-validation" id="journal-create-password-status" role="status" aria-live="polite" hidden></span></span>
-            <input id="journal-create-password" type="password" placeholder="Leave blank for no password" autocomplete="new-password" aria-describedby="journal-create-password-note journal-create-password-status">
+            <input id="journal-create-password" type="password" data-password-manager placeholder="Leave blank for no password" autocomplete="new-password" aria-describedby="journal-create-password-note journal-create-password-status">
             <span class="field-note" id="journal-create-password-note">A password protects Journal files and encrypted downloads. Leave it blank to create without password protection; anyone with the file can open it. Passwords cannot be recovered.</span>
           </label>
           <label class="field"><span class="journal-password-label"><span>Confirm password (optional)</span><span class="journal-password-validation" id="journal-create-confirm-status" role="status" aria-live="polite" hidden></span></span>
-            <input id="journal-create-confirm" type="password" placeholder="Repeat password or leave blank" autocomplete="new-password" aria-describedby="journal-create-confirm-status">
+            <input id="journal-create-confirm" type="password" data-password-manager placeholder="Repeat password or leave blank" autocomplete="new-password" aria-describedby="journal-create-confirm-status">
           </label>
           <div class="row bip85-actions journal-create-actions tool-actions">
             <button class="btn primary" id="journal-create" type="button">Create journal</button>
@@ -833,7 +833,7 @@ words, pick one of the checksum words.</span></span>
             <input id="journal-file" type="file" accept=".json,application/json">
           </label>
           <label class="field">Journal password (if used)
-            <input id="journal-open-password" type="password" placeholder="Leave blank if the file has no password" autocomplete="off">
+            <input id="journal-open-password" type="password" data-password-manager placeholder="Leave blank if the file has no password" autocomplete="off">
           </label>
           <div class="row bip85-actions tool-actions">
             <button class="btn primary" id="journal-unlock" type="button">Open journal</button>
