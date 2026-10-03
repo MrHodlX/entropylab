@@ -52,8 +52,17 @@ export const psbtWasmReady = isNode
   ? Promise.resolve()
   : WebAssembly.instantiate(wasmBytes, {}).then(({ instance }) => bind(instance));
 
+let retired = false;
 const requireReady = () => {
+  if (retired) throw new Error("This session has ended; reload the page to start a new one.");
   if (!wasm) throw new Error("PSBT WebAssembly is not initialized yet; await psbtWasmReady.");
+};
+// End session: zeroes the whole linear memory and drops the instance, as
+// retireWasm does for the crypto module; every later call is refused.
+export const retirePsbtWasm = () => {
+  if (wasm) new Uint8Array(wasm.memory.buffer).fill(0);
+  wasm = null;
+  retired = true;
 };
 // The WASM heap can grow during a call, detaching earlier views; take a fresh
 // view of the whole buffer whenever memory is touched.
@@ -79,10 +88,12 @@ const lastError = () => {
   }
 };
 
-// Copies `input` into WASM memory, runs `fn(inPtr, inLen, outPtr, outCap)`
-// with the two-call capacity convention, and returns the produced bytes.
-const call = (input, fn) => {
+// Copies `input` into WASM memory, runs export `name` as
+// `(inPtr, inLen, outPtr, outCap)` with the two-call capacity convention,
+// and returns the produced bytes.
+const call = (input, name) => {
   requireReady();
+  const fn = wasm[name];
   const inPtr = wasm.psbt_alloc(input.length);
   heap().set(input, inPtr);
   try {
@@ -105,7 +116,7 @@ const call = (input, fn) => {
 // input; the error message comes from the Rust side.
 export const psbtInspectDoc = (bytes) => {
   if (!(bytes instanceof Uint8Array) || !bytes.length) throw new Error("PSBT must be a non-empty byte array.");
-  return JSON.parse(decoder.decode(call(bytes, wasm.psbt_inspect)));
+  return JSON.parse(decoder.decode(call(bytes, "psbt_inspect")));
 };
 
 // Rebuilds PSBT bytes from a (possibly edited) editor document. Throws when
@@ -116,5 +127,5 @@ export const psbtInspectDoc = (bytes) => {
 // still enforced, so the output is always a parseable PSBT.
 export const psbtBuildBytes = (doc, { insane = false } = {}) => {
   if (!doc || typeof doc !== "object") throw new Error("editor document must be an object.");
-  return call(encoder.encode(JSON.stringify(insane ? { ...doc, insane: true } : doc)), wasm.psbt_build);
+  return call(encoder.encode(JSON.stringify(insane ? { ...doc, insane: true } : doc)), "psbt_build");
 };

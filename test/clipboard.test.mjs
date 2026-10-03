@@ -160,3 +160,61 @@ test("no module but clipboard.js writes the clipboard", () => {
   }
   assert.deepEqual(offenders, [], `clipboard writes outside clipboard.js: ${offenders.join(", ")}`);
 });
+
+// End session's clear (clearClipboard). Contract: it replaces the clipboard's
+// current item only when this page wrote it (never what the user copied
+// elsewhere); the Clipboard API writes an empty string, the fallback a single
+// space through the same emptied-and-removed field; it resolves true only
+// when the clipboard was cleared. Each case loads its own copy of the module,
+// so what an earlier case copied does not count.
+const freshClipboard = async (tag) => import(`../src/js/clipboard.js?${tag}`);
+const runWith = async (page, fn) => {
+  const saved = { document: globalThis.document, navigator: globalThis.navigator };
+  Object.defineProperty(globalThis, "document", { value: page.document, configurable: true, writable: true });
+  Object.defineProperty(globalThis, "navigator", { value: page.navigator, configurable: true, writable: true });
+  try {
+    return await fn();
+  } finally {
+    Object.defineProperty(globalThis, "document", { value: saved.document, configurable: true, writable: true });
+    Object.defineProperty(globalThis, "navigator", { value: saved.navigator, configurable: true, writable: true });
+  }
+};
+
+test("End session leaves alone a clipboard this page never wrote", async () => {
+  const module = await freshClipboard("untouched");
+  const written = [];
+  const page = fakePage({ clipboard: { writeText: async (text) => { written.push(text); } } });
+  assert.equal(await runWith(page, () => module.clearClipboard()), false);
+  assert.deepEqual(written, [], "a clipboard the page never wrote was overwritten");
+});
+
+test("End session empties the clipboard the page wrote, once", async () => {
+  const module = await freshClipboard("api");
+  const written = [];
+  const page = fakePage({ clipboard: { writeText: async (text) => { written.push(text); } } });
+  assert.equal(await runWith(page, () => module.copyText(PHRASE)), true);
+  assert.equal(await runWith(page, () => module.clearClipboard()), true);
+  assert.deepEqual(written, [PHRASE, ""]);
+  assert.equal(await runWith(page, () => module.clearClipboard()), false, "a second clear rewrote a clipboard the page no longer owns");
+});
+
+test("without the Clipboard API, End session clears through the emptied, removed field", async () => {
+  const module = await freshClipboard("fallback");
+  const page = fakePage();
+  assert.equal(await runWith(page, () => module.copyText(PHRASE)), true);
+  assert.equal(await runWith(page, () => module.clearClipboard()), true);
+  assert.equal(page.selected(), " ", "the fallback must copy a single space over the phrase");
+  for (const field of page.fields) {
+    assert.equal(field.removed, true);
+    assert.equal(field.valueAtRemoval, "");
+  }
+});
+
+test("a clear the browser refuses reports false", async () => {
+  const module = await freshClipboard("refused");
+  let allow = true;
+  const page = fakePage({ clipboard: { writeText: async () => { if (!allow) throw new Error("NotAllowedError"); } }, execResult: false });
+  assert.equal(await runWith(page, () => module.copyText(PHRASE)), true);
+  allow = false;
+  assert.equal(await runWith(page, () => module.clearClipboard()), false);
+});

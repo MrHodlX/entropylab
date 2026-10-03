@@ -53,8 +53,20 @@ export const wasmReady = isNode
   ? Promise.resolve()
   : WebAssembly.instantiate(wasmBytes, {}).then(({ instance }) => bind(instance));
 
+let retired = false;
 export const requireReady = () => {
+  if (retired) throw new Error("This session has ended; reload the page to start a new one.");
   if (!wasm) throw new Error("EntropyLab WebAssembly is not initialized yet; await wasmReady.");
+};
+// End session: zeroes the whole linear memory (heap, shadow stack, the
+// module's own data) and drops the instance. What the buffers, the stack
+// scrub and the dependencies' unerasable heap copies held is gone at once;
+// the module cannot run again on the zeroed memory, so every later call is
+// refused.
+export const retireWasm = () => {
+  if (wasm) new Uint8Array(wasm.memory.buffer).fill(0);
+  wasm = null;
+  retired = true;
 };
 export const wasmExports = () => {
   requireReady();

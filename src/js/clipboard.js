@@ -31,16 +31,47 @@ const fallbackCopy = (text, host) => {
   }
 };
 
+// Whether this page has put anything on the clipboard, as far as the page
+// can know: a page cannot read the clipboard, so if the user copied
+// something else in another app since, End session will replace that newer
+// item with "" too. The direction is privacy-safe — it never skips a
+// clipboard the page might have written.
+let wroteClipboard = false;
+
 export const copyText = async (text, { host = document.body } = {}) => {
   if (!text) return false;
   const writeText = navigator.clipboard?.writeText;
   if (typeof writeText === "function") {
     try {
       await writeText.call(navigator.clipboard, text);
+      wroteClipboard = true;
       return true;
     } catch {}
   }
-  return fallbackCopy(text, host);
+  const copied = fallbackCopy(text, host);
+  if (copied) wroteClipboard = true;
+  return copied;
+};
+
+// End session: replaces the clipboard's current item when this page wrote
+// it. The Clipboard API takes an empty string; the fallback needs a
+// selection, so it copies one space. Clipboard history and sync keep their
+// own copies of earlier items, which no page can reach. Resolves true when
+// the clipboard was cleared, false when there was nothing of ours on it or
+// the browser refused.
+export const clearClipboard = async ({ host = document.body } = {}) => {
+  if (!wroteClipboard) return false;
+  const writeText = navigator.clipboard?.writeText;
+  let cleared = false;
+  if (typeof writeText === "function") {
+    try {
+      await writeText.call(navigator.clipboard, "");
+      cleared = true;
+    } catch {}
+  }
+  if (!cleared) cleared = fallbackCopy(" ", host);
+  if (cleared) wroteClipboard = false;
+  return cleared;
 };
 
 // The icon-button confirmation every boxed copy control shows: the clipboard
