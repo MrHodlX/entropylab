@@ -351,6 +351,11 @@ Content-Security-Policy cannot stop them, because the browser or the
 extension sends the text, not the page. Each offers an opt-out, and
 EntropyLab uses it:
 
+- Browser translation. Chrome's and Edge's built-in translators send the
+  page's text to Google or Microsoft. Everything that shows a seed word, a
+  key or a typed secret is marked `translate="no"`, so it is not sent, and a
+  warning appears if the page is translated anyway. Firefox translates on the
+  device.
 - Writing aids. Edge's text prediction, which sends what you type to
   Microsoft, is off for the whole page. Every field opts out of Grammarly,
   which sends field text to its servers whatever the spell-check setting.

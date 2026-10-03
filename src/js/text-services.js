@@ -58,3 +58,23 @@ export function initTextServiceOptOuts(doc = document) {
     if (event.target?.nodeType === 1 && isTextField(event.target)) optOutTextField(event.target);
   }, true);
 }
+
+// Browser translation is the one service the page can see after the fact.
+// Chrome's and Edge's built-in translators send the page's text to an online
+// service; translate="no" withholds what is inside it, and the page marks
+// every element that shows a secret. Chrome then marks the root with a
+// translated-ltr or translated-rtl class. By then the text has been sent, so
+// the warning cannot undo anything: it says what happened and stays up.
+export function initTranslationWarning(doc = document) {
+  const warning = doc.getElementById("translated-warning");
+  if (!warning) return;
+  const root = doc.documentElement;
+  const observer = new MutationObserver(() => check());
+  const check = () => {
+    if (!/(^|\s)translated-(ltr|rtl)(\s|$)/.test(root.getAttribute("class") || "")) return;
+    warning.removeAttribute("hidden");
+    observer.disconnect();
+  };
+  observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+  check();
+}

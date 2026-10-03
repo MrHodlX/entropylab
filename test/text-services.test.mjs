@@ -16,7 +16,12 @@
 // 1Password's data-1p-ignore, LastPass's data-lpignore="true", Bitwarden's
 // data-bwignore and Dashlane's data-form-type="other"; and the HTML
 // standard's writingsuggestions="false", inherited from the root.
-// The live page, with its observer, is covered in the browser suite.
+//
+// Browser translation sends the page's text to an online service too, and
+// the page can only see it afterwards: Chrome marks a translated page with a
+// translated-ltr or translated-rtl class on the root. Contract: either class
+// shows the warning, any other class does not, and it stays up.
+// The live page, with its observers, is covered in the browser suite.
 // Run with `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -24,7 +29,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MiniDocument, MiniElement } from "./mini-dom.mjs";
-import { initTextServiceOptOuts, optOutTextFields } from "../src/js/text-services.js";
+import { initTextServiceOptOuts, initTranslationWarning, optOutTextFields } from "../src/js/text-services.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const shell = readFileSync(join(root, "src/shell.html"), "utf8");
@@ -136,4 +141,47 @@ test("the page root turns off writing suggestions and every field added later is
   const focused = doc.createElement("textarea");
   focusListeners[0].listener({ target: focused });
   assertAttrs(focused, all, "a field stamped on focus");
+});
+
+test("a machine-translated page shows the translation warning and keeps it up", () => {
+  const observers = [];
+  const original = globalThis.MutationObserver;
+  globalThis.MutationObserver = class {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe(target, options) { this.target = target; this.options = options; }
+    disconnect() { this.disconnected = true; }
+  };
+  const page = (rootClass) => {
+    const doc = new MiniDocument();
+    const html = new MiniElement("html", doc);
+    html.append(doc.body);
+    doc.documentElement = html;
+    doc.body.innerHTML = shell;
+    if (rootClass) html.setAttribute("class", rootClass);
+    return { doc, html, warning: doc.getElementById("translated-warning") };
+  };
+  try {
+    const { html, warning } = page("");
+    assert.ok(warning?.hidden, "the warning must start hidden");
+    initTranslationWarning(warning.ownerDocument);
+    const observer = observers.at(-1);
+    assert.equal(observer.target, html);
+    assert.deepEqual(observer.options, { attributes: true, attributeFilter: ["class"] });
+    html.setAttribute("class", "translated-pending some-theme");
+    observer.callback([]);
+    assert.ok(warning.hidden, "a class other than Chrome's marker must not show the warning");
+    html.setAttribute("class", "some-theme translated-ltr");
+    observer.callback([]);
+    assert.equal(warning.hidden, false, "translated-ltr must show the warning");
+    assert.ok(observer.disconnected);
+    html.setAttribute("class", "");
+    assert.equal(warning.hidden, false, "showing the original again must not hide it: the text was already sent");
+
+    // A page already translated when the app boots warns at once.
+    const late = page("translated-rtl");
+    initTranslationWarning(late.warning.ownerDocument);
+    assert.equal(late.warning.hidden, false, "translated-rtl must show the warning");
+  } finally {
+    globalThis.MutationObserver = original;
+  }
 });
