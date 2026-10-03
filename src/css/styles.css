@@ -1678,6 +1678,16 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .vanity-formula-title:empty::before { content: "\00a0"; }
 /* Values share one band, so they sit level whatever their own height. */
 .vanity-prefix-fixed, .vanity-prefix-plus, .vanity-prefix-result { display: flex; align-items: center; justify-content: center; min-height: 44px; }
+/* The two outer terms are readouts, so each fills its column on a square,
+   edgeless ground: the fixed prefix the faint section-band tint, the result
+   the page ground itself (black, or white in light mode), so the term being
+   built reads as the answer. */
+.vanity-prefix-fixed, .vanity-prefix-result {
+  align-self: stretch; padding-inline: var(--space-control);
+  background: var(--vanity-term-ground);
+}
+.vanity-prefix-fixed { --vanity-term-ground: color-mix(in oklab, var(--fg) 5%, transparent); }
+.vanity-prefix-result { --vanity-term-ground: var(--bg); }
 .vanity-prefix-fixed { max-width: 100%; white-space: nowrap; font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--muted); }
 .vanity-prefix-result {
   max-width: 100%; overflow-x: auto; white-space: nowrap;
@@ -2749,6 +2759,10 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
      faint is invisible, and on pure white it has nowhere to go. */
   background: var(--edge-note-ground, color-mix(in oklab, var(--edge-note-color, var(--border)) 8%, color-mix(in oklab, var(--fg) 7%, var(--bg))));
 }
+/* A note with no message draws nothing: an empty note would still paint its
+   ground and edge, and a hidden one can be re-shown by a display rule it
+   also wears (.field-note sets display: block). */
+.edge-note:is([hidden], :empty) { display: none; }
 /* On white the grey lift turns the brownish light-mode orange muddy; the
    orange note tints the white ground straight from the bright orange. */
 :root[data-theme="light"] .edge-note.is-info { --edge-note-ground: color-mix(in oklab, var(--selection-accent) 10%, var(--bg)); }
