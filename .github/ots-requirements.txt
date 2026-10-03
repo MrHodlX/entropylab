@@ -4,7 +4,10 @@
 # --only-binary :all:, so pip takes exactly these wheels or fails, and runs
 # no package build code. Hashes are PyPI's published sha256 digests,
 # cross-checked against the downloaded wheels. The pycryptodomex wheel is the
-# manylinux x86_64 build the ubuntu-latest runners take.
+# manylinux x86_64 build the ubuntu-latest runners take; it is cp37-abi3, so
+# a newer runner Python still takes it, but a different architecture (arm64)
+# selects another wheel and the install fails closed. Re-pin then by adding
+# that wheel's published hash to the pycryptodomex entry.
 opentimestamps-client==0.7.2 \
     --hash=sha256:84e604d7f76534da4bab61ab62b211a6559aa988da51438408ae7947b0e8b7ba
 opentimestamps==0.4.5 \
