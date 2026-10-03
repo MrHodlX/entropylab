@@ -12,6 +12,7 @@ function harness() {
   const lab = { id: 0, number: 0, name: "Key Station", isLab: true, fields: {}, result: null };
   let nextId = 3;
   const context = vm.createContext({
+    hodlPassphraseVaultField: null, hodlPassphraseShown: false, TextEncoder, TextDecoder,
     hodlKeys: [lab, original], hodlActiveKey: 1,
     hodlNewKeyState: () => ({ id: nextId, number: nextId++, name: "New key", fields: {}, result: null }),
     hodlNewLabState: () => ({ id: 0, number: 0, name: "Key Station", isLab: true, fields: {}, result: null }),
@@ -22,7 +23,7 @@ function harness() {
     hodlTText: (value, vars) => value.replace("{name}", String(vars?.name ?? "")),
     hodlT: (value, vars) => value.replace("{n}", String(vars?.n ?? "")).replace("{suffix}", String(vars?.suffix ?? "")),
   });
-  for (const name of ["hodlNormalizeKeyName", "hodlKeyNameTaken", "hodlDefaultKeyName", "hodlCloneDerivedKey", "hodlKeyWalletIdentity", "hodlCommitDerivedKey", "hodlFillLabFromKey", "hodlEditKeyInputs"]) {
+  for (const name of ["hodlNormalizeKeyName", "hodlKeyNameTaken", "hodlDefaultKeyName", "hodlCloneDerivedKey", "hodlKeyWalletIdentity", "hodlCommitDerivedKey", "hodlFillLabFromKey", "hodlEditKeyInputs", "hodlStoredPassphraseBytes"]) {
     const source = app.match(new RegExp(`^function ${name}\\([^]*?^}`, "m"));
     assert.ok(source, name);
     vm.runInContext(source[0], context);

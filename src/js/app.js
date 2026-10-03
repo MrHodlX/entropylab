@@ -114,6 +114,7 @@ import {
 } from "./journal.js";
 import { keyVaultIdentity, parseKeyVault, serializeKeyVault } from "./keymanager.js";
 import { copyText } from "./clipboard.js";
+import { PassphraseVault, bindVaultField } from "./passphrase-vault.js";
 const hodlBip39Wordlist = Object.freeze(bip39English);
 function hodlNote(key, vars) {
   return vars == null ? { key } : { key, vars };
@@ -687,6 +688,7 @@ function hodlQrSvg(e, t = "#111111", r = "#ffffff") {
 // minifier drops this statement and no test code ships in entropylab.html;
 // the browser harness stages a --test-hooks variant instead.
 if (__ENTROPYLAB_TEST_HOOKS__ && globalThis.__entropyLabTest) globalThis.__entropyLabCrypto = { entropyToMnemonic: (hex) => hodlEntropyToMnemonic(hodlHex.decode(hex), hodlBip39Wordlist), mnemonicToEntropy: (mnemonic) => hodlHex.encode(hodlMnemonicToEntropy(mnemonic, hodlBip39Wordlist)), mnemonicToSeed: (mnemonic, passphrase) => hodlHex.encode(hodlMnemonicToSeed(mnemonic, passphrase)), validateMnemonic: (mnemonic) => hodlValidateMnemonic(mnemonic).ok, masterXprv: (mnemonic, passphrase) => hodlHDKey.fromMasterSeed(hodlMnemonicToSeed(mnemonic, passphrase)).privateExtendedKey, privateKeyInputIsValid: () => hodlPrivateKeyInputIsValid(), computeTargetLastWords: (words, targetWords) => hodlComputeTargetLastWords(words, targetWords), clearLastWordCache: () => hodlLastWordCache.clear(), validateTargetMnemonic: (value, targetWords) => hodlValidateTargetMnemonic(value, targetWords), bruteTargetLastWords: (value) => hodlLastWordCandidates(value) };
+if (__ENTROPYLAB_TEST_HOOKS__ && globalThis.__entropyLabTest) globalThis.__entropyLabPassphrase = () => hodlPassphraseText(hodlPassphraseFieldBytes());
 if (__ENTROPYLAB_TEST_HOOKS__ && globalThis.__entropyLabTest) globalThis.__entropyLabI18n = { sanitizeCatalogHtml: hodlSanitizeCatalogHtml, tHtml: hodlT, tAttr: hodlTAttr };
 var hodlRootEl = document.getElementById("btc-calc");
 if (!hodlRootEl) throw new Error("#app missing");
@@ -1218,7 +1220,7 @@ async function hodlMnemonicWalletWithProgress(value, passphrase, network, count,
   let warnings = [...source?.warnings ?? []];
   if (passphrase.length > 0) warnings.push("A passphrase is in use. The same words without this passphrase are a different wallet. Do not store the passphrase with the words.");
   // The typed passphrase is kept as its UTF-8 bytes, recorded the same way.
-  let passphraseBytes = passphrase.length > 0 ? new TextEncoder().encode(passphrase) : null;
+  let passphraseBytes = passphrase.length > 0 ? ArrayBuffer.isView(passphrase) ? Uint8Array.from(passphrase) : new TextEncoder().encode(passphrase) : null;
   if (passphraseBytes) hodlActiveDerivation?.rowKeys?.push(passphraseBytes);
   try {
     return await hodlRootWalletWithProgress(root, network, count, { entropy, passphraseUsed: passphrase.length > 0, passphrase: passphraseBytes, seed, notes: source?.notes ?? [], warnings }, accountIndex, addressStart, tracker, purposeIndex, coinType, hardening, branchStart, branchRange, derivationPlan);
@@ -4228,6 +4230,61 @@ function hodlPassphraseAutocompleteEnabled() {
   if (toggle) return toggle.checked;
   return hodlKeys[hodlActiveKey]?.passphraseAutocomplete !== false;
 }
+// The passphrase vault (passphrase-vault.js): the Key Station passphrase
+// field shows bullets, and the passphrase itself is kept as code points that
+// can be wiped. BIP39-word mode edits the field's own text (autocomplete,
+// highlighting), so there the field is ordinary.
+var hodlPassphraseVault = new PassphraseVault(), hodlPassphraseVaultField = null, hodlPassphraseShown = false;
+function hodlPassphraseVaultActive() {
+  return !hodlPassphraseBip39Enabled();
+}
+function hodlInitPassphraseVault() {
+  let field = document.getElementById("pass");
+  if (field && !hodlPassphraseVaultField) hodlPassphraseVaultField = bindVaultField(field, hodlPassphraseVault, { active: hodlPassphraseVaultActive });
+}
+// The passphrase as UTF-8 bytes, a copy the caller wipes; "" when there is
+// none, so the checks for a set passphrase read as before. Without a bound
+// vault (word mode, or before boot) the field holds the text itself.
+function hodlPassphraseFieldBytes() {
+  let bytes = hodlPassphraseVaultField && hodlPassphraseVaultActive() ? hodlPassphraseVault.bytes() : new TextEncoder().encode(document.getElementById("pass")?.value ?? "");
+  return bytes.length ? bytes : "";
+}
+// A key tab keeps its passphrase as bytes; one imported from a key file, or
+// found by Vanity, arrives as text. Each tab gets its own copy, so wiping one
+// tab's passphrase never touches another's.
+function hodlStoredPassphraseBytes(value) {
+  if (ArrayBuffer.isView(value)) return value.length ? Uint8Array.from(value) : "";
+  return value ? new TextEncoder().encode(String(value)) : "";
+}
+function hodlPassphraseText(value) {
+  return ArrayBuffer.isView(value) ? new TextDecoder().decode(value) : String(value ?? "");
+}
+function hodlStorePassphrase(state) {
+  if (!state?.fields) return;
+  if (ArrayBuffer.isView(state.fields.pass)) state.fields.pass.fill(0);
+  state.fields.pass = hodlPassphraseFieldBytes();
+}
+function hodlShowStoredPassphrase(value) {
+  hodlPassphraseShown = false;
+  let bytes = hodlStoredPassphraseBytes(value);
+  try {
+    if (hodlPassphraseVaultField) hodlPassphraseVaultField.setBytes(bytes || new Uint8Array(0));
+    else {
+      let field = document.getElementById("pass");
+      if (field) field.value = hodlPassphraseText(bytes);
+    }
+  } finally {
+    if (bytes) bytes.fill(0);
+  }
+}
+function hodlClearPassphraseField() {
+  hodlPassphraseShown = false;
+  if (hodlPassphraseVaultField) hodlPassphraseVaultField.clear();
+  else {
+    let field = document.getElementById("pass");
+    if (field) field.value = "";
+  }
+}
 function hodlAnalyzeBip39Passphrase(value, activeCaret = null) {
   value = String(value ?? "");
   let tokens = [...value.matchAll(/\S+/g)].map((match) => ({
@@ -4259,6 +4316,10 @@ function hodlRenderPassphraseInputState(input, enabled = hodlPassphraseBip39Enab
   // keyboard capitalize it, free-text mode included (audit finding).
   input.setAttribute("autocapitalize", "off");
   hodlRenderInputHighlight(input, analysis.invalidRanges);
+  if (!enabled && input.id === "pass" && hodlPassphraseShown && hodlPassphraseVault.length) {
+    let mirror = document.getElementById("passphrase-highlight");
+    if (mirror) mirror.textContent = hodlPassphraseVault.text();
+  }
   if (status) {
     status.hidden = !enabled;
     if (enabled) {
@@ -4328,7 +4389,10 @@ function hodlPassphraseKeyboardToggleMarkup() {
 }
 function hodlPassphraseBip39ToggleMarkup(checked = hodlPassphraseBip39Enabled()) {
   let autocomplete = hodlPassphraseAutocompleteEnabled();
-  return `<div class="passphrase-bip39-options"><div class="switch-row"><label class="switch-toggle passphrase-bip39-toggle"><input type="checkbox" id="passphrase-bip39-words" aria-describedby="passphrase-bip39-note" ${checked ? "checked" : ""} /><span class="label">Build passphrase from BIP39 words</span></label><p class="switch-note" id="passphrase-bip39-note">Use complete lowercase English BIP39 words separated by single spaces</p></div><label class="switch-toggle passphrase-autocomplete-toggle" id="passphrase-autocomplete-control"${checked ? "" : " hidden"}><input type="checkbox" id="passphrase-autocomplete" ${autocomplete ? "checked" : ""} /><span class="label">Autocomplete BIP39 words</span></label></div>`;
+  // Showing the passphrase is its own choice; in word mode the field shows
+  // its text anyway, so the switch steps aside.
+  let reveal = hodlSwitchRowMarkup("passphrase-reveal", hodlT("Show passphrase"), { note: hodlT("Hidden by default: a passphrase on screen can be captured or seen"), checked: hodlPassphraseShown, hidden: checked });
+  return `<div class="passphrase-bip39-options"><div class="switch-row"><label class="switch-toggle passphrase-bip39-toggle"><input type="checkbox" id="passphrase-bip39-words" aria-describedby="passphrase-bip39-note" ${checked ? "checked" : ""} /><span class="label">Build passphrase from BIP39 words</span></label><p class="switch-note" id="passphrase-bip39-note">Use complete lowercase English BIP39 words separated by single spaces</p></div><label class="switch-toggle passphrase-autocomplete-toggle" id="passphrase-autocomplete-control"${checked ? "" : " hidden"}><input type="checkbox" id="passphrase-autocomplete" ${autocomplete ? "checked" : ""} /><span class="label">Autocomplete BIP39 words</span></label></div>${reveal}`;
 }
 function hodlBrainWalletTrimEnabled() {
   return Boolean(document.getElementById("brain-wallet-trim")?.checked);
@@ -4730,6 +4794,11 @@ function hodlUpdatePrivateKeyKeyboardKeys(input, keyboardId = "private-keyboard"
 }
 function hodlApplySeedKeyboardKey(input, key, deleteBackward = false) {
   if (!input) return;
+  if (input.id === "pass" && hodlPassphraseVaultField && hodlPassphraseVaultActive()) {
+    if (deleteBackward) hodlPassphraseVaultField.deleteBackward();
+    else hodlPassphraseVaultField.insert(String(key ?? ""));
+    return;
+  }
   let start = input.selectionStart ?? input.value.length, end = input.selectionEnd ?? start, inputType = "insertText", data = key;
   if (deleteBackward) {
     inputType = "deleteContentBackward";
@@ -4994,14 +5063,24 @@ function hodlBindPassphraseKeyboard(inputId = "pass", toggleId = "passphrase-key
 function hodlBindPassphraseOptions(keyboardId = "passphrase-keyboard") {
   let input = document.getElementById("pass"), bip39Toggle = document.getElementById("passphrase-bip39-words"), autocompleteToggle = document.getElementById("passphrase-autocomplete"), autocompleteControl = document.getElementById("passphrase-autocomplete-control"), keyboard = document.getElementById(keyboardId), modeButton = keyboard?.querySelector("[data-seed-keyboard-mode]");
   if (!input || !bip39Toggle || !autocompleteToggle || !autocompleteControl) return;
-  let refresh = () => {
+  let reveal = document.getElementById("passphrase-reveal"), refresh = () => {
     autocompleteControl.hidden = !bip39Toggle.checked;
+    let revealRow = reveal?.closest(".switch-row");
+    if (revealRow) revealRow.hidden = bip39Toggle.checked;
+    if (reveal) reveal.checked = hodlPassphraseShown;
     hodlRenderPassphraseInputState(input, bip39Toggle.checked);
     hodlUpdatePassphraseKeyboardKeys(input, keyboardId);
+  };
+  if (reveal) reveal.onchange = () => {
+    hodlPassphraseShown = reveal.checked;
+    refresh();
   };
   bip39Toggle.onchange = () => {
     let state = hodlKeys[hodlActiveKey];
     if (state) state.passphraseBip39Words = bip39Toggle.checked;
+    hodlPassphraseShown = false;
+    if (bip39Toggle.checked) hodlPassphraseVaultField?.unmask();
+    else hodlPassphraseVaultField?.mask();
     if (bip39Toggle.checked && modeButton) hodlSetSeedKeyboardLayout(keyboard, modeButton, "lower");
     refresh();
     hodlSyncKeyClearButton();
@@ -6894,10 +6973,12 @@ function hodlRenderMasterFingerprintPreview(revision = hodlMasterFingerprintRevi
     clear();
     return;
   }
-  let value = "";
-  if (pass.value.length > 0) try {
-    value = hodlMasterFingerprint(mnemonic, pass.value);
+  let value = "", passphrase = hodlPassphraseFieldBytes();
+  if (passphrase.length > 0) try {
+    value = hodlMasterFingerprint(mnemonic, passphrase);
   } catch {
+  } finally {
+    passphrase.fill(0);
   }
   let available = hodlSetMasterFingerprintCard(passphraseCard, passphraseValue, value, passphraseImage);
   // The passphrase card appears only once it has a fingerprint to show: until
@@ -6947,7 +7028,7 @@ function hodlInitMasterFingerprintPreview() {
     if (id === "pass") {
       let state = hodlKeys[hodlActiveKey];
       hodlAutocompletePassphraseInput(pass, event);
-      if (state) state.fields.pass = pass.value;
+      hodlStorePassphrase(state);
       hodlRenderPassphraseInputState(pass);
     }
     if (id !== "pass" && !event.target?.hodlRestoring) hodlGlobalSyncFromCurrentInput();
@@ -6991,7 +7072,7 @@ async function hodlCalculateKey(progress, action = "derive") {
   // from genesis) so a previous "new keys" choice cannot leak into a
   // recovery export.
   hodlWalletDatBirthday = "genesis";
-  let generation = hodlDerivationGeneration, control = hodlActiveDerivation, result;
+  let generation = hodlDerivationGeneration, control = hodlActiveDerivation, result, passphraseCopy = "";
   try {
     // `network` is the encoding family the tool fields settled on (from the
     // coin type); `chain` is the picker's chain identity when it belongs to
@@ -6999,9 +7080,9 @@ async function hodlCalculateKey(progress, action = "derive") {
     // result and its wallet.dat export (issue #329). A tool override that
     // switches family (e.g. coin type 0' under a signet picker) drops the
     // picker chain with it.
-    let derivationPlan = hodlKeyMode === "key" && !hodlBrainHdActive() ? null : hodlReadDerivationPlan(), coinType = derivationPlan?.coinType ?? hodlReadCoinType(document.getElementById("network")), network = derivationPlan?.network ?? hodlNetworkFromCoinType(coinType), chain = hodlNetworkFamily(hodlNetworkChoice) === network ? hodlNetworkChoice : network, addressWindow = hodlKeyMode === "key" ? { start: 0, range: 1 } : hodlReadAddressWindow(), branchWindow = hodlKeyMode === "key" ? { start: 0, range: 2 } : hodlReadBranchWindow(), count = addressWindow.range, addressStart = addressWindow.start, branchStart = branchWindow.start, branchRange = branchWindow.range, passphrase = document.getElementById("pass").value, scriptType = hodlSelectedScriptType(), purpose = derivationPlan?.purpose ?? 84, account = derivationPlan?.accountIndex ?? 0, hardening = derivationPlan?.hardening ?? hodlDefaultHardening();
+    let derivationPlan = hodlKeyMode === "key" && !hodlBrainHdActive() ? null : hodlReadDerivationPlan(), coinType = derivationPlan?.coinType ?? hodlReadCoinType(document.getElementById("network")), network = derivationPlan?.network ?? hodlNetworkFromCoinType(coinType), chain = hodlNetworkFamily(hodlNetworkChoice) === network ? hodlNetworkChoice : network, addressWindow = hodlKeyMode === "key" ? { start: 0, range: 1 } : hodlReadAddressWindow(), branchWindow = hodlKeyMode === "key" ? { start: 0, range: 2 } : hodlReadBranchWindow(), count = addressWindow.range, addressStart = addressWindow.start, branchStart = branchWindow.start, branchRange = branchWindow.range, passphrase = (passphraseCopy = hodlPassphraseFieldBytes()), scriptType = hodlSelectedScriptType(), purpose = derivationPlan?.purpose ?? 84, account = derivationPlan?.accountIndex ?? 0, hardening = derivationPlan?.hardening ?? hodlDefaultHardening();
     if ((hodlKeyMode !== "key" || hodlBrainHdActive()) && hodlPassphraseBip39Enabled() && passphrase) {
-      let passphraseAnalysis = hodlAnalyzeBip39Passphrase(passphrase);
+      let passphraseAnalysis = hodlAnalyzeBip39Passphrase(document.getElementById("pass")?.value ?? "");
       if (passphraseAnalysis.invalidRanges.length || passphraseAnalysis.incomplete || passphraseAnalysis.trailingSeparator) throw hodlError("Correct the highlighted BIP39-word passphrase inconsistencies before deriving.");
     }
     if (hodlKeyMode === "dice") {
@@ -7115,6 +7196,8 @@ async function hodlCalculateKey(progress, action = "derive") {
     hodlDisposeDroppedWallets(); // the wallet the tab showed before the failure
     hodlJournalLog("derive-error");
     return false;
+  } finally {
+    if (ArrayBuffer.isView(passphraseCopy)) passphraseCopy.fill(0); // the wallet keeps its own copy
   }
 }
 function hodlFilterHex(e) {
@@ -11189,7 +11272,7 @@ function hodlPickSpSessionKey(state) {
     hodlSpUseKey(state);
     // The station's key field shows the words, as the user would type them.
     document.getElementById("sp-key").value = hodlResultMnemonic(state.result) || hodlResultRootXprv(state.result) || "";
-    document.getElementById("sp-pass").value = hodlResultHasSeed(state.result) ? state.fields?.pass || "" : "";
+    document.getElementById("sp-pass").value = hodlResultHasSeed(state.result) ? hodlPassphraseText(state.fields?.pass) : "";
     document.getElementById("sp-session").textContent = hodlSpNote;
   } catch (exception) {
     if (error) error.textContent = exception.message || String(exception);
@@ -12276,6 +12359,9 @@ function hodlKeyManagerEntry(state) {
   // Byte arrays stay behind: the copy is read only for the key's identity, and
   // JSON would turn a row's key bytes into plain numbers no wipe can reach.
   let copy = JSON.parse(JSON.stringify(state, (key, value) => ArrayBuffer.isView(value) ? void 0 : value));
+  // The passphrase is the one byte array a key file keeps: as text, inside
+  // the encrypted file, which is an export.
+  if (ArrayBuffer.isView(state.fields?.pass) && copy.fields) copy.fields.pass = hodlPassphraseText(state.fields.pass);
   delete copy.isLab;
   copy.reveal = false;
   copy.error = "";
@@ -12467,7 +12553,7 @@ function hodlKeyManagerImportedState(entry) {
     number: state.number,
     color: hodlKeyColor(state.id),
     createdAt: entry.createdAt || state.createdAt,
-    fields: { ...state.fields, ...entry.fields, ...(entry.fields?.privateKeys ? { privateKeys: { ...state.fields.privateKeys, ...entry.fields.privateKeys } } : {}) },
+    fields: { ...state.fields, ...entry.fields, ...(entry.fields?.privateKeys ? { privateKeys: { ...state.fields.privateKeys, ...entry.fields.privateKeys } } : {}), pass: hodlStoredPassphraseBytes(entry.fields?.pass) },
     reveal: false,
     result: null,
     needsDerivation: true,
@@ -12588,7 +12674,7 @@ function hodlKeyManagerReset() {
   hodlKeyManagerRender();
 }
 function hodlCloneDerivedKey(source, existing) {
-  let state = existing ? { ...existing, fields: { ...existing.fields, ...(existing.fields.privateKeys ? { privateKeys: { ...existing.fields.privateKeys } } : {}) } } : hodlNewKeyState();
+  let state = existing ? { ...existing, fields: { ...existing.fields, ...(existing.fields.privateKeys ? { privateKeys: { ...existing.fields.privateKeys } } : {}), pass: hodlStoredPassphraseBytes(existing.fields.pass) } } : hodlNewKeyState();
   let fingerprint = source.result?.masterFingerprint || "";
   Object.assign(state, {
     isLab: false,
@@ -12624,7 +12710,7 @@ function hodlCloneDerivedKey(source, existing) {
     createdScript: source.createdScript,
     createdPath: source.createdPath,
     error: source.error,
-    fields: { ...source.fields, ...(source.fields?.privateKeys ? { privateKeys: { ...source.fields.privateKeys } } : {}) }
+    fields: { ...source.fields, ...(source.fields?.privateKeys ? { privateKeys: { ...source.fields.privateKeys } } : {}), pass: hodlStoredPassphraseBytes(source.fields?.pass) }
   });
   return state;
 }
@@ -12976,7 +13062,8 @@ function hodlCaptureKey() {
   state.fields.script = state.accountId;
   state.errorSpec = hodlKeyErrorSpec;
   state.error = hodlFormatErrorSpec(hodlKeyErrorSpec);
-  ["pass", "derivation-path", "purpose", "account", "branch-start", "branch-range", "address-start", "address-range", "hex", "bin", "base4", "base8", "base32", "base64", "seed", "cards"].forEach((id) => {
+  hodlStorePassphrase(state);
+  ["derivation-path", "purpose", "account", "branch-start", "branch-range", "address-start", "address-range", "hex", "bin", "base4", "base8", "base32", "base64", "seed", "cards"].forEach((id) => {
     let el = document.getElementById(id);
     if (el) state.fields[id === "derivation-path" ? "derivationPath" : id === "branch-start" ? "branchStart" : id === "branch-range" ? "branchRange" : id === "address-start" ? "addressStart" : id === "address-range" ? "addressRange" : id] = el.value;
   });
@@ -13035,7 +13122,7 @@ function hodlRestoreKey() {
     hodlRenderKeyForm();
     let pass2 = document.getElementById("pass");
     if (pass2) {
-      pass2.value = "";
+      hodlClearPassphraseField();
       hodlRenderPassphraseInputState(pass2, false);
     }
     hodlSyncSelect(document.getElementById("script-type"), "bip84");
@@ -13083,7 +13170,7 @@ function hodlRestoreKey() {
   hodlRenderKeyForm();
   let pass = document.getElementById("pass");
   if (pass) {
-    pass.value = state.fields.pass || "";
+    hodlShowStoredPassphrase(state.fields.pass);
     hodlRenderPassphraseInputState(pass, Boolean(state.passphraseBip39Words));
   }
   hodlAccountId = state.accountId || state.fields.script || "bip84";
@@ -15975,7 +16062,7 @@ function hodlVanitySyncSource() {
   }
   let passphraseOption = document.querySelector('#vanity-method-tabs [data-vanity-method-option="passphrase"]');
   if (state) {
-    let label = hodlVanityKeyLabel(state), pass = String(state.fields?.pass ?? ""), hasMnemonic = hodlResultHasSeed(state.result);
+    let label = hodlVanityKeyLabel(state), pass = hodlPassphraseText(state.fields?.pass), hasMnemonic = hodlResultHasSeed(state.result);
     let name = document.getElementById("vanity-source-name"), kind = document.getElementById("vanity-source-kind"), image = document.getElementById("vanity-source-lifehash"), field = document.getElementById("vanity-pass"), passNote = document.getElementById("vanity-pass-note");
     if (name) name.textContent = label;
     if (kind) kind.textContent = `${hasMnemonic ? "BIP39 seed words" : "Master xprv"}${state.name && state.name !== label ? ` · ${state.name}` : ""}`;
@@ -16096,7 +16183,7 @@ function hodlVanityPlan(state, method, scriptId) {
   let path = scriptId === "sp"
     ? [352 + VANITY_HARDENED, VANITY_HARDENED, (accountComponents[2] & VANITY_MAX_INDEX) + VANITY_HARDENED]
     : [...accountComponents, index(fields.branchStart, Boolean(fields.branchHarden)), index(fields.addressStart, Boolean(fields.addressHarden))];
-  let passphrase = validateVanityPassphrase(fields.pass ?? "");
+  let passphrase = validateVanityPassphrase(hodlPassphraseText(fields.pass));
   let plan = { method, script: scriptId, sourceId: state.id, sourceLabel: label, passphrase, accountHardened: path[2] >= VANITY_HARDENED };
   if (method === "passphrase") {
     if (!hodlResultHasSeed(result)) throw new Error(`Key ${label} has no seed words (root xprv), so its passphrase cannot be extended — switch to the derivation grind.`);
@@ -16452,7 +16539,7 @@ async function hodlVanityApplyMatch(index) {
   let lab = hodlKeys.find((candidate) => candidate.isLab) || null;
   try {
     let labIndex = hodlFillLabFromKey(state), draft = hodlKeys[labIndex];
-    draft.fields.pass = match.passphrase;
+    draft.fields.pass = hodlStoredPassphraseBytes(match.passphrase);
     if (match.index !== null) {
       draft.fields.account = `${match.index}${run.accountHardened ? "'" : ""}`;
       draft.fields.accountHarden = run.accountHardened;
@@ -16941,7 +17028,9 @@ function hodlInitSecretFieldAutoClear() {
         privateKeys[kind] = "";
       });
       Object.keys(fields).forEach((id) => {
-        if (id !== "privateKeys") fields[id] = "";
+        if (id === "privateKeys") return;
+        if (ArrayBuffer.isView(fields[id])) fields[id].fill(0);
+        fields[id] = "";
       });
       if (Array.isArray(state.diceCoinPositions)) state.diceCoinPositions.length = 0;
       state.lastWord = "";
@@ -16969,6 +17058,7 @@ function hodlInitSecretFieldAutoClear() {
         delete field.dataset.previousValue;
       }
     }
+    hodlClearPassphraseField();
     let psbtKey = document.getElementById("psbt-key"), psbtPass = document.getElementById("psbt-pass");
     if (psbtKey) psbtKey.value = "";
     if (psbtPass) psbtPass.value = "";
@@ -17130,6 +17220,7 @@ function hodlApplyLocale() {
   });
 }
 async function hodlBoot() {
+  hodlInitPassphraseVault();
   hodlInitWorkspace();
   hodlInitAddressQr(hodlQrSvg, { copy: hodlClipboardIconMarkup, copied: hodlCopiedIconMarkup }, { frames: hodlPsbtQrFrames });
   hodlLowEntropyConfirm = initLowEntropyConfirm();

@@ -2221,7 +2221,7 @@ test("BIP-85 and SP Stations can bring in compatible existing roots", () => {
   assert.match(appSource, /function hodlPickSpSessionKey\(state\) \{/);
   assert.match(appSource, /document\.getElementById\("bip85-key"\)\.value = rootXprv;/);
   assert.match(appSource, /document\.getElementById\("sp-key"\)\.value = hodlResultMnemonic\(state\.result\) \|\| hodlResultRootXprv\(state\.result\) \|\| "";/);
-  assert.match(appSource, /document\.getElementById\("sp-pass"\)\.value = hodlResultHasSeed\(state\.result\) \? state\.fields\?\.pass \|\| "" : "";/);
+  assert.match(appSource, /document\.getElementById\("sp-pass"\)\.value = hodlResultHasSeed\(state\.result\) \? hodlPassphraseText\(state\.fields\?\.pass\) : "";/);
   assert.match(appSource, /document\.getElementById\("bip85-key"\)\.addEventListener\("input"/);
   assert.match(appSource, /document\.getElementById\("sp-key"\)\.addEventListener\("input", detachStationKey\)/);
   // The selected chip is unmistakable: accent border and tint plus a check
@@ -2359,14 +2359,15 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
   assert.match(appSource, /function hodlVanitySourceKeys\(\) \{\s*return hodlSessionHdRootKeys\(\);/);
   // The selected key's passphrase is read from its state, never retyped: the
   // source panel shows it verbatim and the plan reads it again at start.
-  assert.match(vanityController, /function hodlVanitySyncSource\(\) \{[\s\S]*?pass = String\(state\.fields\?\.pass \?\? ""\)[\s\S]*?field\.textContent = pass/);
-  assert.match(vanityController, /function hodlVanityPlan\(state, method, scriptId\) \{[\s\S]*?validateVanityPassphrase\(fields\.pass \?\? ""\)/);
+  // A key keeps its passphrase as bytes (the passphrase vault), decoded here.
+  assert.match(vanityController, /function hodlVanitySyncSource\(\) \{[\s\S]*?pass = hodlPassphraseText\(state\.fields\?\.pass\)[\s\S]*?field\.textContent = pass/);
+  assert.match(vanityController, /function hodlVanityPlan\(state, method, scriptId\) \{[\s\S]*?validateVanityPassphrase\(hodlPassphraseText\(fields\.pass\)\)/);
   // Matching is mainnet only, on the key's own account path.
   assert.match(vanityController, /Vanity matching is Bitcoin mainnet/);
   assert.match(vanityController, /vanityPathIndexes\(fields\.derivationAccountPath \|\| "m\/84'\/0'\/0'"\)/);
   // Update key uses the Key Station edit path and explicitly commits to its
   // source tab, including when a new passphrase changes the fingerprint.
-  assert.match(vanityController, /async function hodlVanityApplyMatch\(index\) \{[\s\S]*?hodlFillLabFromKey\(state\)[\s\S]*?draft\.fields\.pass = match\.passphrase;[\s\S]*?draft\.fields\.account = `\$\{match\.index\}[\s\S]*?await hodlDeriveWithProgress\("key", \(progress\) => hodlCalculateKey\(progress, "update"\)\);/);
+  assert.match(vanityController, /async function hodlVanityApplyMatch\(index\) \{[\s\S]*?hodlFillLabFromKey\(state\)[\s\S]*?draft\.fields\.pass = hodlStoredPassphraseBytes\(match\.passphrase\);[\s\S]*?draft\.fields\.account = `\$\{match\.index\}[\s\S]*?await hodlDeriveWithProgress\("key", \(progress\) => hodlCalculateKey\(progress, "update"\)\);/);
   assert.match(vanityController, /data-vanity-apply="\$\{index\}"/);
   assert.match(vanityController, /Saved to key \$\{hodlEscapeHtml\(match\.savedTo\)\}/);
   // The chip picker marks the selected chip with a check, not colour alone.

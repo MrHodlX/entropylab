@@ -35,12 +35,22 @@ function functionSource(name) {
   return (app.slice(start - 6, start) === "async " ? "async " : "") + app.slice(start, end);
 }
 
+// Every context gets the passphrase vault's helpers (passphrase-vault.js)
+// with no vault bound, so they read the field's own text, as these harnesses
+// model it, and the encoders a VM context lacks.
+const passphraseHelpers = ["hodlPassphraseVaultActive", "hodlPassphraseFieldBytes", "hodlStoredPassphraseBytes", "hodlPassphraseText", "hodlStorePassphrase", "hodlShowStoredPassphrase", "hodlClearPassphraseField"];
+function createContext(sandbox) {
+  const context = vm.createContext({ hodlPassphraseVaultField: null, hodlPassphraseShown: false, TextEncoder, TextDecoder, ...sandbox });
+  for (const name of passphraseHelpers) vm.runInContext(functionSource(name), context);
+  return context;
+}
+
 function raceHarness() {
   const pending = deferred(), decryptStarted = deferred(), events = {}, effects = [];
   const fields = new Map();
   const mirrors = [".dice-input-highlight", ".dice-word-grid", "#last-words", "#brain-lab-hex"]
     .map(selector => ({ selector, textContent: "secret mnemonic" }));
-  const context = vm.createContext({
+  const context = createContext({
     // Synthetic commit results have no markers; the notice call on the
     // derive path must see "no private material" rather than throw.
     hodlResultHasSeed: () => false, hodlResultHasRoot: () => false,
@@ -219,6 +229,18 @@ const start = app.indexOf("function hodlInitSecretFieldAutoClear()");
 const end = app.indexOf("\nfunction hodlBoot()", start);
 const lifecycle = app.slice(start, end);
 
+// A key tab keeps its BIP39 passphrase as UTF-8 bytes (the passphrase
+// vault): leaving the page zeroes them, rather than dropping them for the
+// collector, and empties the field.
+test("pagehide zeroes each key tab's stored passphrase bytes", () => {
+  const { context, events, fields } = raceHarness();
+  const stored = new TextEncoder().encode("private passphrase");
+  context.hodlKeys[0].fields.pass = stored;
+  events.pagehide({ persisted: false });
+  assert.ok(stored.every((byte) => byte === 0), "the tab's passphrase bytes survived pagehide");
+  assert.equal(fields.get("pass").value, "");
+});
+
 test("page lifecycle clearing replaces every cached key and clears PSBT private state", () => {
   assert.match(lifecycle, /hodlPsbtWipeMem\(\)/);
   assert.match(lifecycle, /hodlBip85WipeMem\(\)/);
@@ -226,7 +248,7 @@ test("page lifecycle clearing replaces every cached key and clears PSBT private 
   assert.match(lifecycle, /hodlJournalWipeMem\(\)/);
   assert.match(lifecycle, /hodlKeys\s*=\s*hodlKeys\.map\(\(state\)\s*=>\s*\{/);
   assert.match(lifecycle, /privateKeys\[kind\]\s*=\s*""/);
-  assert.match(lifecycle, /if \(id !== "privateKeys"\) fields\[id\] = ""/);
+  assert.match(lifecycle, /if \(id === "privateKeys"\) return;\s*if \(ArrayBuffer\.isView\(fields\[id\]\)\) fields\[id\]\.fill\(0\);\s*fields\[id\] = ""/);
   assert.match(lifecycle, /state\.result\s*=\s*null/);
   assert.match(lifecycle, /return state\.isLab \? hodlNewLabState\(\) : hodlNewKeyState\(state\.name, state\.id, state\.number\)/);
   assert.match(lifecycle, /hodlWalletResult\s*=\s*null[\s\S]*hodlRevealPrivate\s*=\s*false[\s\S]*hodlPickedLastWord\s*=\s*""[\s\S]*hodlDiceCoinPositions\s*=\s*\[\]/);
@@ -381,7 +403,7 @@ test("dropping the vanity key pick clears the passphrase the source block showed
   const elements = new Map();
   for (const id of ["vanity-source-block", "vanity-session-note", "vanity-source-name", "vanity-source-kind", "vanity-pass", "vanity-pass-note", "vanity-source-path", "vanity-source-lifehash"])
     elements.set(id, { textContent: "hunter2", hidden: false, disabled: false, dataset: {} });
-  const context = vm.createContext({
+  const context = createContext({
     document: {
       getElementById: id => elements.get(id) ?? null,
       querySelector: () => null,
@@ -418,7 +440,7 @@ test("journal Lock empties the snapshot, the notepad and the session log", () =>
   journal.pages[0].notesText = "dice rolls and brain text";
   journal.log.push({ kind: "journal-unlock" });
   journal.stateText = "snapshot text";
-  const context = vm.createContext({
+  const context = createContext({
     document: { getElementById: id => elements.get(id) ?? null },
     hodlJournal: journal,
     wipeJournal,
@@ -455,7 +477,7 @@ test("pagehide and persisted pageshow end the PSBT session, reports included", (
   for (const id of ["psbt-out", "nonce-out"]) elements.set(id, { innerHTML: "<table>report</table>", dataset: {} });
   for (const id of ["psbt-key", "psbt-pass", "psbt-text", "psbt-ax-transcript", "nonce-key", "nonce-pass", "nonce-text"]) elements.set(id, { value: "session material", dataset: {} });
   const errors = [];
-  const context = vm.createContext({
+  const context = createContext({
     document: { getElementById: id => elements.get(id) ?? null },
     hodlPsbtWipeMem() {}, hodlPsbtClearNonceHistory() {},
     hodlPsbtLast: { rvalues: ["deadbeef"] }, hodlPsbtInspected: { psbt: "stamp" },
@@ -501,7 +523,7 @@ test("the key Wipe button drops the cached partial mnemonics", () => {
   // must do so even when no key slot is active.
   for (const activeKey of [-1, 0]) {
     const cache = new Map([["24:abandon abandon abandon", { candidates: [] }]]);
-    const context = vm.createContext({
+    const context = createContext({
       hodlLastWordCache: cache,
       hodlInvalidateDerivation() {},
       hodlActiveKey: activeKey,
@@ -612,7 +634,7 @@ test("Wipe zeroes a wallet's row key bytes unless another key tab still shows th
   for (const shared of [false, true]) {
     const { rows, result } = walletWithRows();
     const active = { name: "Key 1", id: 1, number: 1, isLab: false, result };
-    const context = vm.createContext({
+    const context = createContext({
       hodlLastWordCache: new Map(), hodlInvalidateDerivation() {}, hodlActiveKey: 0,
       hodlKeys: shared ? [active, { isLab: true, result }] : [active], hodlKeyManagerPending: [], hodlWalletResult: result,
       hodlNewKeyState: () => ({ result: null }), hodlNewLabState: () => ({ result: null }),
@@ -655,7 +677,7 @@ test("an ignored key's saved copy carries no key bytes", async () => {
 // Manager's reset (Journal lock, unlock, create, wipe) zeroes every byte array
 // its pending keys reach; it must not reach rows a station still shows.
 test("a Key Manager reset leaves the row key bytes of a wallet a station still shows", () => {
-  const context = vm.createContext({
+  const context = createContext({
     hodlKeyManagerIgnored: [], hodlKeyManagerIds: new Set(), hodlKeyManagerActiveId: "",
     document: { getElementById: () => null }, hodlKeyManagerStatus() {}, hodlKeyManagerRender() {},
     hodlRefreshStationKeyPickers() {}, hodlRefreshMsigSessionPickers() {},

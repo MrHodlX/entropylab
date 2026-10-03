@@ -685,9 +685,10 @@
     keyboard.querySelector('[data-seed-key="1"]').click();
     keyboard.querySelector('[data-seed-key="!"]').click();
     keyboard.querySelector(".seed-keyboard-space").click();
-    equal(passphraseKeyboardInput.value, "aA1! ");
+    equal(window.__entropyLabPassphrase(), "aA1! ");
+    equal(passphraseKeyboardInput.value, "\u2022".repeat(5), "the on-screen keyboard put the passphrase in the field");
     deleteButton.click();
-    equal(passphraseKeyboardInput.value, "aA1!");
+    equal(window.__entropyLabPassphrase(), "aA1!");
     input(passphraseKeyboardInput, "");
     seed.focus();
     // Firefox's headless focus transition can update activeElement without
@@ -1915,7 +1916,7 @@
     assert(document.getElementById("calc-card").hidden && !document.getElementById("vanity-card").hidden, "the Vanity tab stays in front");
     document.querySelector('#workspace [data-workspace="calc"]').click();
     await until(() => !document.getElementById("key-manager").hidden, "key workspace");
-    equal(document.getElementById("pass").value, "correct horse battery staplea", "the Keys tab carries the new passphrase");
+    equal(window.__entropyLabPassphrase(), "correct horse battery staplea", "the Keys tab carries the new passphrase");
     equal(document.getElementById("key-summary-fingerprint").textContent, "c55401c7", "the Keys tab summary shows the new fingerprint");
     await until(() => document.getElementById("key-summary-lifehash").dataset.fingerprint === "c55401c7" && !document.getElementById("key-summary-lifehash").hidden, "the Keys tab summary LifeHash to follow the new fingerprint");
     assert(document.getElementById("out").textContent.includes("bc1qylthc2drk6x5q0czdljal99vqwed9tja80z06d"), "the Keys tab derives the vanity address");
@@ -2054,7 +2055,7 @@
     await refused("Update key to refuse a key whose address start moved");
     await openKeys();
     assert(firstAcctAddress()?.path.endsWith("/0/7"), "a refused Update key leaves the edited path alone");
-    equal(document.getElementById("pass").value, pass, "a refused Update key leaves the passphrase alone");
+    equal(window.__entropyLabPassphrase(), pass, "a refused Update key leaves the passphrase alone");
     // The same wallet re-imported as its root xprv: same fingerprint, but no
     // seed words for the match's passphrase to extend.
     await rederive(() => input(document.getElementById("address-start"), "0"), "the key to re-derive from address 0");
@@ -3173,7 +3174,7 @@
     input(passphrase, "");
     input(dice, "");
     keyboard.querySelector('[data-seed-key="a"]').click();
-    equal(passphrase.value, "a");
+    equal(window.__entropyLabPassphrase(), "a", "the key did not reach the passphrase");
     equal(dice.value, "");
 
     await chooseMode("Number bases");
@@ -3188,7 +3189,7 @@
     input(passphrase, "");
     input(hex, "");
     keyboard.querySelector('[data-seed-key="a"]').click();
-    equal(passphrase.value, "a");
+    equal(window.__entropyLabPassphrase(), "a", "the key did not reach the passphrase");
     equal(hex.value, "");
     toggle.click();
     assert(toggle.getAttribute("aria-expanded") === "false" && keyboard.hidden, "Hex keyboard did not close");
@@ -5904,6 +5905,70 @@
     document.querySelector('#journal-tool-tabs [data-journal-tool="keymanager"]').click();
     assert(!document.getElementById("journal-keymanager-tabs").textContent.includes("Unverified legacy fixture"), "successful derivation retires the pending input");
     document.querySelector('#workspace [data-workspace="calc"]').click();
+  });
+
+  // The passphrase vault: the BIP39 passphrase field never holds the
+  // passphrase, whatever reaches it, so the browser's editor, undo history,
+  // session restore and extensions only ever see bullets. Keys arrive as a
+  // browser delivers them, one cancelable beforeinput each. The seed is the
+  // published BIP39 vector for this mnemonic with passphrase TREZOR
+  // (trezor/python-mnemonic vectors.json).
+  await test("the BIP39 passphrase field holds only bullets, and the passphrase still reaches the seed", async () => {
+    const bullets = (n) => "\u2022".repeat(n);
+    let keyDerived = false;
+    const pass = document.getElementById("pass"), mirror = document.getElementById("passphrase-highlight");
+    const key = (data, inputType = "insertText") => pass.dispatchEvent(new InputEvent("beforeinput", { inputType, data, cancelable: true, bubbles: true }));
+    try {
+      document.querySelector('#workspace [data-workspace="calc"]').click();
+      await until(() => !document.getElementById("key-manager").hidden, "key workspace");
+      chooseSeedWords(12);
+      await chooseMode("Seed phrase");
+      input(document.getElementById("seed"), vectors[0].mnemonic);
+      input(pass, "");
+      pass.focus();
+      for (const character of "TREZQR") key(character);
+      key(null, "deleteContentBackward");
+      key(null, "deleteContentBackward");
+      for (const character of "OR") key(character);
+      equal(pass.value, bullets(6));
+      equal(window.__entropyLabPassphrase(), "TREZOR");
+      equal(mirror.textContent, bullets(6), "the mirror behind the field showed the passphrase while hidden");
+      const reveal = document.getElementById("passphrase-reveal");
+      assert(reveal && !reveal.checked, "the passphrase did not start hidden");
+      reveal.click();
+      equal(mirror.textContent, "TREZOR", "Show passphrase did not show it");
+      equal(pass.value, bullets(6), "showing the passphrase put it in the field");
+      reveal.click();
+      equal(mirror.textContent, bullets(6));
+      // A paste replaces the selection, and still only bullets land.
+      pass.setSelectionRange(0, 6);
+      pass.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertFromPaste", data: "TREZOR", cancelable: true, bubbles: true }));
+      equal(window.__entropyLabPassphrase(), "TREZOR");
+      equal(pass.value, bullets(6));
+
+      const offered = (id) => [...document.querySelectorAll(`#${id} [data-key-id]`)].map((chip) => chip.dataset.keyId);
+      const before = new Set(offered("sp-session-keys"));
+      await until(() => !document.getElementById("go").disabled, "Derive Key to enable");
+      document.getElementById("go").click();
+      keyDerived = true;
+      await until(() => document.getElementById("reveal"), "the derived wallet's privacy switch");
+      if (!document.getElementById("reveal").checked) document.getElementById("reveal").click();
+      await until(() => document.getElementById("out").textContent.includes(vectors[0].seed), "the seed of the published vector with passphrase TREZOR");
+      // The key keeps the passphrase as bytes; a station that takes it as
+      // text gets the text, not the bytes' numbers. (Vanity's grind reads it
+      // the same way; its own test extends a key's passphrase.)
+      const keyId = await until(() => offered("sp-session-keys").find((id) => !before.has(id)), "the derived key in the SP picker");
+      document.querySelector(`#sp-session-keys [data-key-id="${keyId}"]`).click();
+      await until(() => document.getElementById("sp-pass")?.value === "TREZOR", "the SP station to take the key's passphrase");
+    } finally {
+      if (document.getElementById("reveal")?.checked) document.getElementById("reveal").click();
+      input(pass, "");
+      if (keyDerived) {
+        await until(() => !document.getElementById("delete-key").disabled, "Delete current key to enable");
+        document.getElementById("delete-key").click();
+      }
+      chooseSeedWords(24);
+    }
   });
 
   await test("hosted application makes only expected same-origin connections", () => {
