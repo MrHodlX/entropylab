@@ -1661,10 +1661,6 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   .vanity-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 }
 .vanity-grid > [hidden] { display: none; }
-/* The estimate's own display (.field-note) wins over the UA [hidden] rule, so
-   restate it: with no valid prefix the note draws no empty box. Its parent
-   stays rendered as the live region the first estimate is announced in. */
-#vanity-estimate[hidden] { display: none; }
 /* The required characters read as the first term of a formula, with the free
    ones typed after it. */
 .vanity-prefix-row { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; width: 100%; margin: var(--space-component) 0 var(--space-section); }
