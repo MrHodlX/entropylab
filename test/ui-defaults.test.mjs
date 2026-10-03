@@ -510,10 +510,10 @@ test("dealt playing cards use theme-appropriate surfaces", () => {
 test("card undo uses the keyboard delete icon, a visible word, and closes the row", () => {
   // The word sits after the icon, and the accessible name begins with it, so
   // what is seen and what is announced agree.
-  assert.match(appSource, /id="card-undo"[^>]*aria-label="\$\{hodlT\("Undo last card"\)\}"[^>]*><svg[\s\S]*?<\/svg><span>\$\{hodlT\("Undo"\)\}<\/span><\/button>/);
+  assert.match(appSource, /id="card-undo"[^>]*aria-label="\$\{hodlTAttr\("Undo last card"\)\}"[^>]*><svg[\s\S]*?<\/svg><span>\$\{hodlT\("Undo"\)\}<\/span><\/button>/);
   // Show cards is the card's shared switch, titled like the rest.
   assert.match(appSource, /class="switch-toggle card-visibility-toggle"><input type="checkbox" id="show-cards"[^>]*><span class="label">/);
-  assert.match(app, /class="card-undo-button seed-keyboard-delete" id="card-undo"[^>]*aria-label="\$\{hodlT\("Undo last card"\)\}"[^>]*><svg viewBox="0 0 24 18"/);
+  assert.match(app, /class="card-undo-button seed-keyboard-delete" id="card-undo"[^>]*aria-label="\$\{hodlTAttr\("Undo last card"\)\}"[^>]*><svg viewBox="0 0 24 18"/);
   // Show cards leads the row and undo closes it, in source order as well as on
   // screen, so keyboard focus meets them in the order the eye does.
   assert.match(app, /<div class="card-controls-row"><label class="switch-toggle card-visibility-toggle">[\s\S]*?<\/label><button class="card-undo-button/);
@@ -1593,7 +1593,7 @@ test("dice rolls hide Pearson chi-squared fairness behind a text expand button",
   assert.match(app, /hodlRenderDiceFairness\(input\.value,\s*hodlDiceMethod,\s*config\.words\)/);
   assert.match(app, /showDiceFairness:!1/);
   assert.match(app, /hodlFairnessVerdictLabels\[report\.verdict\.id\]/);
-  assert.match(app, /hodlT\("Hide die distribution \/ fairness analysis"\)/);
+  assert.match(app, /hodlTAttr\("Hide die distribution \/ fairness analysis"\)/);
   // It heads the panel it opens, so it matches the labels above it rather than
   // inheriting the browser default a step larger than every title around it.
   // Grey at rest, white while hovered or open. The arrow is a child span with

@@ -9,7 +9,7 @@
 // in a data attribute, so virtualized table re-renders never leave stale
 // registry entries behind.
 
-import { t } from "./i18n.js";
+import { t, tAttr, tHtml } from "./i18n.js";
 import { createModal } from "./modal.js";
 import { copyText } from "./clipboard.js";
 
@@ -35,7 +35,7 @@ export const addressQrButtonHtml = (address, label, { animate = "" } = {}) => {
   // split — a PSBT past a single code's capacity becomes a UR sequence rather
   // than losing bytes or losing its button.
   const animated = animate ? ` data-address-qr-animate="${escapeHtml(animate)}"` : "";
-  return `<button type="button" class="addr-qr no-print" data-address-qr="${escapeHtml(value)}" data-address-qr-label="${escapeHtml(caption)}"${animated} aria-label="${escapeHtml(t("Show QR code for {label}", { label: caption }))}">${escapeHtml(t("QR"))}</button>`;
+  return `<button type="button" class="addr-qr no-print" data-address-qr="${escapeHtml(value)}" data-address-qr-label="${escapeHtml(caption)}"${animated} aria-label="${tAttr("Show QR code for {label}", { label: caption })}">${tHtml("QR")}</button>`;
 };
 
 // One shared overlay for every address table. `renderQr` is injected by the
