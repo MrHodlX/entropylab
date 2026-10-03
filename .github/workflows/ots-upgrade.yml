@@ -29,11 +29,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: rock
+          # The OTS client is third-party code; keep GITHUB_TOKEN out of
+          # .git/config, where it could read it.
+          persist-credentials: false
       - name: Install OpenTimestamps client
         run: |
           python3 -m venv "$RUNNER_TEMP/ots"
-          "$RUNNER_TEMP/ots/bin/pip" install --disable-pip-version-check "opentimestamps-client==0.7.2"
+          "$RUNNER_TEMP/ots/bin/pip" install --disable-pip-version-check --require-hashes --no-deps --only-binary :all: -r "$GITHUB_WORKSPACE/.github/ots-requirements.txt"
       - name: Upgrade the committed proof
+        id: upgrade
         run: |
           set -euo pipefail
           if [ ! -f entropylab.html.ots ]; then
@@ -61,10 +65,17 @@ jobs:
             exit 0
           fi
           git commit -m "Upgrade OpenTimestamps proof for entropylab.html [skip ci]"
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+      # A step of its own, so the OTS client never runs while the push token
+      # is in reach.
+      - name: Push the proof
+        if: steps.upgrade.outputs.committed == 'true'
+        env:
+          PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
           # Push with the maintainer token: rock is protected, and required
           # status checks reject direct pushes from GITHUB_TOKEN (an admin
-          # token bypasses while enforce_admins is off). The checkout keeps
-          # GITHUB_TOKEN in an includeIf'd credentials file that overrides
-          # URL credentials, so the token goes on the command line, which
-          # outranks every config file.
-          git -c http.https://github.com/.extraheader=             -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(echo -n x-access-token:${{ secrets.RELEASE_PUSH_TOKEN }} | base64)"             push
+          # token bypasses while enforce_admins is off). The token goes on
+          # the command line, which outranks every config file.
+          git -c http.https://github.com/.extraheader=             -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(echo -n x-access-token:$PUSH_TOKEN | base64)"             push

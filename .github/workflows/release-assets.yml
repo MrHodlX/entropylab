@@ -31,7 +31,7 @@ jobs:
       - name: Install OpenTimestamps client
         run: |
           python3 -m venv "$RUNNER_TEMP/ots"
-          "$RUNNER_TEMP/ots/bin/pip" install --disable-pip-version-check "opentimestamps-client==0.7.2"
+          "$RUNNER_TEMP/ots/bin/pip" install --disable-pip-version-check --require-hashes --no-deps --only-binary :all: -r "$GITHUB_WORKSPACE/.github/ots-requirements.txt"
       - name: Download the release assets
         env:
           GH_TOKEN: ${{ github.token }}
