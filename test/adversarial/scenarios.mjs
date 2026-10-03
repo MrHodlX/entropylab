@@ -234,21 +234,26 @@ export const SCENARIOS = [
   {
     name: "dice-oversized",
     description:
-      "Stuff 100k+ junk characters into the dice textarea; the page must stay alive and must not call a constant roll sequence fair.",
+      "Stuff 140k junk characters (120,000 ones, NULs and out-of-range 9s) into the dice textarea. Contract: the page stays alive, " +
+      "and the Pearson chi-squared fairness check does not call 120,000 identical rolls fair. The '... bits estimated' figure in the " +
+      "dice meta line is not a measurement: it is the roll count times log2(6), the most the rolls could carry if the die were fair. " +
+      "No program can measure the entropy of rolls it is handed, so that ceiling is never evidence against the app; judge the " +
+      "fairness verdict and the page's health.",
     actions: [
       `(() => { const el = first(["#dice"]); if (!el) return "no-dice-textarea"; put(el, "1".repeat(120000) + "\\u0000".repeat(50) + "9".repeat(20000)); return "dice-stuffed len=" + el.value.length; })()`,
       `(async () => { await sleep(700); const meta = $("#dice-meta"); return "dice-meta=" + (meta ? (meta.textContent || "").slice(0, 100) : "(none)"); })()`,
-      // #dice-meta alone reports "120000 rolls / 310195.5 bits estimated" for
-      // a field stuffed with identical 1s, which reads like a key tool blessing
-      // zero real entropy. The app does better than that — its Pearson χ² panel
-      // calls this "Looks biased" — but the panel starts collapsed, so the
-      // log showed the estimate and hid the verdict.
+      // #dice-meta reports "120000 rolls / 310195.5 bits estimated" for a field
+      // of identical 1s: count x log2(6), a ceiling that assumes a fair die,
+      // not a measurement (no check can measure the entropy of given rolls).
+      // The app's check on the rolls themselves is its Pearson χ² panel, which
+      // calls this "Looks biased"; the panel starts collapsed, so it is opened
+      // here for the log.
       `(async () => { const t = $('#dice-fairness-toggle'); if (!t) return "no-fairness-toggle"; t.click(); await sleep(900); return "fairness-expanded=" + t.getAttribute("aria-expanded"); })()`,
       `(() => { const v = $('#dice-fairness [data-tone]'); if (!v) return "no-fairness-verdict"; return "fairness tone=" + v.getAttribute("data-tone") + " verdict=" + (v.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 90); })()`,
     ],
     assert: `
       (() => {
-        const failures = [];
+        const failures = [], passed = [];
         if (!document.body) failures.push("document lost");
         // data-tone is the rename-safe handle; the label text is content.
         const verdict = document.querySelector("#dice-fairness [data-tone]");
@@ -256,8 +261,14 @@ export const SCENARIOS = [
           failures.push("no fairness verdict rendered for 120,000 rolls");
         } else if (verdict.getAttribute("data-tone") === "ok") {
           failures.push("120,000 identical rolls were reported as fair");
+        } else {
+          passed.push("120,000 identical rolls were not called fair: the chi-squared fairness check shows tone=" + verdict.getAttribute("data-tone"));
         }
-        return { failures, info: {} };
+        // Dropping what is not a die face is the app's choice, not part of
+        // the contract, so it is reported when seen and never failed on.
+        const field = document.querySelector("#dice");
+        if (field && /^1+$/.test(field.value)) passed.push("the NULs and 9s were dropped; the field holds " + field.value.length + " rolls, all 1");
+        return { failures, passed, info: {} };
       })()
     `,
   },

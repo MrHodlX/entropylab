@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SCENARIOS, HELPER } from "./scenarios.mjs";
 import { verdict, jevAvailable } from "./jev.mjs";
+import { runFailures } from "./outcome.mjs";
 
 // The app under test: the built page at the repo root, resolved relative to
 // this file so the harness works in any checkout (override with --app=<path>).
@@ -384,7 +385,9 @@ for (const log of logs) {
     severity,
     net: log.network.length,
     exceptions: log.exceptions.length,
+    rejections: log.rejections.length,
     inv: log.invariantFailures.length,
+    alive: log.alive,
     netq: networkNoul,
     hangq: hangNoul,
     actions: log.actions,
@@ -397,11 +400,11 @@ for (const log of logs) {
 // bodies, which is where people actually read these results.
 const col = (s) => String(s).replace(/\|/g, "\\|");
 console.log("\n=== Jev adversarial verdict table (took " + ((Date.now() - started) / 1000).toFixed(1) + "s) ===");
-console.log("| scenario | verdict | sev | excp | net | inv | net? | hang? |");
-console.log("|---|---|---|---|---|---|---|---|");
+console.log("| scenario | verdict | sev | excp | rej | net | inv | net? | hang? |");
+console.log("|---|---|---|---|---|---|---|---|---|");
 for (const r of rows) {
   console.log(
-    `| ${col(r.name)} | ${col(r.choice)} | ${col(r.severity)} | ${col(r.exceptions)} | ${col(r.net)} | ${col(r.inv)} | ${col(r.netq)} | ${col(r.hangq)} |`
+    `| ${col(r.name)} | ${col(r.choice)} | ${col(r.severity)} | ${col(r.exceptions)} | ${col(r.rejections)} | ${col(r.net)} | ${col(r.inv)} | ${col(r.netq)} | ${col(r.hangq)} |`
   );
 }
 for (const r of rows) {
@@ -429,14 +432,24 @@ for (const r of rows) {
 // Local verdict if Jev unavailable
 if (!jevAvailable()) {
   for (const r of rows) {
-    const local = r.net + r.exceptions + r.inv ? "would be broken locally" : "clean locally";
+    const local = r.net + r.exceptions + r.rejections + r.inv ? "would be broken locally" : "clean locally";
     console.log(`${r.name}: ${local}`);
   }
+}
+
+// The table is for reading; this is the run's result, and the exit status
+// the workflow reports (see outcome.mjs for what fails it).
+const failed = runFailures(rows);
+if (failed.length) {
+  console.log(`\nRun FAILED, ${failed.length} reason(s):`);
+  for (const failure of failed) console.log("  - " + failure);
+} else {
+  console.log("\nRun passed: no network attempts, exceptions, failed checks or broken verdicts.");
 }
 
 cdp.ws.close();
 proc.kill();
 setTimeout(() => {
   try { rmSync(profile, { recursive: true, force: true }); } catch {}
-  process.exit(0);
+  process.exit(failed.length ? 1 : 0);
 }, 500);
