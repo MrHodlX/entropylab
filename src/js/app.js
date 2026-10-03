@@ -382,31 +382,49 @@ function hodlAccountPath(e, t, r = 0, hardening = hodlDefaultHardening()) {
 function hodlFingerprintHex(e) {
   return (e >>> 0).toString(16).padStart(8, "0");
 }
+// A decoded extended private key's payload embeds the key, so every helper
+// that decodes or builds one wipes it before returning.
 function hodlReversionExtendedKey(e, t) {
   let r = hodlBase58Check.decode(e), n = new Uint8Array(r);
-  return n[0] = t >>> 24 & 255, n[1] = t >>> 16 & 255, n[2] = t >>> 8 & 255, n[3] = t & 255, hodlBase58Check.encode(n);
+  try {
+    return n[0] = t >>> 24 & 255, n[1] = t >>> 16 & 255, n[2] = t >>> 8 & 255, n[3] = t & 255, hodlBase58Check.encode(n);
+  } finally {
+    r.fill(0), n.fill(0);
+  }
 }
 function hodlReadExtendedKeyVersion(e) {
   let t = hodlBase58Check.decode(e.trim());
-  return (t[0] << 24 | t[1] << 16 | t[2] << 8 | t[3]) >>> 0;
+  try {
+    return (t[0] << 24 | t[1] << 16 | t[2] << 8 | t[3]) >>> 0;
+  } finally {
+    t.fill(0);
+  }
 }
 var hodlExtendedKeyPrefixTable = [];
 function hodlEncodeWif(e, t, r) {
   let n = new Uint8Array([hodlWifVersionByte(r)]), o = t ? hodlConcatBytes(n, e, new Uint8Array([1])) : hodlConcatBytes(n, e);
-  return hodlBase58Check.encode(o);
+  try {
+    return hodlBase58Check.encode(o);
+  } finally {
+    o.fill(0); // the WIF payload embeds the key; the caller's own copy is left alone
+  }
 }
 function hodlDecodeWif(e) {
   let t = hodlBase58Check.decode(e.trim());
-  if (t.length !== 33 && t.length !== 34) throw hodlError("WIF decoded to an unexpected length.");
-  let r = t[0], n;
-  if (r === 128) n = "mainnet";
-  else if (r === 239) n = "testnet";
-  else throw hodlError("WIF prefix is not Bitcoin mainnet (5/K/L) or testnet (9/c).");
-  if (t.length === 34) {
-    if (t[33] !== 1) throw hodlError("Compressed WIF is missing the 0x01 suffix.");
-    return { priv: t.slice(1, 33), compressed: true, network: n };
+  try {
+    if (t.length !== 33 && t.length !== 34) throw hodlError("WIF decoded to an unexpected length.");
+    let r = t[0], n;
+    if (r === 128) n = "mainnet";
+    else if (r === 239) n = "testnet";
+    else throw hodlError("WIF prefix is not Bitcoin mainnet (5/K/L) or testnet (9/c).");
+    if (t.length === 34) {
+      if (t[33] !== 1) throw hodlError("Compressed WIF is missing the 0x01 suffix.");
+      return { priv: t.slice(1, 33), compressed: true, network: n };
+    }
+    return { priv: t.slice(1), compressed: false, network: n };
+  } finally {
+    t.fill(0); // the decoded payload; the key returned is a copy the caller owns
   }
-  return { priv: t.slice(1), compressed: false, network: n };
 }
 function hodlConcatBytes(...e) {
   let t = e.reduce((o, i) => o + i.length, 0), r = new Uint8Array(t), n = 0;
@@ -826,14 +844,19 @@ for (let [network, families] of Object.entries(hodlExtendedKeyVersions)) for (le
 }
 hodlExtendedKeyPrefixTable.push(...hodlMultisigKeyVersions);
 var hodlParseExtendedKey = function(value) {
-  let input = String(value ?? "").trim(), payload = hodlBase58Check.decode(input), version = hodlReadExtendedKeyVersion(input), entry = hodlExtendedKeyPrefixTable.find((candidate) => candidate.ver === version);
-  if (!entry) throw hodlError("Not a recognized extended key. Use xpub/xprv, tpub/tprv, ypub/yprv, zpub/zprv, upub/uprv, vpub/vprv, or a supported multisig export.");
-  if (payload.length !== 78) throw hodlError("The extended key payload has an unexpected length.");
-  let normalized = hodlReversionExtendedKey(input, entry.private ? hodlExtendedKeyVersions.mainnet.x.prv : hodlExtendedKeyVersions.mainnet.x.pub), node = hodlHDKey.fromExtendedKey(normalized);
-  if (Boolean(node.privateKey) !== entry.private) throw hodlError("The extended-key prefix does not match its key payload.");
-  let depth = payload[4], childNumber = new DataView(payload.buffer, payload.byteOffset + 9, 4).getUint32(0, false);
-  if (node.depth !== depth) throw hodlError("The extended-key depth does not match its serialized payload.");
-  return { xkey: normalized, isPrivate: entry.private, network: entry.network, family: entry.family, scope: entry.scope, prefix: entry.name, version: entry.ver, node, depth, childNumber };
+  let input = String(value ?? "").trim(), payload = hodlBase58Check.decode(input);
+  try {
+    let version = hodlReadExtendedKeyVersion(input), entry = hodlExtendedKeyPrefixTable.find((candidate) => candidate.ver === version);
+    if (!entry) throw hodlError("Not a recognized extended key. Use xpub/xprv, tpub/tprv, ypub/yprv, zpub/zprv, upub/uprv, vpub/vprv, or a supported multisig export.");
+    if (payload.length !== 78) throw hodlError("The extended key payload has an unexpected length.");
+    let normalized = hodlReversionExtendedKey(input, entry.private ? hodlExtendedKeyVersions.mainnet.x.prv : hodlExtendedKeyVersions.mainnet.x.pub), node = hodlHDKey.fromExtendedKey(normalized);
+    if (Boolean(node.privateKey) !== entry.private) throw hodlError("The extended-key prefix does not match its key payload.");
+    let depth = payload[4], childNumber = new DataView(payload.buffer, payload.byteOffset + 9, 4).getUint32(0, false);
+    if (node.depth !== depth) throw hodlError("The extended-key depth does not match its serialized payload.");
+    return { xkey: normalized, isPrivate: entry.private, network: entry.network, family: entry.family, scope: entry.scope, prefix: entry.name, version: entry.ver, node, depth, childNumber };
+  } finally {
+    payload.fill(0);
+  }
 };
 function hodlAccountExportFamily(definition, options = {}) {
   if (definition.id === "bip86") return "x";
