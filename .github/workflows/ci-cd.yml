@@ -469,6 +469,7 @@ jobs:
     if: github.ref == 'refs/heads/rock' && github.event_name == 'push'
     needs: [build, verify, test-ci, test-browser, build-wasm, fuzz-lifehash, fuzz-msig, reproduce]
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 10
     outputs:
       superseded: ${{ steps.commit.outputs.superseded }}
@@ -543,6 +544,7 @@ jobs:
     if: github.ref == 'refs/heads/rock' && github.event_name == 'push' && needs.artifact.outputs.superseded != 'true'
     needs: [build, artifact]
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 10
     permissions:
       contents: write
