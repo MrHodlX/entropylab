@@ -52,6 +52,7 @@ function importHarness() {
   const calls = [], context = {
     keyVaultIdentity, parseKeyVault,
     hodlNextKeyId: 1, hodlNextKeyNumber: 1, hodlActiveKey: 0,
+    hodlPassphraseVaultField: null, TextEncoder, TextDecoder,
     hodlKeys: [], hodlKeyManagerPending: [], hodlKeyManagerIgnored: [],
     hodlKeyManagerIds: new Set(), hodlKeyManagerActiveId: "", hodlActiveDerivation: null,
     hodlWalletResult: null, hodlOutEl: { innerHTML: "" },
@@ -73,7 +74,7 @@ function importHarness() {
     "hodlKeyManagerStates", "hodlKeyManagerUseInStation", "hodlKeyManagerUseAllInStation",
     "hodlCloneDerivedKey", "hodlFillLabFromKey", "hodlKeyWalletIdentity", "hodlCommitDerivedKey", "hodlKeyManagerImportFile",
     "hodlKeyManagerToggle", "hodlKeyManagerIgnore", "hodlKeyManagerEntry", "hodlKeyLogLabel",
-    "hodlKeyManagerRestoreIgnored"])
+    "hodlKeyManagerRestoreIgnored", "hodlStoredPassphraseBytes", "hodlPassphraseText"])
     runInNewContext(loadSlice(name), context);
   context.hodlKeys.push(context.hodlNewLabState());
   return { context, calls, importFile: text => context.hodlKeyManagerImportFile({ size: text.length, text: async () => text }) };
@@ -155,8 +156,10 @@ function enableDerivation(c) {
   });
   // Keep the real cancellation control declarations with the controller,
   // including the generation fence supplied by the separate lifecycle fix.
+  // No passphrase vault is bound here: the derivation reads the field's text.
+  Object.assign(c, { hodlPassphraseVaultField: null, TextEncoder, TextDecoder });
   runInNewContext(app.slice(app.indexOf("class HodlDerivationCancelledError"), app.indexOf("function hodlDerivationButton")), c);
-  for (const name of ["hodlResultHasSeed", "hodlResultHasRoot", "hodlResultHasSingleKey", "hodlResultHasImportedPrivate", "hodlCalculateKey"])
+  for (const name of ["hodlResultHasSeed", "hodlResultHasRoot", "hodlResultHasSingleKey", "hodlResultHasImportedPrivate", "hodlCalculateKey", "hodlPassphraseFieldBytes"])
     runInNewContext(loadSlice(name), c);
 }
 

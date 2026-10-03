@@ -82,10 +82,28 @@ const validateMnemonic = (mnemonic, wordlist = bip39English) => {
   }
 };
 
+// The salt, NFKD("mnemonic" + passphrase) as UTF-8. The passphrase may come
+// as UTF-8 bytes (the passphrase vault): ASCII is its own NFKD, so it joins
+// the salt as bytes and never becomes a string; anything else is decoded
+// once for its normalization.
+const MNEMONIC_SALT = textEncoder.encode("mnemonic");
+const saltFor = (passphrase) => {
+  if (passphrase instanceof Uint8Array) {
+    if (passphrase.every((byte) => byte < 0x80)) {
+      const salt = new Uint8Array(MNEMONIC_SALT.length + passphrase.length);
+      salt.set(MNEMONIC_SALT);
+      salt.set(passphrase, MNEMONIC_SALT.length);
+      return salt;
+    }
+    return textEncoder.encode(nfkd("mnemonic" + textDecoder.decode(passphrase)));
+  }
+  return textEncoder.encode(nfkd("mnemonic" + passphrase));
+};
+
 // PBKDF2-HMAC-SHA512(NFKD(mnemonic), NFKD("mnemonic" + passphrase), 2048, 64).
 const mnemonicToSeedSync = (mnemonic, passphrase = "") => {
   const phrase = textEncoder.encode(nfkd(mnemonic));
-  const salt = textEncoder.encode(nfkd("mnemonic" + passphrase));
+  const salt = saltFor(passphrase);
   try {
     return pbkdf2Sha512(phrase, salt, 2048, 64);
   } finally {

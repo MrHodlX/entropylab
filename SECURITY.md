@@ -317,7 +317,12 @@ cannot overwrite them:
 
 - Text you type or paste. A field's value is text, and the browser's editor,
   undo history, spell checker and on-screen keyboard may keep copies of their
-  own.
+  own. The Key Station's BIP39 passphrase field is the exception: it shows
+  one bullet per character and never holds the passphrase, which is kept in
+  a form the page can wipe and reaches the seed as bytes. Each key still
+  arrives as a one-character string, a paste or an input-method word arrives
+  as its text once, and showing the passphrase builds it. In
+  BIP39-word mode the field holds the text, as other fields do.
 - Text the page builds from a secret: revealed seed words, WIFs, xprvs and
   hex, SeedQR, the recovery sheet, downloads, and what a copy button puts on
   the clipboard. The few tools that take the words as text build them too:
