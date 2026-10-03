@@ -6254,6 +6254,69 @@
     assert(memories.every((buffer) => new Uint8Array(buffer).every((b) => b === 0)), "a module's memory survived End session");
   });
 
+  // A revealed secret left on screen is what Windows Recall snapshots, a
+  // screen share broadcasts and iOS saves as the app-switcher picture.
+  // Leaving the page (focus lost, page hidden) masks it again, through the
+  // same switch a click uses, and a tab that was off screen comes back masked.
+  await test("revealed private values are masked again when the user leaves the page", async () => {
+    const words = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    const entropyHex = "7f".repeat(16);
+    const reveal = () => document.getElementById("reveal");
+    const revealed = () => document.getElementById("out").textContent.includes(entropyHex);
+    const showSecrets = async (label) => {
+      if (!reveal().checked) reveal().click();
+      await until(() => reveal()?.checked && revealed(), label);
+    };
+    let keyTab = null;
+    try {
+      document.querySelector('#workspace [data-workspace="calc"]').click();
+      await until(() => !document.getElementById("key-manager").hidden, "key workspace");
+      chooseSeedWords(12);
+      await chooseMode("Seed phrase");
+      input(document.getElementById("seed"), words);
+      await until(() => !document.getElementById("go").disabled, "Derive Key to enable");
+      document.getElementById("go").click();
+      await until(() => reveal(), "the derived wallet's privacy switch");
+      keyTab = document.getElementById("calc-card").getAttribute("aria-labelledby");
+
+      await showSecrets("revealed recovery material");
+      window.dispatchEvent(new Event("blur"));
+      await until(() => !revealed(), "the secrets to be masked after the window lost focus");
+      assert(!reveal().checked, "the privacy switch stayed on after the window lost focus");
+
+      await showSecrets("recovery material revealed again");
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      try {
+        document.dispatchEvent(new Event("visibilitychange"));
+      } finally {
+        delete document.visibilityState;
+      }
+      await until(() => !revealed(), "the secrets to be masked after the page was hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await wait(0);
+      assert(!revealed(), "the page showing again brought the secrets back");
+
+      // Off screen: revealed in its tab, then another tab is shown when the
+      // user leaves. Coming back, the first tab must not be revealed.
+      await showSecrets("recovery material revealed for the tab test");
+      document.getElementById("key-tab-lab").click();
+      await until(() => document.getElementById("calc-card").getAttribute("aria-labelledby") !== keyTab, "the other tab");
+      window.dispatchEvent(new Event("blur"));
+      await wait(0);
+      document.getElementById(keyTab).click();
+      await until(() => document.getElementById("calc-card").getAttribute("aria-labelledby") === keyTab && reveal(), "the derived key's tab again");
+      assert(!reveal().checked && !revealed(), "a tab that was off screen came back revealed");
+    } finally {
+      if (reveal()?.checked) reveal().click();
+      if (keyTab && document.getElementById(keyTab)) {
+        document.getElementById(keyTab).click();
+        await until(() => !document.getElementById("delete-key").disabled, "Delete current key to enable");
+        document.getElementById("delete-key").click();
+      }
+      chooseSeedWords(24);
+    }
+  });
+
   await test("hosted application makes only expected same-origin connections", () => {
     const resources = performance.getEntriesByType("resource").map((entry) => entry.name);
     const observed = [...state.network.map((entry) => entry.url), ...resources];
