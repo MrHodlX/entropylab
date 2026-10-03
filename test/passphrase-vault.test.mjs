@@ -25,7 +25,7 @@ import { mnemonicToSeedSync } from "../src/js/bip39.js";
 
 const utf8 = (text) => new TextEncoder().encode(text);
 const hex = (bytes) => Buffer.from(bytes).toString("hex");
-const PASSPHRASES = ["", "TREZOR", "correct horse battery staple", "Grüße, 東京! café 🔑🌕 naïve"];
+const PASSPHRASES = ["", "TREZOR", "correct horse battery staple", "Grüße, 東京! cafe\u0301 🔑🌕 naïve"];
 
 test("the vault's UTF-8 is the standard encoding, both ways, astral characters included", () => {
   for (const text of PASSPHRASES) {
