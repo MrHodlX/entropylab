@@ -38,6 +38,16 @@
   --playing-card-red: #ef7468;
   --scrollbar-track: #0a0a0a;
   --scrollbar-thumb: #4a4a4a;
+  /* Fixed colours that do not follow the theme ramp. */
+  --image-ground: #fff; /* the white matte behind LifeHash icons and QR codes; QR codes need it to scan */
+  --on-color: #fff; /* ink on a coloured ground: dismiss buttons, the network glyph, a running Derive */
+  --wordmark: #ffffff; /* the EntropyLab wordmark runs to the end of the ramp, not to --fg */
+  --progress-start: #c66500; /* derive progress gradient, either side of --accent */
+  --progress-end: #ffb347;
+  --scrim: rgb(0 0 0 / 55%); /* the modal overlay; floating menu and modal shadows */
+  --print-paper: white; /* print only: the page and the policy sheet */
+  --print-ink: #111;
+  --print-highlight: #f3d367; /* print only: the policy sheet's loud network label */
   --scrollbar-thumb-hover: #626262;
   /* UI spacing rhythm: control = label/help adjacency, component = peer
    * controls and actions, section = distinct blocks inside a card, intro =
@@ -147,6 +157,7 @@
   --mono: ui-monospace, "Cascadia Code", Menlo, Consolas, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols", "DejaVu Sans Mono", "DejaVu Sans", monospace;
 }
 :root[data-theme="light"] {
+  --wordmark: #000000;
   color-scheme: light;
   --bg: #ffffff;
   --surface: #f6f6f6;
@@ -993,8 +1004,7 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 /* The wordmark takes the h1's display face, so the bar reads as the same brand
    as the page title below it. Pure white and pure black rather than --fg, which
    stops short of both ends: the wordmark wants the full contrast. */
-.site-title { flex: 0 0 auto; font-family: var(--display); font-size: var(--text-brand); font-weight: 600; letter-spacing: -0.02em; color: #ffffff; white-space: nowrap; }
-:root[data-theme="light"] .site-title { color: #000000; }
+.site-title { flex: 0 0 auto; font-family: var(--display); font-size: var(--text-brand); font-weight: 600; letter-spacing: -0.02em; color: var(--wordmark); white-space: nowrap; }
 /* Straddles the header's bottom rule so the rule runs into its two edges and
    the tag reads as speared by it, and sits at the bar's left edge, under the
    logo and wordmark. Hanging below the control row is what lets it hold that
@@ -1046,7 +1056,7 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 .network-picker[data-network="testnet"] .network-picker-coin { fill: var(--testnet); }
 .network-picker[data-network="signet"] .network-picker-coin { fill: var(--signet); }
 .network-picker[data-network="regtest"] .network-picker-coin { fill: var(--faint); }
-.network-picker-b { fill: #ffffff; }
+.network-picker-b { fill: var(--on-color); }
 .network-picker-chevron { color: var(--accent); transition: transform 120ms ease; }
 .network-picker-button[aria-expanded="true"] .network-picker-chevron { transform: rotate(180deg); }
 /* Right-anchored: the button sits at the bar's right edge, so the menu opens
@@ -1055,7 +1065,7 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
   position: absolute; z-index: 100; top: calc(100% + 6px); right: 0; width: 340px;
   max-width: calc(100vw - 2 * var(--site-header-pad));
   padding: var(--inset-menu); border: 1px solid var(--border); border-radius: var(--radius-container);
-  background: var(--surface-2); box-shadow: 0 16px 36px rgb(0 0 0 / 55%);
+  background: var(--surface-2); box-shadow: 0 16px 36px var(--scrim);
 }
 .network-picker-title {
   margin: var(--space-snug) 10px var(--space-tight); font-size: var(--text-label-small); letter-spacing: 0.18em; text-transform: uppercase;
@@ -1136,7 +1146,7 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 .custom-select-list {
   position: absolute; z-index: 100; top: calc(100% + 6px); left: 0; right: 0; max-height: 260px;
   overflow-y: auto; padding: var(--inset-menu); border: 1px solid var(--border); border-radius: var(--radius-container);
-  background: var(--surface-2); box-shadow: 0 16px 36px rgb(0 0 0 / 55%);
+  background: var(--surface-2); box-shadow: 0 16px 36px var(--scrim);
 }
 .custom-select-option {
   width: 100%; min-height: 38px; padding: var(--inset-option); border: 0; border-radius: var(--radius-control);
@@ -1174,7 +1184,7 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
      up in the corner rather than level with the first line of text. */
   flex: none; display: grid; place-items: center; width: 32px; height: 32px;
   margin: -10px -12px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-small);
-  background: none; color: #ffffff; cursor: pointer;
+  background: none; color: var(--on-color); cursor: pointer;
 }
 /* White reads against the dark banner, but the light theme tints the same
    banner pale, so the glyph takes the theme's near-black foreground there.
@@ -1191,14 +1201,14 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
    prefix is for Safari, which shipped the property unprefixed only recently. */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
-  padding: var(--inset-modal); box-sizing: border-box; background: rgb(0 0 0 / 55%);
+  padding: var(--inset-modal); box-sizing: border-box; background: var(--scrim);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
 .modal-overlay[hidden] { display: none; }
 .modal-card {
   width: min(var(--modal-width, 440px), 100%); padding: var(--inset-modal);
   border: 1px solid var(--border); border-radius: var(--radius-container); background: var(--surface);
-  box-shadow: 0 16px 36px rgb(0 0 0 / 55%);
+  box-shadow: 0 16px 36px var(--scrim);
 }
 .modal-title { margin: 0 0 var(--space-section); font-weight: 600; font-size: var(--text-heading-small); overflow-wrap: anywhere; }
 @media (max-width: 520px) { .modal-card { padding: var(--inset-card); } }
@@ -1284,7 +1294,7 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
     --blue-ink: #1769d6;
   }
   .no-print { display: none !important; }
-  html, body { background: white; color: #111; }
+  html, body { background: var(--print-paper); color: var(--print-ink); }
   /* The fixed header is hidden when printing, so drop the space it reserved. */
   .wrap { padding-top: var(--space-section); }
   .qr-seed svg { width: 40mm; height: 40mm; }
@@ -1293,21 +1303,21 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
   body.msig-policy-print-mode .site-header { display: none !important; }
   body.msig-policy-print-mode .msig-policy-print-root { display: block !important; }
   .msig-policy-sheet {
-    color: #111;
-    background: #fff;
+    color: var(--print-ink);
+    background: var(--print-paper);
     font-family: ui-sans-serif, system-ui, sans-serif;
     font-size: 12pt;
     line-height: 1.35;
     max-width: 180mm;
   }
   .msig-policy-network-loud {
-    color: #111;
-    background: #f3d367;
+    color: var(--print-ink);
+    background: var(--print-highlight);
     font-weight: 700;
     text-transform: uppercase;
     display: inline-block;
     padding: 2px 8px;
-    border: 2px solid #111;
+    border: 2px solid var(--print-ink);
   }
   .msig-policy-warning { font-weight: 700; }
 }
@@ -1439,7 +1449,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   padding: var(--inset-note); border: 1px solid transparent;
   background: color-mix(in oklab, var(--surface-2) 28%, var(--bg));
 }
-.key-summary-lifehash { flex: 0 0 auto; width: 72px; height: 72px; border-radius: var(--radius-control); image-rendering: pixelated; background: #fff; }
+.key-summary-lifehash { flex: 0 0 auto; width: 72px; height: 72px; border-radius: var(--radius-control); image-rendering: pixelated; background: var(--image-ground); }
 .key-summary-lifehash[hidden] { display: none; }
 .key-summary-text { flex: 1 1 auto; min-width: 0; }
 /* Edit sits at the top corner however tall the summary beside it grows. */
@@ -1474,7 +1484,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .bip85-result-lineage { display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--space-control); }
 .bip85-result-lineage .key-lineage-arrow { font-size: var(--text-icon-small); }
 .bip85-parent-fingerprint { font-family: var(--mono); font-weight: 600; color: var(--fg); }
-.key-tab-lifehash { width: 22px; height: 22px; border-radius: var(--radius-tiny); image-rendering: pixelated; background: #fff; }
+.key-tab-lifehash { width: 22px; height: 22px; border-radius: var(--radius-tiny); image-rendering: pixelated; background: var(--image-ground); }
 .key-lineage-arrow { flex: 0 0 auto; color: var(--muted); font-family: var(--sans); font-size: var(--text-icon-inline); line-height: 1; }
 /* A derived multisig tab carries one small LifeHash per co-signer, sized
    down so a 2-of-3 still reads as a tab rather than a filmstrip. */
@@ -1637,7 +1647,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-format-control .custom-select-button { min-height: 44px; padding-block: 8px; }
 .journal-format-control .custom-select-value > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .journal-key-control { grid-column: 1 / -1; }
-.journal-key-option-lifehash { flex: 0 0 auto; width: 22px; height: 22px; border-radius: var(--radius-tiny); image-rendering: pixelated; background: #fff; }
+.journal-key-option-lifehash { flex: 0 0 auto; width: 22px; height: 22px; border-radius: var(--radius-tiny); image-rendering: pixelated; background: var(--image-ground); }
 .journal-key-lineage { display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--space-snug); }
 .journal-notes-wrap {
   --journal-font-family: var(--mono); --journal-font-size: var(--text-data); --journal-line-height: 1.6;
@@ -1672,7 +1682,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-inline-key-lifehash-slot { position: relative; color: transparent; }
 .journal-inline-key-lifehash {
   position: absolute; left: 50%; top: 50%; width: 1.1em; height: 1.1em; border-radius: 0;
-  background: #fff; image-rendering: pixelated; transform: translate(-50%, -50%);
+  background: var(--image-ground); image-rendering: pixelated; transform: translate(-50%, -50%);
 }
 .journal-notes-prompt {
   position: absolute; z-index: 2; top: 1px; left: 1px; overflow: hidden; padding: var(--inset-field); pointer-events: none;
@@ -1727,7 +1737,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-log {
   font-family: var(--mono); font-size: var(--text-data-small); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
   margin: 0; padding: 12px 44px 12px 12px; border: 1px solid var(--border); border-radius: var(--radius-container);
-  background: #000; max-height: 420px; overflow: auto;
+  background: var(--bg); max-height: 420px; overflow: auto;
 }
 :root[data-theme="light"] .journal-log { background: var(--surface-2); }
 .journal-log-copy { position: absolute; z-index: 1; top: 10px; right: 12px; }
@@ -2104,7 +2114,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    a dimmed backdrop with one centered card, dismissed by clicking outside
    or pressing Escape. Shown when an external link is clicked while the
    page is offline, so the user can scan the QR with an online phone. */
-.qr-ref-qr { display: inline-block; padding: var(--inset-box); background: #fff; border-radius: var(--radius-control); }
+.qr-ref-qr { display: inline-block; padding: var(--inset-box); background: var(--image-ground); border-radius: var(--radius-control); }
 .qr-ref-qr svg { display: block; width: 200px; height: 200px; }
 .qr-ref-url { margin: var(--space-component) 0 0; font-size: var(--text-note); overflow-wrap: anywhere; word-break: break-all; }
 .qr-ref-hint { margin: var(--space-related) 0 0; }
@@ -2173,7 +2183,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    private one: each seam gets the wider step. */
 .sp-result > .edge-note.is-public { margin-bottom: var(--space-major); }
 .sp-result > .wallet-data-actions { margin-top: var(--space-major); }
-.sp-qr svg { width: 100%; height: auto; display: block; background: #fff; border-radius: var(--radius-control); }
+.sp-qr svg { width: 100%; height: auto; display: block; background: var(--image-ground); border-radius: var(--radius-control); }
 /* Closes with a rule of its own; the one above it belongs to the Method
    section. Equal 16px either side of both lines, so the band reads as one. */
 .seed-length-control { margin-top: var(--space-component); padding-bottom: var(--space-component); border-bottom: 1px solid var(--border); }
@@ -2273,7 +2283,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   border: 1px solid var(--border); border-radius: var(--radius-tiny); overflow: hidden; background: transparent;
 }
 .master-fingerprint-lifehash {
-  display: block; width: 100%; height: 100%; image-rendering: pixelated; background: #fff;
+  display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--image-ground);
 }
 .master-fingerprint-lifehash[hidden] { display: none; }
 .master-fingerprint-label {
@@ -2496,7 +2506,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .current-item-actions .clear-current-action { margin-inline-start: auto; }
 .btn:is(.primary, .secondary)[data-derivation-state="running"],
 .btn:is(.primary, .secondary)[data-derivation-state="stopping"] {
-  background: var(--danger); border-color: var(--danger); color: #fff;
+  background: var(--danger); border-color: var(--danger); color: var(--on-color);
 }
 .derive-progress {
   display: inline-flex; flex: 0 1 260px; min-width: 170px; align-items: center; gap: var(--space-control);
@@ -2510,7 +2520,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .derive-progress-track { position: relative; flex: 1 1 auto; height: 7px; overflow: hidden; border-radius: var(--radius-pill); background: var(--surface-2); }
 .derive-progress-bar {
   position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit;
-  background: linear-gradient(90deg, #c66500, var(--accent), #ffb347); transition: width .12s linear;
+  background: linear-gradient(90deg, var(--progress-start), var(--accent), var(--progress-end)); transition: width .12s linear;
 }
 .derive-progress.is-complete { color: var(--ok); }
 .derive-progress.is-complete .derive-progress-bar { width: 100%; background: var(--ok); }
@@ -2585,11 +2595,11 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   position: absolute; top: 50%; width: 24px; height: 24px; transform: translate(-50%, -50%);
   /* The handle names itself, so a dragged thumb still says which end it is. */
   display: grid; place-items: center;
-  color: #ededed; font-family: var(--mono); font-size: var(--text-field); font-weight: 400; line-height: 1;
-  border: 2px solid #a3a3a3; border-radius: var(--radius-round);
+  color: var(--fg); font-family: var(--mono); font-size: var(--text-field); font-weight: 400; line-height: 1;
+  border: 2px solid var(--muted); border-radius: var(--radius-round);
   /* The face is a flat colour under a fixed sheen, so hover can darken it on
      the same curve the edge already travels; a gradient alone cannot transition. */
-  background-color: #4f4f4f; background-image: linear-gradient(rgb(255 255 255 / .14), rgb(0 0 0 / .14));
+  background-color: var(--surface-2); background-image: linear-gradient(rgb(255 255 255 / .14), rgb(0 0 0 / .14));
   box-shadow: 0 2px 7px rgb(0 0 0 / .75), inset 0 1px 1px rgb(255 255 255 / .2);
   transition: box-shadow .12s ease, border-color .12s ease, transform .12s ease, background-color .12s ease, color .12s ease;
   pointer-events: auto; cursor: ew-resize;
@@ -2605,8 +2615,13 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .msig-threshold-thumb:hover,
 .msig-threshold-slider:active[data-active-handle="m"] .msig-threshold-thumb-m,
 .msig-threshold-slider:active[data-active-handle="n"] .msig-threshold-thumb-n {
-  border-color: var(--selection-accent); background-color: #111; color: var(--selection-accent);
+  border-color: var(--selection-accent); background-color: var(--bg); color: var(--selection-accent);
 }
+/* On the light ground the sheen's dark half greys a white face, so the
+   hovered or dragged thumb drops it and reads as plain white. */
+:root[data-theme="light"] :is(.msig-threshold-thumb:hover,
+  .msig-threshold-slider:active[data-active-handle="m"] .msig-threshold-thumb-m,
+  .msig-threshold-slider:active[data-active-handle="n"] .msig-threshold-thumb-n) { background-image: none; }
 .msig-threshold-thumb-m { left: var(--msig-m-position); z-index: 2; }
 .msig-threshold-thumb-n { left: var(--msig-n-position); z-index: 3; }
 .msig-threshold-slider[data-active-handle="m"] .msig-threshold-thumb-m { z-index: 4; }
