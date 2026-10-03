@@ -8,7 +8,11 @@
 // does what the page can, in order, and then hands over to the browser:
 //
 //   1. every wipe the page runs when it is left (the `pagehide` listeners:
-//      each station, the Journal, Vanity's workers, the two dialogs);
+//      each station, the Journal, Vanity's workers, the two dialogs). A
+//      Vanity grind in progress is terminated, not wiped: worker.terminate()
+//      is a hard kill, so the worker's message loop never runs wipeSecrets()
+//      and its linear memory is freed unzeroed — only closing the tab covers
+//      it;
 //   2. the WebAssembly modules' whole linear memory, zeroed, and the modules
 //      retired so nothing can run on them again;
 //   3. the clipboard, emptied if this page wrote it;
@@ -52,7 +56,7 @@ export const renderSessionEnded = (doc, { clipboardCleared = false } = {}) => {
     card.append(element);
   };
   line("h1", "sanity-failure-title", t("Session ended"));
-  line("p", "sanity-failure-message", t("EntropyLab wiped every key, seed and field this page held."));
+  line("p", "sanity-failure-message", t("EntropyLab wiped every key, seed and field this page held. A Vanity grind cut short mid-run is the one exception: its workers are stopped, not wiped — closing the tab covers them."));
   line("p", "sanity-failure-advice", t("Close this tab now, or quit the browser: that is what erases the copies the browser keeps for itself. Reloading starts a new session but does not erase them."));
   if (clipboardCleared) line("p", "sanity-failure-advice", t("The clipboard was emptied. Clipboard history and cloud clipboard sync keep their own copies of what was copied."));
   line("p", "sanity-failure-advice", t("Chrome and Edge keep running after the last window closes unless “Continue running background apps” is off in their System settings."));
@@ -62,6 +66,8 @@ export const renderSessionEnded = (doc, { clipboardCleared = false } = {}) => {
 
 export const endSession = async ({ win = window, doc = document, retireModules = [], clearClipboard = async () => false } = {}) => {
   win.dispatchEvent(new win.PageTransitionEvent("pagehide", { persisted: false }));
+  // The retires cannot throw today; if one ever does, the screen and
+  // window.close() below must still run, so keep this sequence flat.
   for (const retire of retireModules) retire();
   // Started inside the confirm click, while the browser still counts it as
   // the user's action; some browsers refuse a clipboard write without one.

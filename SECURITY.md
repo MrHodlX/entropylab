@@ -337,6 +337,11 @@ cannot overwrite them:
   the per-pair copies rust-bitcoin and serde_json make while the PSBT module
   parses or rebuilds a file). End session zeroes both modules' whole memory,
   which removes these too.
+- A Vanity grind stopped mid-run. Its workers are terminated, not wiped:
+  termination is a hard kill, so the worker never runs its own wipe and its
+  memory — the seed words and passphrase it grinds on — is freed unzeroed.
+  Only closing the tab reclaims it. (A grind that finishes or is stopped
+  gracefully wipes itself first.)
 
 Other copies are outside the browser, where the page cannot reach them at
 all. They can outlast the page and the browser, and some outlast a restart:
@@ -358,7 +363,9 @@ all. They can outlast the page and the browser, and some outlast a restart:
   clipboard history and sync first.
 - When you are done, press End session in the header. It wipes the page,
   zeroes the WebAssembly modules' memory, empties the clipboard if
-  EntropyLab copied something, and asks the browser to close the tab.
+  EntropyLab copied something there (as far as the page can tell — it
+  cannot read the clipboard to check), and asks the browser to close the
+  tab.
   Closing the tab is what erases the copies above: in a 2026-10-03 audit it
   was the only step that left no copy of a secret in any Chrome or Edge
   process. A tab you opened straight to the file closes; if it stays open,

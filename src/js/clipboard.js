@@ -31,8 +31,11 @@ const fallbackCopy = (text, host) => {
   }
 };
 
-// Whether this page has put anything on the clipboard, so End session clears
-// only a clipboard the page wrote, never what the user copied elsewhere.
+// Whether this page has put anything on the clipboard, as far as the page
+// can know: a page cannot read the clipboard, so if the user copied
+// something else in another app since, End session will replace that newer
+// item with "" too. The direction is privacy-safe — it never skips a
+// clipboard the page might have written.
 let wroteClipboard = false;
 
 export const copyText = async (text, { host = document.body } = {}) => {
