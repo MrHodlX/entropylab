@@ -48,6 +48,49 @@
   --space-intro: 24px;
   --space-major: 32px; /* seams between the page's major sections */
   --space-lede: 48px; /* the widest seam: where the pitch ends and the tool begins */
+  /* Text sizes, by job. Several share a value today; each names what it is
+   * for, so one can change without moving the others. */
+  /* Base and running text */
+  --text-base: 16px; /* the page's base size, set on html and body; what tabs and plain controls inherit */
+  --text-body: 14px; /* running text: notes, help, messages, results */
+  --text-note: 12px; /* helper and secondary text: field notes, hints, descriptions, statuses, tooltips */
+  --text-compact: 13px; /* dense secondary text: PSBT Editor tables and diagram, status lines, Journal meta, note titles */
+  /* Names of things */
+  --text-label: 14px; /* names of things: field and section labels, disclosure summaries, tab names */
+  --text-label-small: 12px; /* small names and eyebrows: kickers, picker titles, cell labels */
+  --text-caption: 11px; /* small captions: dice key caption, character counts, calculation and slider labels */
+  --text-tag: 11px; /* uppercase status tags: network status, the status word, More */
+  /* Controls and fields */
+  --text-control: 16px; /* buttons; the disclaimer proof digit */
+  --text-control-compact: 15px; /* buttons at 520px and below (no field uses it) */
+  --text-control-small: 14px; /* small secondary controls: toggles, header buttons, pickers, undo */
+  --text-field: 14px; /* what you type into: inputs, textareas, selects and their overlays */
+  --text-field-small: 12px; /* compact inputs: PSBT Editor fields, the expand view's textarea */
+  /* Values */
+  --text-readout: 18px; /* a large monospace value: the Vanity formula's prefix terms */
+  --text-readout-small: 16px; /* a prominent value: Silent Payment address, master fingerprint, M-of-N number */
+  --text-data: 13px; /* monospace values: keys, words, PSBT fields, the Journal's default size; calculation figures */
+  --text-data-small: 12px; /* dense monospace values: tables, calculation panels, logs, the Journal's small size */
+  --text-micro: 10px; /* the address-row QR button; calculation details */
+  --text-micro-narrow: 9px; /* the number-base grid squeezed onto a phone */
+  /* Headings and brand */
+  --text-heading: 24px; /* h1 and h2; the self-test failure title */
+  --text-heading-small: 18px; /* modal and modal-warning titles */
+  --text-heading-note: 16px; /* titles inside notes, such as the tool intros; the dice fairness header */
+  --text-brand: 22px; /* the EntropyLab wordmark */
+  --text-brand-compact: 19px; /* the wordmark below 720px */
+  --text-brand-narrow: 17px; /* the wordmark at 400px and below */
+  /* Entry pads and dealt cards */
+  --text-keypad: 18px; /* characters on an entry pad: dice digits, a dealt card's lone rank */
+  --text-keypad-small: 15px; /* entry pad keys: card ranks, coin buttons, the seed keyboard */
+  --text-card-suit: 16px; /* the suit on a dealt card */
+  --text-card-rank: 13px; /* the rank on a dealt card */
+  /* Glyphs that act as icons (+ and −, arrows, emoji) rather than words */
+  --text-icon-large: 28px; /* the add and remove buttons beside tab strips */
+  --text-icon-medium: 26px; /* disclosure triangles; the master-fingerprint arrow */
+  --text-icon-small: 24px; /* the BIP-85 lineage arrow, card suits, the phone fingerprint arrow */
+  --text-icon-inline: 18px; /* glyphs in a line of text or a small button: lineage and Journal arrows, PSBT Editor delete */
+  --footer-emoji: 21px; /* the emoji line in the page footer */
   --site-header-height: 52px; /* .header-button height plus 6px above and below */
   --site-header-pad: 16px; /* the bar's side padding; the status tag aligns to it */
   --site-min-width: 320px; /* the narrowest layout we lay out for: below this the page scrolls */
@@ -96,15 +139,15 @@
 *::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 *::-webkit-scrollbar-corner { background: var(--scrollbar-track); }
 html { overflow-y: scroll; scrollbar-gutter: stable; scroll-padding-top: calc(var(--site-header-height) + 12px); }
-html, body { margin: 0; min-width: var(--site-min-width); background: var(--bg); color: var(--fg); font-family: var(--sans); transition: background-color .21s ease; }
+html, body { margin: 0; min-width: var(--site-min-width); background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: var(--text-base); transition: background-color .21s ease; }
 /* Flipping the theme eases the page between the two grounds rather than
    cutting. The first paint is not a transition, so the opening theme still
    arrives instantly. */
 @media (prefers-reduced-motion: reduce) { html, body { transition: none; } }
 body { min-height: 100vh; }
 h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.02em; }
-h1 { font-size: 1.5rem; margin: 8px 0; }
-h2 { font-size: 1.5rem; margin: 8px 0; }
+h1 { font-size: var(--text-heading); margin: 8px 0; }
+h2 { font-size: var(--text-heading); margin: 8px 0; }
 /* A link brightens under the pointer, in the same lettering orange the
    controls take: --accent alone gives no sign that it answers at all. */
 a { color: var(--accent); transition: color .14s ease; }
@@ -127,7 +170,7 @@ button:not(:disabled):active *,
 /* No bottom padding: the closing footer supplies the page's last band of
    space itself, so it sits flush with the bottom of the document. */
 .wrap { max-width: 1000px; margin: 0 auto; padding: calc(var(--site-header-height) + 20px) 16px 0; }
-.kicker { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+.kicker { font-size: var(--text-label-small); letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; margin: 16px 0; }
 /* On a phone the side padding is width the content needs more than the frame
    does, so the card gives most of it back. */
@@ -164,7 +207,7 @@ button:not(:disabled):active *,
 /* A fine-print list steps its items like the Sources paragraphs above it. */
 .sources ul { display: grid; gap: var(--space-component); padding-left: 20px; }
 .warn { background: color-mix(in oklab, var(--danger) 12%, var(--bg)); border-color: color-mix(in oklab, var(--danger) 40%, var(--border)); }
-.muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.muted { color: var(--muted); font-size: var(--text-body); line-height: 1.5; }
 /* The pitch is a set of discrete claims rather than prose, so it reads as a
    list. The top margin stands in for the paragraph's, and dropping the
    bottom one lets the card's own padding close it out. */
@@ -177,7 +220,7 @@ button:not(:disabled):active *,
    one thing in it worth reading, so it keeps its own size and spaces itself
    off the two text rows. */
 .page-footer { margin-top: var(--space-lede); padding: 24px 0; border-top: 1px solid var(--border); text-align: center; color: var(--faint); }
-.page-footer-emoji { font-size: 1.5em; line-height: 1; margin: 6px 0; }
+.page-footer-emoji { font-size: var(--footer-emoji); line-height: 1; margin: 6px 0; }
 /* The build stamp: version, short commit, and the commit's LifeHash as a
    small inline identicon next to the hash it visualizes. */
 .page-footer-build code { font-family: var(--mono); }
@@ -198,12 +241,12 @@ button:not(:disabled):active *,
    the row they sit in. A label that wraps sets its two lines as close as the
    words are tall: through font: inherit a button otherwise takes the leading of
    whatever it sits in, which spaced the lines as if they were paragraphs. */
-.btn { font-size: 16px; font-weight: 600; line-height: 1; }
+.btn { font-size: var(--text-control); font-weight: 600; line-height: 1; }
 /* A phone gives a label less room before it wraps, so the type steps down
    one notch rather than the words breaking sooner. It sits here, with the
    button's own type, so the header's smaller buttons still overrule it
    below. */
-@media (max-width: 520px) { .btn { font-size: 15px; } }
+@media (max-width: 520px) { .btn { font-size: var(--text-control-compact); } }
 .tab.active {
   background: var(--selection-accent);
   color: var(--selection-fg);
@@ -286,7 +329,7 @@ textarea, select,
 input:not([type="radio"]):not([type="checkbox"]) {
   width: 100%; min-height: 44px; margin-top: var(--space-control); padding: 10px 12px;
   border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--fg);
-  font-family: var(--mono); font-size: 14px;
+  font-family: var(--mono); font-size: var(--text-field);
 }
 textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .dice-input-shell {
@@ -301,7 +344,7 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
   position: absolute; z-index: 0; inset: 0; margin: 0; padding: 10px 12px;
   border: 1px solid transparent; border-radius: 12px; overflow: hidden; pointer-events: none;
   white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
-  color: var(--fg); font-family: var(--mono); font-size: 14px; line-height: 1.45; letter-spacing: 0.08em;
+  color: var(--fg); font-family: var(--mono); font-size: var(--text-field); line-height: 1.45; letter-spacing: 0.08em;
 }
 .dice-input-highlight[data-trailing-newline="true"]::after { content: "\200b"; }
 .dice-roll-invalid {
@@ -323,10 +366,10 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .global-sync-host .switch-row, .passphrase-bip39-options .switch-row, .passphrase-keyboard-tools > .switch-row { margin-top: 0; }
 .switch-toggle {
   display: inline-flex; align-items: center; gap: 9px; width: 100%; min-height: 24px; margin-top: 0;
-  font-size: 14px; font-weight: 600; cursor: pointer;
+  font-size: var(--text-control-small); font-weight: 600; cursor: pointer;
 }
 .switch-toggle input { margin: 0; }
-.switch-note { display: block; margin: 0; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }
+.switch-note { display: block; margin: 0; color: var(--muted); font-size: var(--text-note); font-weight: 400; line-height: 1.4; }
 /* Tighter to the dropdown above than to the section below: the control reads
    as part of the method it qualifies. The rule belongs to this section, not to
    the length band under it: Method closes with the line rather than Seed
@@ -342,7 +385,7 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .global-sync-toggle .label { margin: 0; }
 .global-sync-status {
   display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
-  color: var(--ok); font-size: 13px; font-weight: 600; white-space: nowrap;
+  color: var(--ok); font-size: var(--text-compact); font-weight: 600; white-space: nowrap;
 }
 /* Narrow screens only: the badge drops below the toggle and the shortfall takes
    its own line, while each phrase stays on one line. */
@@ -360,7 +403,7 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .global-sync-status svg { display: block; width: 16px; height: 16px; }
 .number-base-binary-conversion { margin-bottom: var(--space-section); }
 .number-base-conversion-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
-.number-base-conversion-cell { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 6px 8px; border: 1px solid transparent; background: var(--surface-2); font-family: var(--mono); font-size: 12px; }
+.number-base-conversion-cell { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 6px 8px; border: 1px solid transparent; background: var(--surface-2); font-family: var(--mono); font-size: var(--text-data-small); }
 .number-base-conversion-cell strong { color: var(--accent); font-weight: 700; }
 .number-base-conversion-cell b { color: var(--faint); font-family: var(--sans); font-weight: 400; }
 .number-base-conversion-cell > span { color: var(--fg); }
@@ -369,20 +412,20 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
    like the other readouts, down to the cells inside it. */
 .number-base-calculation {
   overflow-x: auto; padding: 14px 12px 12px; border: 1px solid transparent;
-  background: var(--surface-2); font-family: var(--mono); font-size: 12px;
+  background: var(--surface-2); font-family: var(--mono); font-size: var(--text-data-small);
 }
 .number-base-calculation-title { display: flex; justify-content: space-between; gap: 12px; margin: 0 0 12px; color: var(--muted); }
 .number-base-calculation-title span, .number-base-calculation-label { letter-spacing: 0.04em; }
-.number-base-calculation-title strong { color: var(--fg); font-family: var(--mono); font-size: 13px; font-weight: 400; }
+.number-base-calculation-title strong { color: var(--fg); font-family: var(--mono); font-size: var(--text-data); font-weight: 400; }
 .number-base-calculation-row { display: grid; grid-template-columns: 88px minmax(396px, 1fr); align-items: center; gap: 8px; margin-top: 6px; }
-.number-base-calculation-label { color: var(--muted); font-family: var(--sans); font-size: 11px; font-weight: 600; }
+.number-base-calculation-label { color: var(--muted); font-family: var(--sans); font-size: var(--text-caption); font-weight: 600; }
 .number-base-calculation-powers, .number-base-calculation-bits, .number-base-calculation-products { display: grid; grid-template-columns: repeat(11, minmax(32px, 1fr)); gap: 4px; min-width: 396px; text-align: center; }
 .number-base-calculation-powers { color: var(--accent); font-weight: 700; }
-.number-base-calculation-bits span { padding: 8px 4px; border: 1px solid transparent; color: var(--fg); background: var(--bg); font-size: 14px; font-weight: 700; }
+.number-base-calculation-bits span { padding: 8px 4px; border: 1px solid transparent; color: var(--fg); background: var(--bg); font-size: var(--text-body); font-weight: 700; }
 .number-base-calculation-products { color: var(--fg); font-weight: 600; }
 .number-base-calculation-sum { display: flex; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; gap: 6px 16px; min-width: 484px; margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
 .number-base-calculation-sum > span { display: inline-flex; align-items: baseline; gap: 5px; }
-.number-base-calculation-sum strong { color: var(--accent); font-size: 13px; font-weight: 700; }
+.number-base-calculation-sum strong { color: var(--accent); font-size: var(--text-data); font-weight: 700; }
 .number-base-calculation-sum b { color: var(--faint); }
 .manual-calculations-container { margin-top: var(--space-section); }
 .manual-calculations-row[hidden] { display: none; }
@@ -392,9 +435,9 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .manual-calculation-row {
   display: grid; grid-template-columns: auto auto minmax(220px, 1fr) auto; align-items: baseline; gap: 8px 14px;
   overflow-x: auto; padding: 12px; border: 1px solid transparent; background: var(--surface-2);
-  color: var(--muted); font-family: var(--mono); font-size: 12px;
+  color: var(--muted); font-family: var(--mono); font-size: var(--text-data-small);
 }
-.manual-calculation-row strong { color: var(--fg); font-size: 13px; font-weight: 400; }
+.manual-calculation-row strong { color: var(--fg); font-size: var(--text-data); font-weight: 400; }
 .manual-calculation-row code { color: var(--fg); white-space: nowrap; }
 .manual-calculation-row b { color: var(--accent); font-weight: 700; white-space: nowrap; }
 .manual-calculation-heading { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); }
@@ -402,8 +445,8 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .dplus-calculation-row { display: block; }
 .dplus-calculation-stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
 .dplus-calculation-stage { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 7px; min-width: 0; padding: 6px 8px; border: 1px solid transparent; background: var(--bg); }
-.dplus-calculation-stage span { grid-column: 1 / -1; color: var(--muted); font-family: var(--sans); font-size: 10px; font-weight: 600; }
-.dplus-calculation-stage strong { color: var(--fg); font-size: 13px; }
+.dplus-calculation-stage span { grid-column: 1 / -1; color: var(--muted); font-family: var(--sans); font-size: var(--text-micro); font-weight: 600; }
+.dplus-calculation-stage strong { color: var(--fg); font-size: var(--text-data); }
 .dplus-calculation-stage small { color: var(--muted); white-space: nowrap; }
 .dplus-calculation-stage b { color: var(--accent); font-weight: 700; white-space: nowrap; }
 .dplus-calculation-sum { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); white-space: nowrap; }
@@ -413,25 +456,25 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
   .number-base-calculation-title { margin-bottom: 8px; }
   .number-base-calculation-row { display: block; margin-top: 4px; }
   .number-base-calculation-label { display: none; }
-  .number-base-calculation-powers, .number-base-calculation-bits, .number-base-calculation-products { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 2px; min-width: 0; font-size: 9px; }
+  .number-base-calculation-powers, .number-base-calculation-bits, .number-base-calculation-products { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 2px; min-width: 0; font-size: var(--text-micro-narrow); }
   .number-base-calculation-powers span, .number-base-calculation-bits span, .number-base-calculation-products span { min-width: 0; white-space: nowrap; }
-  .number-base-calculation-bits span { padding: 6px 1px; font-size: 12px; }
-  .number-base-calculation-sum { display: block; min-width: 0; margin-top: 8px; padding-top: 7px; white-space: normal; font-size: 10px; }
+  .number-base-calculation-bits span { padding: 6px 1px; font-size: var(--text-data-small); }
+  .number-base-calculation-sum { display: block; min-width: 0; margin-top: 8px; padding-top: 7px; white-space: normal; font-size: var(--text-micro); }
   .number-base-calculation-sum > span { display: block; margin-top: 3px; white-space: normal; overflow-wrap: anywhere; }
   .number-base-calculation-sum > span:first-child { margin-top: 0; }
-  .number-base-calculation-sum strong { font-size: 11px; }
+  .number-base-calculation-sum strong { font-size: var(--text-caption); }
   .manual-calculation-row { grid-template-columns: auto auto; }
   .manual-calculation-row code, .manual-calculation-row b { grid-column: 1 / -1; }
   .manual-calculations-container { margin-top: var(--space-control); }
   .manual-calculation-panel > .muted { margin-bottom: var(--space-control); }
   .dplus-calculation-row { overflow: visible; padding: 8px; }
   .dplus-calculation-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-top: 7px; }
-  .dplus-calculation-stage { gap: 3px 5px; padding: 5px 6px; font-size: 10px; }
-  .dplus-calculation-stage strong { font-size: 12px; }
-  .dplus-calculation-stage small { font-size: 10px; }
-  .dplus-calculation-sum { justify-content: flex-start; flex-wrap: wrap; margin-top: 7px; padding-top: 6px; gap: 4px; font-size: 10px; white-space: normal; overflow: visible; }
+  .dplus-calculation-stage { gap: 3px 5px; padding: 5px 6px; font-size: var(--text-micro); }
+  .dplus-calculation-stage strong { font-size: var(--text-data-small); }
+  .dplus-calculation-stage small { font-size: var(--text-micro); }
+  .dplus-calculation-sum { justify-content: flex-start; flex-wrap: wrap; margin-top: 7px; padding-top: 6px; gap: 4px; font-size: var(--text-micro); white-space: normal; overflow: visible; }
 }
-.passphrase-field { margin-top: var(--space-component); font-size: 14px; font-weight: 600; }
+.passphrase-field { margin-top: var(--space-component); font-size: var(--text-field); font-weight: 600; }
 .passphrase-keyboard-tools { display: flex; align-items: center; gap: var(--space-control); margin-top: var(--space-control); }
 .passphrase-keyboard-tools[hidden] { display: none; }
 .passphrase-keyboard-tools > .switch-row { flex: 1 1 auto; }
@@ -478,7 +521,7 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .seed-keyboard-space,
 .seed-keyboard-mode {
   min-height: 42px; padding: 0; border: 1px solid var(--border); border-radius: 7px;
-  background: var(--surface-2); color: var(--fg); font-family: var(--mono); font-size: 15px;
+  background: var(--surface-2); color: var(--fg); font-family: var(--mono); font-size: var(--text-keypad-small);
 }
 .seed-keyboard-key { flex: 0 0 var(--seed-key-size); width: var(--seed-key-size); }
 .seed-keyboard-key[hidden] { display: none; }
@@ -487,7 +530,7 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 .seed-keyboard-space-row { display: flex; justify-content: center; gap: 4px; }
 .seed-keyboard-mode { flex: 0 0 clamp(42px, 10vw, 64px); padding-inline: 6px; letter-spacing: -.08em; }
 .seed-keyboard-mode:disabled { cursor: not-allowed; opacity: .42; color: var(--muted); }
-.seed-keyboard-space { width: min(46%, 250px); padding-inline: 14px; color: var(--muted); font-size: 13px; }
+.seed-keyboard-space { width: min(46%, 250px); padding-inline: 14px; color: var(--muted); font-size: var(--text-compact); }
 .seed-keyboard-key:disabled,
 .seed-keyboard-space:disabled { cursor: not-allowed; opacity: .3; color: var(--muted); }
 input[type="radio"], input[type="checkbox"] {
@@ -517,8 +560,8 @@ input[type="checkbox"]:not(:disabled):hover {
   outline: 1px solid var(--selection-accent);
   outline-offset: -1px;
 }
-label.field { display: block; margin-top: var(--space-component); font-size: 14px; font-weight: 600; }
-.label { font-size: 14px; font-weight: 600; margin: var(--space-section) 0 var(--space-control); color: var(--fg); }
+label.field { display: block; margin-top: var(--space-component); font-size: var(--text-label); font-weight: 600; }
+.label { font-size: var(--text-label); font-weight: 600; margin: var(--space-section) 0 var(--space-control); color: var(--fg); }
 /* The part of a label that changes with a selection, set in regular weight so
    the fixed title still reads as the title. */
 .label-value { font-weight: 400; }
@@ -533,12 +576,12 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
   margin-top: var(--space-control);
   cursor: pointer;
   font-weight: 400;
-  font-size: 14px;
+  font-size: var(--text-label);
   color: var(--fg);
   transition: border-color .14s ease;
 }
 .choice strong { display: block; color: var(--fg); font-weight: 600; }
-.choice .desc { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; font-weight: 400; }
+.choice .desc { display: block; margin-top: 4px; color: var(--muted); font-size: var(--text-note); line-height: 1.4; font-weight: 400; }
 .choice:has(input:checked) { border-color: color-mix(in oklab, var(--accent) 55%, var(--border)); }
 .choice:has(input:disabled) { cursor: not-allowed; opacity: 0.52; }
 /* The whole card is the target, so the edge is what answers the pointer. It
@@ -567,16 +610,16 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 .dice-input-pad.entropy-keypad.coin-phase { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .dice-input-pad.entropy-keypad-base4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .dice-input-pad.seed-number-pad { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.seed-number-pad .seed-number-next { grid-column: span 4; font-family: inherit; font-size: 14px; }
+.seed-number-pad .seed-number-next { grid-column: span 4; font-family: inherit; font-size: var(--text-control-small); }
 .dice-input-pad button {
-  min-height: 48px; font-family: var(--mono); font-size: 18px;
+  min-height: 48px; font-family: var(--mono); font-size: var(--text-keypad);
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--fg);
 }
 .dice-input-pad.dplus button { padding-inline: 6px; white-space: nowrap; }
-.dice-input-pad .coin-button { font-size: 15px; }
+.dice-input-pad .coin-button { font-size: var(--text-keypad-small); }
 /* Names the coin side a face stands for on the BitBox sixth roll. */
 .dice-input-pad button.has-caption { line-height: 1.1; }
-.dice-key-caption { display: block; font-size: 11px; line-height: 1.1; color: var(--muted); }
+.dice-key-caption { display: block; font-size: var(--text-caption); line-height: 1.1; color: var(--muted); }
 .dice-input-pad button:disabled {
   cursor: not-allowed; opacity: 0.38; color: var(--muted); border-color: var(--border);
 }
@@ -591,7 +634,7 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
    browser's 16px and read a step larger than every title around it. */
 .dice-fairness-toggle {
   display: inline-flex; align-items: center; gap: 2px; width: fit-content; min-height: 32px; padding: 0;
-  border: 0; background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer;
+  border: 0; background: transparent; color: var(--muted); font-size: var(--text-control-small); font-weight: 600; cursor: pointer;
 }
 /* Grey at rest, white while open, the buttons' orange under the pointer: the
    arrow is a child span with no colour of its own, so it follows the label. */
@@ -634,14 +677,14 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 .dice-fairness-head {
   display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px;
 }
-.dice-fairness-head strong { font-size: 15px; }
+.dice-fairness-head strong { font-size: var(--text-heading-note); }
 .dice-fairness[data-tone="ok"] .dice-fairness-head strong { color: var(--ok); }
 .dice-fairness[data-tone="warn"] .dice-fairness-head strong,
 .dice-fairness-test[data-tone="warn"] .dice-fairness-head strong { color: var(--warn); }
 .dice-fairness[data-tone="danger"] .dice-fairness-head strong,
 .dice-fairness-test[data-tone="danger"] .dice-fairness-head strong { color: var(--danger); }
-.dice-fairness-head span { color: var(--muted); font-family: var(--mono); font-size: 12px; }
-.dice-fairness-note, .dice-fairness-caveat { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.dice-fairness-head span { color: var(--muted); font-family: var(--mono); font-size: var(--text-data-small); }
+.dice-fairness-note, .dice-fairness-caveat { margin: 6px 0 0; color: var(--muted); font-size: var(--text-note); line-height: 1.4; }
 .dice-fairness-caveat { margin-top: 12px; }
 /* The empty state is the whole panel: with nothing above it to separate from,
    its 6px lead only unbalances the padding, leaving 18px over 12px. Populated
@@ -653,7 +696,7 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 }
 .dice-fairness-face {
   display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 2.2em; gap: 8px; align-items: center;
-  font-family: var(--mono); font-size: 12px;
+  font-family: var(--mono); font-size: var(--text-data-small);
 }
 .dice-fairness-label { color: var(--muted); }
 .dice-fairness-count { color: var(--fg); text-align: right; font-variant-numeric: tabular-nums; }
@@ -670,7 +713,7 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 }
 .card-suit-pad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: var(--space-control); }
 .card-suit-pad button {
-  min-height: 48px; font-size: 22px; line-height: 1;
+  min-height: 48px; font-size: var(--text-icon-small); line-height: 1;
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--fg);
 }
 .card-suit-pad button.is-red { color: var(--danger); }
@@ -683,7 +726,7 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 @media (min-width: 640px) {
   .card-rank-pad { grid-template-columns: repeat(13, minmax(0, 1fr)); }
 }
-.card-rank-pad button { font-size: 15px; }
+.card-rank-pad button { font-size: var(--text-keypad-small); }
 .card-rank-pad button.active {
   background: var(--selection-accent); color: var(--selection-fg); border-color: var(--selection-accent);
 }
@@ -700,7 +743,7 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 .card-controls-row .card-undo-button { grid-column: -3 / -1; }
 .card-undo-button {
   display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 48px; padding: 0;
-  font-size: 14px; font-weight: 600;
+  font-size: var(--text-control-small); font-weight: 600;
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--muted);
 }
 .card-undo-button:disabled { cursor: not-allowed; opacity: 0.38; }
@@ -710,13 +753,13 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 }
 .dealt-shuffle-label {
   flex: 1 0 100%; margin: 0; color: var(--muted);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: var(--text-note); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
 }
 .cards-reshuffle {
   margin-top: 12px; padding: 12px 14px; border-radius: 12px;
   border: 1px solid color-mix(in oklab, var(--accent) 55%, var(--border));
   background: color-mix(in oklab, var(--accent) 14%, var(--bg));
-  color: var(--fg); font-size: 14px; line-height: 1.5;
+  color: var(--fg); font-size: var(--text-control-small); line-height: 1.5;
 }
 .cards-reshuffle[hidden] { display: none; }
 .cards-reshuffle strong { color: var(--accent); }
@@ -728,12 +771,12 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 }
 .dealt-card-placeholder { visibility: hidden; }
 .dealt-card.is-red { color: var(--playing-card-red); }
-.dealt-card .dealt-rank { font-size: 13px; }
-.dealt-card .dealt-suit { font-size: 16px; }
-.dealt-card.dealt-card-rank-only .dealt-rank { font-size: 18px; }
+.dealt-card .dealt-rank { font-size: var(--text-card-rank); }
+.dealt-card .dealt-suit { font-size: var(--text-card-suit); }
+.dealt-card.dealt-card-rank-only .dealt-rank { font-size: var(--text-keypad); }
 .wordlist {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 16px;
-  font-family: var(--mono); font-size: 13px; margin-top: 12px;
+  font-family: var(--mono); font-size: var(--text-data); margin-top: 12px;
 }
 @media (min-width: 640px) { .wordlist { grid-template-columns: repeat(3, 1fr); } }
 .wordlist span { color: var(--muted); display: inline-block; width: 1.6em; }
@@ -777,16 +820,16 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
    label hands its own vertical margins to the row and pushes the rest right. */
 .seed-word-copy-row .label { margin: 0; margin-right: auto; }
 .copy-status {
-  flex: 0 0 auto; color: var(--ok); font-size: 12px; line-height: 21px; white-space: nowrap;
+  flex: 0 0 auto; color: var(--ok); font-size: var(--text-note); line-height: 21px; white-space: nowrap;
 }
 .copy-status:empty { display: none; }
 /* The check carries the confirmation, so it takes the green and a little more
    size; the word beside it is a status line, not a signal, and stays grey. */
-.bip85-copy-status, .copy-field-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; line-height: normal; }
+.bip85-copy-status, .copy-field-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--text-body); line-height: normal; }
 .bip85-copy-status svg, .copy-field-status svg { width: 20px; height: 20px; color: var(--ok-bright); fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 /* The copy confirmation sits in a 14px label row, so it is pinned to
    that line box: appearing and clearing must not move the row. */
-.copy-field-status { height: 14px; font-size: 12px; gap: 4px; }
+.copy-field-status { height: 14px; font-size: var(--text-note); gap: 4px; }
 .copy-field-status svg { width: 14px; height: 14px; }
 .copy-button {
   flex: 0 0 auto; display: grid; place-items: center;
@@ -806,7 +849,7 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
   --dice-word-rows: var(--dice-word-rows-wide);
   display: grid; grid-auto-flow: column; grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: repeat(var(--dice-word-rows), minmax(34px, auto)); gap: 6px 10px;
-  margin-top: var(--space-component); font-family: var(--mono); font-size: 13px;
+  margin-top: var(--space-component); font-family: var(--mono); font-size: var(--text-data);
 }
 /* The derived words are what the card produced, not something to press: no
    edge and no rounded corner, which the controls above use to say they can be
@@ -824,7 +867,7 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-.secret { font-family: var(--mono); font-size: 13px; word-break: break-all; }
+.secret { font-family: var(--mono); font-size: var(--text-data); word-break: break-all; }
 .private-field-value { display: block; margin-top: 2px; line-height: 1.55; }
 .table-private-field-value { display: inline-grid; white-space: nowrap; }
 .private-field-value:not(.secret-placeholder),
@@ -844,8 +887,8 @@ label.field { display: block; margin-top: var(--space-component); font-size: 14p
 }
 .seed-phrase-value { word-break: normal; overflow-wrap: normal; }
 .seed-phrase-word { display: inline-block; white-space: nowrap; }
-.mono { font-family: var(--mono); font-size: 13px; word-break: break-all; }
-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mono { font-family: var(--mono); font-size: var(--text-data); word-break: break-all; }
+table { width: 100%; border-collapse: collapse; font-size: var(--text-data-small); }
 th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px; }
 td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; font-family: var(--mono); }
 .qr { max-width: 100%; background: var(--paper); border: 1px solid var(--border); border-radius: 8px; display: inline-block; }
@@ -869,7 +912,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 @media (min-width: 720px) {
   .seed-qr-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
-.err { margin: var(--space-control) 0 0; color: var(--danger); font-size: 14px; }
+.err { margin: var(--space-control) 0 0; color: var(--danger); font-size: var(--text-body); }
 .ok { color: var(--ok); }
 /* Top padding sets the gap below the warning banners, which carry 12px of
    their own margin. */
@@ -907,7 +950,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 /* The wordmark takes the h1's display face, so the bar reads as the same brand
    as the page title below it. Pure white and pure black rather than --fg, which
    stops short of both ends: the wordmark wants the full contrast. */
-.site-title { flex: 0 0 auto; font-family: var(--display); font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: #ffffff; white-space: nowrap; }
+.site-title { flex: 0 0 auto; font-family: var(--display); font-size: var(--text-brand); font-weight: 600; letter-spacing: -0.02em; color: #ffffff; white-space: nowrap; }
 :root[data-theme="light"] .site-title { color: #000000; }
 /* Straddles the header's bottom rule so the rule runs into its two edges and
    the tag reads as speared by it, and sits at the bar's left edge, under the
@@ -929,7 +972,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
      over whatever is scrolling beneath it. The bar is the same --bg, so the
      halo is invisible above the rule and only softens the overhang below. */
   background: var(--bg); box-shadow: 0 0 6px 5px var(--bg);
-  font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase;
+  font-size: var(--text-tag); font-weight: 700; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase;
   text-indent: 0.1em; white-space: nowrap;
 }
 .network-status[data-state="offline"] { color: var(--ok-bright); }
@@ -948,7 +991,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 .network-picker-button {
   display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 9px 0 12px;
   border: 1px solid var(--border); border-radius: 8px;
-  background: var(--surface-2); color: var(--fg); font-size: 14px; font-weight: 600; cursor: pointer;
+  background: var(--surface-2); color: var(--fg); font-size: var(--text-control-small); font-weight: 600; cursor: pointer;
 }
 .network-picker-button:hover { border-color: var(--accent); }
 /* Sized with the download and GitHub marks either side of it, which are
@@ -971,7 +1014,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
   background: var(--surface-2); box-shadow: 0 16px 36px rgb(0 0 0 / 55%);
 }
 .network-picker-title {
-  margin: 6px 10px 4px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;
+  margin: 6px 10px 4px; font-size: var(--text-label-small); letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--accent); font-weight: 600;
 }
 .network-picker-option {
@@ -990,9 +1033,9 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 .custom-select-option:hover, .custom-select-option:focus-visible { background: color-mix(in oklab, var(--accent) 14%, var(--surface-2)); outline: none; }
 .network-picker-option[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 20%, var(--surface-2)); }
 .network-picker-option[aria-checked="true"] strong { color: var(--accent); }
-.network-picker-option-text { font-size: 14px; }
-.network-picker-option-desc { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-.network-picker-note { margin: 6px 10px 8px; color: var(--faint); font-size: 12px; line-height: 1.45; }
+.network-picker-option-text { font-size: var(--text-control-small); }
+.network-picker-option-desc { display: block; margin-top: 2px; color: var(--muted); font-size: var(--text-note); line-height: 1.45; }
+.network-picker-note { margin: 6px 10px 8px; color: var(--faint); font-size: var(--text-note); line-height: 1.45; }
 /* min-width: 0 lets the row shrink on narrow screens rather than pushing the
    controls out of the bar. */
 .download-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
@@ -1001,7 +1044,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 .download-mark { display: block; flex: 0 0 auto; }
 /* Header controls sit below the app's default 44px so the bar stays slim.
    Keep --site-header-height in step. */
-.header-button, .journal-file-button { min-height: 40px; font-size: 14px; }
+.header-button, .journal-file-button { min-height: 40px; font-size: var(--text-control-small); }
 .download-controls > a, .journal-file-button { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .journal-file-button .control-label { display: inline; }
 /* Centring puts the label's em box on the button's centre line, but a font's
@@ -1013,12 +1056,12 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 .locale-control { display: flex; align-items: center; flex: 0 0 auto; }
 .locale-select {
   min-height: 40px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--bg); color: var(--fg); font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+  background: var(--bg); color: var(--fg); font-size: var(--text-compact); font-weight: 600; letter-spacing: 0.04em;
 }
 /* enhanced-inputs.js swaps the select for a custom listbox whose form chrome
    (44px minimum, control margin, mono face) would bulge out of the 52px bar.
    In the header the generated control wears the header-button sizing instead. */
-.locale-control .custom-select { flex: 0 0 auto; width: auto; margin-top: 0; font-family: inherit; font-size: 14px; }
+.locale-control .custom-select { flex: 0 0 auto; width: auto; margin-top: 0; font-family: inherit; font-size: var(--text-control-small); }
 /* Right padding runs 3px short of the left: the 12px chevron's ink spans
    only the middle half of its box, so a symmetric 12px reads wide on that
    side. Optical, not layout. */
@@ -1033,7 +1076,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
   position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important;
   margin: 0 !important; padding: 0 !important; opacity: 0; pointer-events: none; overflow: hidden;
 }
-.custom-select { position: relative; width: 100%; margin-top: var(--space-control); font-family: var(--mono); font-size: 14px; }
+.custom-select { position: relative; width: 100%; margin-top: var(--space-control); font-family: var(--mono); font-size: var(--text-field); }
 .custom-select-button {
   width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;
@@ -1064,7 +1107,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 .beta-warning, .online-warning {
   display: flex; align-items: flex-start; gap: 12px; margin: 0 0 12px; padding: 14px 16px; border: 0;
   background: color-mix(in oklab, var(--danger) 14%, var(--surface));
-  color: var(--fg); font-size: 14px; line-height: 1.5;
+  color: var(--fg); font-size: var(--text-body); line-height: 1.5;
 }
 .online-warning a { white-space: nowrap; }
 /* The author display wins over the UA [hidden] rule, so restate it. */
@@ -1079,7 +1122,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
    would add half its leading above the caps as invisible space. The gap down
    to the sentence is then an explicit margin. */
 .beta-warning-text strong, .online-warning-text strong {
-  display: block; margin-bottom: 6px; font-size: 14px; line-height: 1; text-transform: uppercase;
+  display: block; margin-bottom: 6px; font-size: var(--text-body); line-height: 1; text-transform: uppercase;
   color: var(--danger-bright);
 }
 .beta-warning-dismiss, .intro-dismiss {
@@ -1113,7 +1156,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
   border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
   box-shadow: 0 16px 36px rgb(0 0 0 / 55%);
 }
-.modal-title { margin: 0 0 var(--space-section); font-weight: 600; font-size: 18px; overflow-wrap: anywhere; }
+.modal-title { margin: 0 0 var(--space-section); font-weight: 600; font-size: var(--text-heading-small); overflow-wrap: anywhere; }
 @media (max-width: 520px) { .modal-card { padding: 20px; } }
 /* The gate alone fades in, and wears the danger frame its warning calls for. */
 .disclaimer-overlay { opacity: 0; transition: opacity .24s ease; }
@@ -1128,7 +1171,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 }
 .modal-warning-icon { display: block; width: 48px; height: 48px; margin: 0 auto; color: var(--danger-bright); }
 .modal-warning-title {
-  margin: 12px 0 var(--space-section); font-size: 18px; font-weight: 700; text-transform: uppercase;
+  margin: 12px 0 var(--space-section); font-size: var(--text-heading-small); font-weight: 700; text-transform: uppercase;
   text-align: center; color: var(--danger-bright);
 }
 .disclaimer-card { --modal-width: 520px; text-align: center; }
@@ -1145,12 +1188,12 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 /* The second step's answer: a one-digit field left of the button, which stays
    disabled until the reader types 3. The field takes the button's height. */
 .disclaimer-proof-row { display: flex; justify-content: center; align-items: center; gap: var(--space-control); }
-.disclaimer-proof-row input.disclaimer-proof { width: 56px; min-width: 0; margin: 0; padding: 10px 0; text-align: center; font-size: 16px; font-weight: 700; }
+.disclaimer-proof-row input.disclaimer-proof { width: 56px; min-width: 0; margin: 0; padding: 10px 0; text-align: center; font-size: var(--text-control); font-weight: 700; }
 /* The network words carry the header status colours, and nothing else of it:
    that tag is a positioned pill anchored to the bar. */
 .status-word {
   padding: 1px 4px; background: var(--bg);
-  font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase;
+  font-size: var(--text-tag); font-weight: 700; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase;
   /* The trailing letter-space is offset, as the header tag does, so the word
      sits centred in its ground rather than shunted left. */
   text-indent: 0.1em; white-space: nowrap;
@@ -1170,15 +1213,15 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
   background: color-mix(in oklab, var(--danger) 10%, var(--surface));
 }
 .sanity-failure-icon { width: 56px; height: 56px; color: var(--danger); }
-.sanity-failure-title { margin: 12px 0 6px; font-size: 22px; color: var(--fg); }
+.sanity-failure-title { margin: 12px 0 6px; font-size: var(--text-heading); color: var(--fg); }
 .sanity-failure-message { margin: 0 0 18px; color: var(--fg); }
 .sanity-failure-table { margin: 0 auto 16px; border-collapse: collapse; min-width: min(100%, 420px); }
 .sanity-failure-table th, .sanity-failure-table td {
-  border: 1px solid var(--border); padding: 8px 14px; text-align: left; font-size: 14px;
+  border: 1px solid var(--border); padding: 8px 14px; text-align: left; font-size: var(--text-body);
 }
 .sanity-failure-table th { color: var(--muted); font-weight: 600; }
 .sanity-failure-table td:last-child { color: var(--danger); font-weight: 700; }
-.sanity-failure-advice { margin: 0; color: var(--muted); font-size: 14px; }
+.sanity-failure-advice { margin: 0; color: var(--muted); font-size: var(--text-body); }
 .sanity-failure-advice + .sanity-failure-advice { margin-top: 10px; }
 .msig-policy-print-root { display: none; }
 @media print {
@@ -1232,7 +1275,7 @@ td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; fon
 }
 
 input.bad, textarea.bad { border-color: var(--danger) !important; }
-.hint { font-size: 12px; margin: var(--space-control) 0 0; }
+.hint { font-size: var(--text-note); margin: var(--space-control) 0 0; }
 .hint.bad { color: var(--danger); }
 .hint.ok { color: var(--ok); }
 .hint.neutral { color: var(--muted); }
@@ -1263,7 +1306,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   position: absolute; right: 0; bottom: 100%; z-index: 4;
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 2px 6px; border: 0; background: none; cursor: pointer;
-  font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0.1em;
+  font-size: var(--text-tag); font-weight: 700; line-height: 1; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--accent);
 }
 .workspace-more[hidden] { display: none; }
@@ -1362,7 +1405,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    starts at the top rather than floating against the middle of the stack. */
 #msig-summary .key-summary-text { align-self: flex-start; }
 .key-summary-fingerprint { display: block; font-family: var(--mono); font-weight: 700; letter-spacing: 0.04em; color: var(--fg); }
-.key-summary-meta { margin: 2px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.key-summary-meta { margin: 2px 0 0; color: var(--muted); font-size: var(--text-note); line-height: 1.35; }
 /* The keys the multisig was built from, in the order its script uses them.
    Readouts rather than controls: no edge and no corner of their own, the
    LifeHash carrying the only radius. */
@@ -1373,7 +1416,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .msig-summary-cosigners[hidden] { display: none; }
 /* Sorted keys share one row: a wider step between marks than above them. */
 .msig-summary-cosigners:not(.is-listed) { column-gap: var(--space-component); }
-.msig-summary-cosigner { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.msig-summary-cosigner { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-family: var(--mono); font-size: var(--text-data-small); }
 /* Under multi the order is the script's: one key per line, its path beneath. */
 .msig-summary-cosigners.is-listed { flex-direction: column; align-items: flex-start; }
 .msig-summary-cosigner-text { display: grid; }
@@ -1385,10 +1428,10 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    parent's LifeHash beside the fingerprint it names. */
 .bip85-child-parent { display: flex; align-items: center; gap: 6px; margin-top: var(--space-control); }
 .bip85-result-lineage { display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--space-control); }
-.bip85-result-lineage .key-lineage-arrow { font-size: 24px; }
+.bip85-result-lineage .key-lineage-arrow { font-size: var(--text-icon-small); }
 .bip85-parent-fingerprint { font-family: var(--mono); font-weight: 600; color: var(--fg); }
 .key-tab-lifehash { width: 22px; height: 22px; border-radius: 4px; image-rendering: pixelated; background: #fff; }
-.key-lineage-arrow { flex: 0 0 auto; color: var(--muted); font-family: var(--sans); font-size: 18px; line-height: 1; }
+.key-lineage-arrow { flex: 0 0 auto; color: var(--muted); font-family: var(--sans); font-size: var(--text-icon-inline); line-height: 1; }
 /* A derived multisig tab carries one small LifeHash per co-signer, sized
    down so a 2-of-3 still reads as a tab rather than a filmstrip. */
 .msig-tab-lifehashes { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 2px; }
@@ -1409,7 +1452,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .session-key-option, .msig-session-key {
   display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px;
   min-height: 44px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px;
-  background: var(--surface-2); color: var(--fg); font-family: var(--mono); font-size: 13px; cursor: pointer;
+  background: var(--surface-2); color: var(--fg); font-family: var(--mono); font-size: var(--text-data); cursor: pointer;
 }
 /* Selection is unmistakable: accent border and tint plus a check mark, so
    it does not rest on the border colour alone. */
@@ -1513,19 +1556,19 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-item:hover { border-color: var(--accent); }
 .journal-item-lifehash { width: 32px; height: 32px; border-radius: 6px; image-rendering: pixelated; grid-row: span 2; }
 .journal-item-label { font-weight: 700; }
-.journal-item-meta { color: var(--muted); font-size: 13px; }
+.journal-item-meta { color: var(--muted); font-size: var(--text-compact); }
 .journal-empty { color: var(--muted); margin: var(--space-component) 0 0; }
 .journal-editor { margin-top: var(--space-component); }
 #journal-view { margin-top: var(--space-component); }
 .journal-password-label { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
-.journal-password-validation { margin-inline-start: auto; font-size: 12px; font-weight: 700; line-height: 1.4; text-align: end; }
+.journal-password-validation { margin-inline-start: auto; font-size: var(--text-note); font-weight: 700; line-height: 1.4; text-align: end; }
 .journal-password-validation[hidden] { display: none; }
 .journal-password-validation.is-invalid { color: var(--danger); }
 .journal-password-validation.is-valid { color: var(--ok); }
 .journal-create-actions { align-items: center; }
-.journal-create-ready { display: inline-flex; align-items: center; gap: 7px; color: var(--ok); font-size: 13px; font-weight: 700; }
+.journal-create-ready { display: inline-flex; align-items: center; gap: 7px; color: var(--ok); font-size: var(--text-compact); font-weight: 700; }
 .journal-create-ready[hidden] { display: none; }
-.journal-create-ready-arrow { display: inline-block; font-size: 18px; line-height: 1; }
+.journal-create-ready-arrow { display: inline-block; font-size: var(--text-icon-inline); line-height: 1; }
 #journal-tool-tabs .key-tab:disabled,
 #journal-tool-tabs .key-tab:disabled:hover {
   background: transparent; color: var(--faint); opacity: .52; cursor: not-allowed;
@@ -1544,22 +1587,22 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
   padding: 0 0 12px;
 }
-.journal-format-control { min-width: 0; color: var(--muted); font-size: 12px; font-weight: 700; }
+.journal-format-control { min-width: 0; color: var(--muted); font-size: var(--text-note); font-weight: 700; }
 .journal-format-control > span { display: block; margin-bottom: 5px; }
-.journal-format-control .custom-select { margin-top: 0; font-size: 13px; }
+.journal-format-control .custom-select { margin-top: 0; font-size: var(--text-compact); }
 .journal-format-control .custom-select-button { min-height: 44px; padding-block: 8px; }
 .journal-format-control .custom-select-value > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .journal-key-control { grid-column: 1 / -1; }
 .journal-key-option-lifehash { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 4px; image-rendering: pixelated; background: #fff; }
 .journal-key-lineage { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 .journal-notes-wrap {
-  --journal-font-family: var(--mono); --journal-font-size: 13px; --journal-line-height: 1.6;
+  --journal-font-family: var(--mono); --journal-font-size: var(--text-data); --journal-line-height: 1.6;
   position: relative; border-radius: 0 12px 12px 12px; background: var(--bg);
 }
 .journal-notes-wrap[data-font="sans"] { --journal-font-family: var(--sans); }
 .journal-notes-wrap[data-font="serif"] { --journal-font-family: Georgia, "Times New Roman", serif; }
-.journal-notes-wrap[data-size="small"] { --journal-font-size: 12px; }
-.journal-notes-wrap[data-size="large"] { --journal-font-size: 16px; }
+.journal-notes-wrap[data-size="small"] { --journal-font-size: var(--text-data-small); }
+.journal-notes-wrap[data-size="large"] { --journal-font-size: var(--text-base); }
 .journal-notes-wrap[data-spacing="compact"] { --journal-line-height: 1.35; }
 .journal-notes-wrap[data-spacing="spacious"] { --journal-line-height: 1.9; }
 .journal-notes-text {
@@ -1602,7 +1645,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-notes-copy.is-copied, .journal-notes-copy.is-copied:not(:disabled):hover { color: var(--ok); }
 @media (prefers-reduced-motion: reduce) { .journal-notes-copy { transition: none; } }
 .journal-download-options { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
-.journal-encrypt-option { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; }
+.journal-encrypt-option { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: var(--text-note); font-weight: 700; cursor: pointer; }
 .journal-encrypt-option input { margin: 0; accent-color: var(--ok); }
 .journal-file-actions .journal-upload-action { margin-inline-start: auto; }
 .journal-notes-status { margin: 8px 0 0; }
@@ -1616,11 +1659,11 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-keymanager-empty { margin: 0; color: var(--muted); }
 .journal-keymanager-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
 .journal-keymanager-heading h3 { margin: 0; }
-.journal-keymanager-badge { color: var(--muted); font-size: 12px; font-weight: 700; }
+.journal-keymanager-badge { color: var(--muted); font-size: var(--text-label-small); font-weight: 700; }
 .journal-keymanager-badge.is-included { color: var(--ok); }
 .journal-keymanager-name { flex: 1 1 16rem; margin-top: var(--space-component); }
 .journal-keymanager-details { display: grid; grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr); gap: 8px 14px; margin: var(--space-component) 0 0; }
-.journal-keymanager-details dt { color: var(--muted); font-size: 12px; font-weight: 700; }
+.journal-keymanager-details dt { color: var(--muted); font-size: var(--text-label-small); font-weight: 700; }
 .journal-keymanager-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .journal-keymanager-entry-actions { margin-top: var(--space-component); }
 .journal-keymanager-ignore { margin-inline-start: auto; }
@@ -1630,15 +1673,15 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-keymanager-ignored-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
 .journal-keymanager-ignored-copy { min-width: 0; }
 .journal-keymanager-ignored-copy strong, .journal-keymanager-ignored-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.journal-keymanager-ignored-copy span { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.journal-keymanager-ignored-copy span { color: var(--muted); font-family: var(--mono); font-size: var(--text-data-small); }
 .journal-keymanager-file-actions { margin-top: var(--space-section); }
-.journal-keymanager-encryption-note { color: var(--muted); font-size: 12px; font-weight: 700; }
+.journal-keymanager-encryption-note { color: var(--muted); font-size: var(--text-note); font-weight: 700; }
 .journal-keymanager-status { margin: 8px 0 0; }
 .journal-keymanager-status:empty { display: none; }
 .journal-keymanager-status[data-state="error"] { color: var(--danger); }
 .journal-log-wrap { position: relative; margin: 0 0 14px; }
 .journal-log {
-  font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--mono); font-size: var(--text-data-small); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
   margin: 0; padding: 12px 44px 12px 12px; border: 1px solid var(--border); border-radius: 12px;
   background: #000; max-height: 420px; overflow: auto;
 }
@@ -1646,7 +1689,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .journal-log-copy { position: absolute; z-index: 1; top: 10px; right: 12px; }
 .journal-log-copy.is-copied, .journal-log-copy.is-copied:not(:disabled):hover { color: var(--ok); }
 .journal-log-actions #journal-log-clear { margin-inline-start: auto; }
-#journal-state-text { min-height: 280px; letter-spacing: 0; font-size: 13px; }
+#journal-state-text { min-height: 280px; letter-spacing: 0; font-size: var(--text-compact); }
 @media (min-width: 720px) {
   .journal-format-bar { grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(120px, 1fr)); }
   .journal-key-control { grid-column: auto; }
@@ -1688,12 +1731,12 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 }
 .vanity-prefix-fixed { --vanity-term-ground: color-mix(in oklab, var(--fg) 5%, transparent); }
 .vanity-prefix-result { --vanity-term-ground: var(--bg); }
-.vanity-prefix-fixed { max-width: 100%; white-space: nowrap; font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--muted); }
+.vanity-prefix-fixed { max-width: 100%; white-space: nowrap; font-family: var(--mono); font-size: var(--text-readout); font-weight: 700; color: var(--muted); }
 .vanity-prefix-result {
   max-width: 100%; overflow-x: auto; white-space: nowrap;
-  font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent);
+  font-family: var(--mono); font-size: var(--text-readout); font-weight: 700; color: var(--accent);
 }
-.vanity-prefix-plus { flex: 0 0 auto; color: var(--muted); font-size: 14px; }
+.vanity-prefix-plus { flex: 0 0 auto; color: var(--muted); font-size: var(--text-body); }
 .vanity-prefix-row input:not([type="radio"]):not([type="checkbox"]) { width: 100%; min-width: 0; margin-top: 0; text-align: center; }
 .vanity-secret { display: inline-flex; align-items: center; gap: 6px; }
 /* In the match table the copy box takes the Update Key button's height, so
@@ -1717,12 +1760,12 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 #vanity-prefix-label,
 #vanity-card > :is(.vanity-first-row, .current-item-actions) { margin-top: var(--space-major); }
 #vanity-method-label { margin-top: var(--space-intro); }
-.vanity-key { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.vanity-key { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: var(--text-data-small); white-space: nowrap; }
 .vanity-key code { font-family: var(--mono); }
-.vanity-apply { min-height: 36px; padding: 4px 12px; font-size: 12px; }
-.vanity-saved { display: inline-flex; align-items: center; gap: 6px; color: var(--ok-bright); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.vanity-apply { min-height: 36px; padding: 4px 12px; font-size: var(--text-note); }
+.vanity-saved { display: inline-flex; align-items: center; gap: 6px; color: var(--ok-bright); font-size: var(--text-note); font-weight: 600; white-space: nowrap; }
 .vanity-saved svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.psbt-kv { font-family: var(--mono); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.psbt-kv { font-family: var(--mono); font-size: var(--text-data); line-height: 1.55; overflow-wrap: anywhere; }
 /* A muted note inside a report line keeps the line's own size and rhythm;
    .muted alone would set it at 14px in a 13px line. */
 .psbt-kv .muted { font-size: inherit; line-height: inherit; }
@@ -1738,14 +1781,14 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .psbt-analysis-summary ul { margin: 0 0 8px; padding-left: 20px; }
 .psbt-analysis-summary > ul { padding-left: 0; list-style: none; }
 /* Label, verdict and the dash between them read at one size. */
-.psbt-analysis-summary > ul > li { font-size: 14px; }
+.psbt-analysis-summary > ul > li { font-size: var(--text-body); }
 /* A check's detail sits under its verdict as a tighter block: an inline span
    cannot set its line height below the line it sits in. */
 .psbt-analysis-summary li > .muted { display: block; line-height: 1.3; }
 /* The overall verdict is a <strong>, which the browser sets at 700; the
    report's headings sit at 600. */
 .psbt-analysis-summary > p > strong { font-weight: 600; }
-.psbt-analysis-summary > p:is(.psbt-ok, .psbt-warn, .psbt-bad, .psbted-note-ok, .psbted-note-warn, .psbted-note-bad) { font-size: 13px; }
+.psbt-analysis-summary > p:is(.psbt-ok, .psbt-warn, .psbt-bad, .psbted-note-ok, .psbted-note-warn, .psbted-note-bad) { font-size: var(--text-compact); }
 /* The report's sections — the analysis, where the coins go, what they spend —
    are parted by the same hairline the rest of the app uses. */
 .result-divider { height: 0; margin: var(--space-section) 0; border: 0; border-top: 1px solid var(--border); }
@@ -1794,7 +1837,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   box-shadow: 0 0 0 10px color-mix(in oklab, var(--accent) 16%, transparent);
 }
 /* Section titles in the editor read as the shared label, not as headings. */
-.psbted-map > h3 { margin: 0 0 4px; font: inherit; font-size: 14px; font-weight: 600; letter-spacing: normal; }
+.psbted-map > h3 { margin: 0 0 4px; font: inherit; font-size: var(--text-label); font-weight: 600; letter-spacing: normal; }
 /* Long forms mark where each section begins with a faint full-width band
    behind its label: the PSBT Editor's sections, the PSBT Inspector's result
    sections, MS Station's co-signer cards and its address settings.
@@ -1805,9 +1848,9 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   background: color-mix(in oklab, var(--fg) 5%, transparent);
 }
 .psbted-txhead { display: flex; flex-wrap: wrap; gap: 0 16px; margin-bottom: 4px; }
-.psbted-txhead label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.psbted-txhead label { display: flex; align-items: center; gap: 8px; font-size: var(--text-compact); }
 .psbted-txhead input { width: 11em; }
-.psbted-pairs { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 13px; table-layout: fixed; }
+.psbted-pairs { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: var(--text-compact); table-layout: fixed; }
 .psbted-pairs th, .psbted-pairs td { text-align: left; padding: 8px 8px 8px 0; vertical-align: top; overflow-wrap: anywhere; }
 #psbted-out :is(.psbted-pairs, .psbted-add) input { margin-top: 0; }
 .psbted-pairs th { font-weight: 600; color: var(--muted); }
@@ -1826,11 +1869,11 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .psbted-txins .psbted-col-seq { width: 15ch; }
 .psbted-txouts .psbted-col-val { width: 20ch; }
 .psbted-kv .psbted-col-field { width: 15em; }
-.psbted-pairs .psbted-name, .psbted-pairs .psbted-hex { font-family: var(--mono); font-size: 12px; }
+.psbted-pairs .psbted-name, .psbted-pairs .psbted-hex { font-family: var(--mono); font-size: var(--text-data-small); }
 /* Compact, data-table density: the fields fill their column and drop the
    global control sizing (full width comes from the fixed cell, not the
    field's own rule). */
-.psbted-pairs input, .psbted-add input, .psbted-add select, .psbted-build input, .psbted-build select { margin-top: 0; padding: 6px 8px; border-radius: 6px; font-size: 12px; min-height: 0; }
+.psbted-pairs input, .psbted-add input, .psbted-add select, .psbted-build input, .psbted-build select { margin-top: 0; padding: 6px 8px; border-radius: 6px; font-size: var(--text-field-small); min-height: 0; }
 .psbted-pairs .psbted-num { min-width: 0; }
 /* The decoded address under a scriptPubKey (and in a map section's "Pays"
    line) is one long unbroken bech32 string: wrap it anywhere so it can
@@ -1841,7 +1884,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    button stay compact at its right. */
 /* align-items keeps each control at its own height: stretching them to the
    tallest cell pushed the row past the shared 44px control height. */
-:is(.psbted-build, .psbted-add) > .btn { font-family: var(--sans); font-size: 14px; }
+:is(.psbted-build, .psbted-add) > .btn { font-family: var(--sans); font-size: var(--text-control-small); }
 .psbted-build { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; margin-top: 4px; align-items: center; }
 /* The picker's stacking margin belongs to stacked forms; in these one-line
    rows it only knocks the controls out of alignment. */
@@ -1857,12 +1900,12 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .psbted-result-value {
   margin-top: var(--space-control); padding: 10px 12px;
   border: 1px solid var(--border); background: var(--bg);
-  font-family: var(--mono); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere;
+  font-family: var(--mono); font-size: var(--text-data-small); line-height: 1.55; overflow-wrap: anywhere;
 }
 .psbted-stale { opacity: 0.55; }
 .psbted-map > p { overflow-wrap: anywhere; }
 /* The shared red button (.btn.red) at the size of a table row. */
-.psbted-del { width: 30px; height: 30px; min-height: 0; padding: 0; border-radius: 6px; font-size: 18px; }
+.psbted-del { width: 30px; height: 30px; min-height: 0; padding: 0; border-radius: 6px; font-size: var(--text-icon-inline); }
 .psbted-add { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 2fr) auto; gap: 8px; align-items: center; margin: 4px 0 14px; }
 /* The add row closes its map, so it carries the gap to the next one. */
 .psbted-map > .psbted-add:last-child { margin-bottom: var(--space-section); }
@@ -1903,7 +1946,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   /* A cell holding several parts (the scriptPubKey field, its address, the
      builder) keeps them all in the value column. */
   .psbted-stack tbody td > :not(.psbted-cell-label) { grid-column: 2; }
-  .psbted-cell-label { display: block; font-family: var(--sans); font-size: 12px; font-weight: 600; color: var(--muted); }
+  .psbted-cell-label { display: block; font-family: var(--sans); font-size: var(--text-label-small); font-weight: 600; color: var(--muted); }
   /* The transaction tables' first cell is a bare row index; stacked, it reads
      "Input 0" / "Output 0" as the block's heading. */
   .psbted-stack tbody td:first-child > .psbted-cell-label { display: inline; margin-right: 0.35em; font-size: inherit; color: inherit; }
@@ -1935,7 +1978,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .psbted-compare { padding-top: var(--space-component); }
 .psbted-pairs .psbted-col-mark { width: 1.8em; }
 .psbted-diff-mark { font-weight: 700; text-align: center; }
-#psbted-result textarea { font-family: var(--mono); font-size: 12px; min-height: 90px; }
+#psbted-result textarea { font-family: var(--mono); font-size: var(--text-field-small); min-height: 90px; }
 /* Transaction-flow visualizer (mempool.space-style): input boxes on the
    left, the unsigned transaction in the middle, output boxes on the right,
    with a bezier connector drawn from every box into the transaction. Every
@@ -1950,8 +1993,8 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .psbted-viz-line-in { stroke: var(--blue); }
 .psbted-viz-line-out { stroke: var(--ok); }
 .psbted-viz-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.psbted-viz-heading { margin: 0; font: inherit; font-size: 14px; font-weight: 600; letter-spacing: normal; color: var(--fg); }
-.psbted-viz-hint { margin: -4px 0 0; font-size: 12px; }
+.psbted-viz-heading { margin: 0; font: inherit; font-size: var(--text-label); font-weight: 600; letter-spacing: normal; color: var(--fg); }
+.psbted-viz-hint { margin: -4px 0 0; font-size: var(--text-note); }
 .psbted-viz-mid { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .psbted-viz-arrow { display: none; position: relative; flex: none; width: 30px; height: 2px; background: var(--faint); }
 .psbted-viz-arrow::after {
@@ -1960,23 +2003,23 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 }
 .psbted-viz-tx {
   min-height: 0; margin: 0; max-width: 230px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px;
-  background: var(--surface-2); color: inherit; font-size: 13px; text-align: center;
+  background: var(--surface-2); color: inherit; font-size: var(--text-compact); text-align: center;
 }
 /* A greyed line in the tx box is the same line in a quieter colour, so it
    keeps the box's type size instead of taking .muted's 14px. */
 .psbted-viz-txline { display: block; margin: 2px 0; font-size: inherit; overflow-wrap: anywhere; }
 .psbted-viz-feenum { font-family: var(--mono); }
 .psbted-viz-fee { font-weight: 600; }
-.psbted-viz-box { position: relative; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 8px 10px; font-size: 13px; }
+.psbted-viz-box { position: relative; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 8px 10px; font-size: var(--text-compact); }
 /* The whole box is the link: the button's overlay stretches over it, and the
    output amount field sits above the overlay so it stays editable. The box
    stands down while the pointer is on that field, which answers for itself. */
 .psbted-viz-open::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .psbted-viz-open {
   display: flex; gap: 8px; align-items: baseline; width: 100%; min-height: 0; margin: 0; padding: 0;
-  border: none; border-radius: 4px; background: none; color: inherit; font-size: 13px; text-align: left;
+  border: none; border-radius: 4px; background: none; color: inherit; font-size: var(--text-compact); text-align: left;
 }
-.psbted-viz-idx { flex: none; font-family: var(--mono); font-size: 13px; }
+.psbted-viz-idx { flex: none; font-family: var(--mono); font-size: var(--text-data); }
 .psbted-viz-id { font-family: var(--mono); overflow-wrap: anywhere; }
 .psbted-viz-in { color: var(--blue-ink); } /* the text blue the input map rows use */
 /* An output address is green wherever the editor names it: the diagram box
@@ -1985,13 +2028,13 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .psbted-viz-tag { color: var(--warn); }
 .psbted-viz-kind { color: var(--muted); }
 .psbted-viz-status { font-weight: 600; }
-.psbted-viz-amount { margin: 6px 0 0; font-family: var(--mono); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.psbted-viz-amount { margin: 6px 0 0; font-family: var(--mono); font-size: var(--text-data); font-weight: 600; overflow-wrap: anywhere; }
 /* Specificity matches the global text-input rule (two classes + element,
    later in the file) so the in-box field stays compact and inline. */
-.psbted-viz input.psbted-viz-sats { position: relative; z-index: 1; cursor: text; width: 12ch; min-width: 0; min-height: 0; margin-top: 0; padding: 4px 8px; border-radius: 6px; font-size: 13px; font-weight: 600; }
-.psbted-viz-sub { margin: 4px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.psbted-viz input.psbted-viz-sats { position: relative; z-index: 1; cursor: text; width: 12ch; min-width: 0; min-height: 0; margin-top: 0; padding: 4px 8px; border-radius: 6px; font-size: var(--text-compact); font-weight: 600; }
+.psbted-viz-sub { margin: 4px 0 0; font-size: var(--text-compact); overflow-wrap: anywhere; }
 /* Quiet lines inside a box are still box text: one size for all of them. */
-:is(.psbted-viz-box, .psbted-viz-tx) .muted { font-size: 13px; }
+:is(.psbted-viz-box, .psbted-viz-tx) .muted { font-size: var(--text-compact); }
 @media (max-width: 720px) {
   .psbted-viz-cols { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .psbted-viz-svg { display: none; }
@@ -2002,15 +2045,15 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .exp-cell {
   display: block; width: 100%; min-height: 0; margin-top: 0; padding: 6px 8px;
   border: 1px dashed var(--border); border-radius: 6px; background: none;
-  color: inherit; font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  color: inherit; font-family: var(--mono); font-size: var(--text-data-small); line-height: 1.55;
   text-align: left; overflow-wrap: anywhere; cursor: pointer;
 }
-.exp-len { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.exp-len { color: var(--muted); font-size: var(--text-caption); white-space: nowrap; }
 /* The overlay mirrors the disclaimer gate: dimmed page, one centered card. */
 .exp-meta { margin: 4px 0 0; }
 .exp-card textarea {
   min-height: 240px; max-height: 55vh; margin-top: var(--space-control);
-  font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere;
+  font-family: var(--mono); font-size: var(--text-field-small); overflow-wrap: anywhere;
 }
 .exp-card textarea[readonly] { color: var(--muted); }
 /* The QR reference overlay mirrors the expandable and disclaimer overlays:
@@ -2019,7 +2062,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    page is offline, so the user can scan the QR with an online phone. */
 .qr-ref-qr { display: inline-block; padding: 12px; background: #fff; border-radius: 8px; }
 .qr-ref-qr svg { display: block; width: 200px; height: 200px; }
-.qr-ref-url { margin: 16px 0 0; font-size: 12px; overflow-wrap: anywhere; word-break: break-all; }
+.qr-ref-url { margin: 16px 0 0; font-size: var(--text-note); overflow-wrap: anywhere; word-break: break-all; }
 .qr-ref-hint { margin: 12px 0 0; }
 /* Per-address QR: compact button in each address-table row, one shared overlay. */
 .addr-text {
@@ -2034,7 +2077,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 }
 .addr-qr {
   margin-left: 6px; padding: 1px 6px; border: 1px solid var(--faint); border-radius: 6px;
-  background: transparent; color: var(--muted); font: inherit; font-size: 10px;
+  background: transparent; color: var(--muted); font: inherit; font-size: var(--text-micro);
   letter-spacing: 0.05em; cursor: pointer; vertical-align: middle;
 }
 .addr-qr-image { cursor: pointer; }
@@ -2044,7 +2087,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .addr-qr-address-row { display: flex; align-items: center; justify-content: center; gap: 6px; margin: var(--space-control) 0 0; }
 .addr-qr-address {
   min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit;
-  font-size: 12px; overflow-wrap: anywhere; cursor: pointer;
+  font-size: var(--text-data-small); overflow-wrap: anywhere; cursor: pointer;
 }
 .addr-qr-address:hover { color: var(--selection-accent-ink); }
 /* Every viewer modal closes on one row: copy at the start, the actions that
@@ -2065,17 +2108,17 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .low-entropy-recommended { display: block; }
 /* The shortfall states the numbers plainly; the warning beside it is what
    carries the note treatment. */
-.low-entropy-message, .fingerprint-collision-message { margin: 0 0 var(--space-section); color: var(--fg); font-size: 14px; line-height: 1.5; text-align: center; }
+.low-entropy-message, .fingerprint-collision-message { margin: 0 0 var(--space-section); color: var(--fg); font-size: var(--text-body); line-height: 1.5; text-align: center; }
 .sp-result { margin-top: var(--space-component); }
 /* The address tab opens flush with the card like the other result views. */
 #sp-address-view > .sp-result, #sp-address-view > .sp-result > :first-child > .label:first-child,
 #sp-address-view > .sp-result > .edge-note:first-child { margin-top: 0; }
-.sp-address-value { padding: 10px; border: 1px solid var(--border); background: var(--bg); font-size: 16px; }
+.sp-address-value { padding: 10px; border: 1px solid var(--border); background: var(--bg); font-size: var(--text-readout-small); }
 /* The QR is a copy target too: a bare button around the code. */
 .sp-qr { display: block; width: min(220px, 100%); margin: var(--space-control) 0; padding: 0; border: 0; background: none; cursor: pointer; }
 .sp-copy > .btn { margin-top: var(--space-control); }
 /* Result status lines stay on the 14px body step. */
-#sp-out > p { font-size: 14px; }
+#sp-out > p { font-size: var(--text-body); }
 /* A plain value under its own label inside a match sits at the same step as
    the copyable address above it. */
 .sp-copy > .label + .psbt-kv { margin-top: var(--space-control); }
@@ -2190,12 +2233,12 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 }
 .master-fingerprint-lifehash[hidden] { display: none; }
 .master-fingerprint-label {
-  grid-column: 1; min-width: 0; color: var(--muted); font-size: 12px; line-height: 1.35;
+  grid-column: 1; min-width: 0; color: var(--muted); font-size: var(--text-label-small); line-height: 1.35;
   transition: color .16s ease, opacity .16s ease;
 }
 .master-fingerprint-value {
   grid-column: 1; min-width: 0; min-height: 1.25em; overflow: hidden; color: var(--fg); font-family: var(--mono);
-  font-size: 16px; font-weight: 700; line-height: 1.25; letter-spacing: .08em; white-space: nowrap;
+  font-size: var(--text-readout-small); font-weight: 700; line-height: 1.25; letter-spacing: .08em; white-space: nowrap;
   transition: color .16s ease, opacity .16s ease;
 }
 /* The card sets its own display, which outranks the browser's rule for the
@@ -2207,7 +2250,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   color: var(--faint); opacity: .58;
 }
 .master-fingerprint-arrow {
-  flex: 0 0 auto; color: var(--accent); font-size: 26px; line-height: 1;
+  flex: 0 0 auto; color: var(--accent); font-size: var(--text-icon-medium); line-height: 1;
   transition: color .16s ease, opacity .16s ease;
 }
 .master-fingerprint-arrow.is-disabled { visibility: hidden; opacity: 0; }
@@ -2240,7 +2283,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .tool-result-body > :last-child :last-child { margin-bottom: 0; }
 /* The nonce report is all verdict lines and r values: prose takes the 14px
    body size, the mono r values keep the report's own 13px. */
-:is(#nonce-out, #psbt-nonce-history-result, #psbted-result) { font-size: 14px; }
+:is(#nonce-out, #psbt-nonce-history-result, #psbted-result) { font-size: var(--text-body); }
 #nonce-out strong { font-weight: 600; }
 /* A run of toggles is fenced top and bottom. Each toggle draws the rule below
    itself, so only the first in a run draws one above: a second would stack
@@ -2266,14 +2309,14 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 :is(.derivation-advanced, .key-group, .msig-import, .sources, .wallet-advanced) > summary {
   display: inline-flex; align-items: center; gap: 2px; width: fit-content; min-height: 32px;
   margin-bottom: var(--space-control);
-  color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; list-style: none;
+  color: var(--muted); font-size: var(--text-label); font-weight: 600; cursor: pointer; list-style: none;
 }
 :is(.derivation-advanced, .key-group, .msig-import, .sources, .wallet-advanced) > summary::-webkit-details-marker { display: none; }
 :is(.derivation-advanced, .key-group, .msig-import, .sources, .wallet-advanced) > summary::before { content: "\25B8"; }
 /* The disclosure triangle, one size for every toggle: the details summaries
    draw it as a pseudo-element, the fairness button as a child span. */
 :is(.derivation-advanced, .key-group, .msig-import, .sources, .wallet-advanced) > summary::before, .dice-fairness-toggle [data-dice-fairness-glyph] {
-  display: inline-block; width: 0.6em; font-size: 26px; line-height: 1; transform: translateY(-2px);
+  display: inline-block; width: 0.6em; font-size: var(--text-icon-medium); line-height: 1; transform: translateY(-2px);
 }
 :is(.derivation-advanced, .key-group, .msig-import, .sources, .wallet-advanced)[open] > summary::before { content: "\25BE"; }
 :is(.derivation-advanced, .key-group, .msig-import, .sources, .wallet-advanced) > summary:focus-visible { outline-offset: 4px; border-radius: 3px; }
@@ -2297,7 +2340,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    leaving the two on a shared baseline instead of centred. */
 .derivation-advanced-fields :is(.field, .field-head) > label:not(.derivation-harden),
 .key-settings :is(.field, .field-head) > label:not(.derivation-harden) {
-  display: block; font-size: 14px; font-weight: 600; color: var(--fg);
+  display: block; font-size: var(--text-label); font-weight: 600; color: var(--fg);
 }
 .derivation-advanced .derivation-index-value input:not([type="checkbox"]) { padding-right: 12px; }
 .derivation-index-control {
@@ -2310,7 +2353,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .derivation-index-value input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .derivation-index-prime {
   position: absolute; top: 50%; left: 12px; transform: translateY(-50%);
-  color: var(--fg); font-family: var(--mono); font-size: 14px; white-space: pre; pointer-events: none;
+  color: var(--fg); font-family: var(--mono); font-size: var(--text-field); white-space: pre; pointer-events: none;
 }
 .derivation-index-prime::before { content: attr(data-index-value); color: transparent; }
 /* Scoped to the field rather than the control: the toggle that governs the
@@ -2342,7 +2385,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .derivation-harden {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   padding: 0; border: 0; background: none;
-  color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  color: var(--muted); font-size: var(--text-label-small); font-weight: 600; white-space: nowrap; cursor: pointer;
 }
 /* Grey at rest, like the accordion toggles: it qualifies the field rather than
    naming one, and at the title's own weight and colour the two competed for
@@ -2352,7 +2395,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 #passphrase-field[hidden], #master-fingerprint-preview[hidden], #script-type-field[hidden], #derivation-path-field[hidden],
 #derivation-advanced[hidden], #purpose-network-settings[hidden], #account-field[hidden], #address-range-settings[hidden] { display: none !important; }
 .field-note {
-  display: block; margin-top: var(--space-control); color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4;
+  display: block; margin-top: var(--space-control); color: var(--muted); font-size: var(--text-note); font-weight: 400; line-height: 1.4;
 }
 .address-estimate { color: var(--accent); }
 /* Until the key can be derived the estimate is not advice to act on, so it
@@ -2385,7 +2428,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 @media (max-width: 520px) {
   .master-fingerprint-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
   #calc-card .label.master-fingerprint-heading { margin: 0; }
-  .master-fingerprint-arrow { justify-self: center; transform: rotate(90deg); font-size: 22px; }
+  .master-fingerprint-arrow { justify-self: center; transform: rotate(90deg); font-size: var(--text-icon-small); }
 }
 .last-word-field { flex: 1 1 260px; max-width: 420px; margin-top: 0 !important; }
 .last-word-field .custom-select-list {
@@ -2427,7 +2470,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 }
 .derive-progress.is-complete { color: var(--ok); }
 .derive-progress.is-complete .derive-progress-bar { width: 100%; background: var(--ok); }
-.derive-progress-label { display: inline-flex; flex: 0 0 auto; min-width: 42px; align-items: center; justify-content: flex-end; gap: 4px; font-size: 12px; font-weight: 700; }
+.derive-progress-label { display: inline-flex; flex: 0 0 auto; min-width: 42px; align-items: center; justify-content: flex-end; gap: 4px; font-size: var(--text-note); font-weight: 700; }
 .derive-progress-label svg { display: block; width: 14px; height: 14px; }
 @media (prefers-reduced-motion: reduce) { .derive-progress-bar { transition: none; } }
 .msig-keys textarea { min-height: 72px; }
@@ -2476,7 +2519,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   appearance: textfield; flex: 0 0 54px; width: 54px !important; min-width: 54px; min-height: 30px !important;
   height: 30px; margin: 0 !important; padding: 0 8px !important; text-align: center;
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--fg);
-  font-family: var(--mono); font-size: 16px; font-weight: 700;
+  font-family: var(--mono); font-size: var(--text-readout-small); font-weight: 700;
 }
 .msig-threshold-number::-webkit-inner-spin-button,
 .msig-threshold-number::-webkit-outer-spin-button { appearance: none; margin: 0; }
@@ -2498,7 +2541,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   position: absolute; top: 50%; width: 24px; height: 24px; transform: translate(-50%, -50%);
   /* The handle names itself, so a dragged thumb still says which end it is. */
   display: grid; place-items: center;
-  color: #ededed; font-family: var(--mono); font-size: 14px; font-weight: 400; line-height: 1;
+  color: #ededed; font-family: var(--mono); font-size: var(--text-field); font-weight: 400; line-height: 1;
   border: 2px solid #a3a3a3; border-radius: 50%;
   /* The face is a flat colour under a fixed sheen, so hover can darken it on
      the same curve the edge already travels; a gradient alone cannot transition. */
@@ -2536,7 +2579,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 }
 .msig-threshold-ticks {
   position: relative; height: 19px; margin: 0 var(--msig-slider-inset);
-  color: var(--muted); font-family: var(--mono); font-size: 12px; line-height: 1; text-align: center;
+  color: var(--muted); font-family: var(--mono); font-size: var(--text-data-small); line-height: 1; text-align: center;
 }
 .msig-threshold-ticks span {
   position: absolute; top: 0; left: var(--msig-tick-position); width: max-content;
@@ -2554,7 +2597,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
  .msig-keys { display: grid; gap: var(--space-component); margin-top: var(--space-section); padding-top: var(--space-section); border-top: 1px solid var(--border); }
  .msig-keys .field { margin-top: 0; }
 .msig-key-row { display: grid; gap: var(--space-control); }
-.msig-key-title { margin-top: 0; color: var(--accent); font-size: 14px; }
+.msig-key-title { margin-top: 0; color: var(--accent); font-size: var(--text-label); }
 .msig-key-content { display: grid; min-width: 0; gap: 8px; }
 .msig-cosigner-advanced { padding-top: 8px; }
 /* The card's banded head: title left, the listed-order controls right. */
@@ -2566,7 +2609,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .section-band { margin-bottom: 12px; }
 .msig-output-advanced > .section-band { margin-top: 0; }
 .msig-key-move { display: flex; align-items: center; gap: 6px; }
-.msig-key-move-label { margin-right: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.msig-key-move-label { margin-right: 4px; color: var(--muted); font-size: var(--text-label-small); font-weight: 600; }
 .msig-key-move-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; min-height: 32px; height: 32px; padding: 0; }
 .msig-key-move-btn svg { width: 12px; height: 12px; fill: currentColor; }
 .msig-key-move-btn:disabled { opacity: 0.42; cursor: not-allowed; }
@@ -2577,7 +2620,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   /* With the slider gone the numbers answer to the note above them, so they
      take the step they would have had as the section's first control. */
   .msig-threshold-labels { margin-top: var(--space-section); }
-  .msig-threshold-labels label { font-size: 11px; }
+  .msig-threshold-labels label { font-size: var(--text-caption); }
   .msig-threshold-labels input.msig-threshold-number { flex: 0 0 auto; width: 56px !important; min-width: 56px; height: 40px; min-height: 40px !important; }
 }
 .bip85-grid, .ln-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 14px; margin-top: var(--space-component); }
@@ -2591,7 +2634,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    the larger of the two. */
 .bip85-path-row { margin: var(--space-component) 0 var(--space-section); }
 #bip85-out .edge-note:has(+ .bip85-actions) { margin-bottom: var(--space-section); }
-.bip85-path-row code { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.bip85-path-row code { font-family: var(--mono); font-size: var(--text-data); overflow-wrap: anywhere; }
 /* The actions close the bench, so they sit a step further from the block
    above them than peer controls do. */
 #bip85-out { margin-top: var(--space-component); }
@@ -2604,7 +2647,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .key-tab-strip { display: flex; align-items: flex-end; min-width: 0; margin-top: 12px; }
 .add-key {
   width: 36px; min-width: 36px; min-height: 44px; padding: 0; border: 0; border-radius: 0;
-  background: transparent; box-shadow: none; color: var(--muted); font-size: 28px; line-height: 1; cursor: pointer;
+  background: transparent; box-shadow: none; color: var(--muted); font-size: var(--text-icon-large); line-height: 1; cursor: pointer;
 }
 .add-key:not(:disabled):hover { background: transparent; color: var(--accent); }
 .add-key:focus-visible { outline-offset: -4px; }
@@ -2620,7 +2663,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   position: absolute; top: calc(100% + 10px); right: 0; z-index: 10; width: max-content; max-width: min(240px, calc(100vw - 32px));
   padding: 8px 10px; border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); border-radius: 8px;
   background: var(--surface-2); box-shadow: 0 8px 24px rgb(0 0 0 / .38); color: var(--fg);
-  font-size: 12px; font-weight: 600; line-height: 1.35; text-align: left; white-space: normal;
+  font-size: var(--text-note); font-weight: 600; line-height: 1.35; text-align: left; white-space: normal;
   opacity: 0; visibility: hidden; transform: translateY(-4px); pointer-events: none;
   transition: opacity .14s ease, transform .14s ease, visibility 0s linear .14s;
 }
@@ -2686,7 +2729,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .reveal-private-toggle {
   display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 9px 12px;
   border: 1px solid color-mix(in oklab, var(--warn) 40%, var(--border)); border-radius: 10px;
-  background: var(--surface-2); color: var(--fg); font-size: 14px; font-weight: 600; cursor: pointer;
+  background: var(--surface-2); color: var(--fg); font-size: var(--text-control-small); font-weight: 600; cursor: pointer;
 }
 .reveal-private-toggle input { margin: 0; accent-color: var(--blue); }
 .reveal-private-toggle-note { color: var(--muted); font-weight: 400; }
@@ -2727,7 +2770,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .edge-note-titled { margin-top: var(--space-component); }
 .edge-note-titled > .edge-note { margin-top: 0; }
 .edge-note-title {
-  margin: 0 0 6px; padding: 0 14px; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: normal;
+  margin: 0 0 6px; padding: 0 14px; font: inherit; font-size: var(--text-compact); font-weight: 600; letter-spacing: normal;
   text-transform: uppercase; color: var(--edge-note-color, inherit);
 }
 .edge-note-title.is-private { --edge-note-color: var(--danger-bright); }
@@ -2754,7 +2797,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
    Each note supplies only its colour. */
 .edge-note {
   margin: var(--edge-note-space-before, var(--space-component)) 0 var(--edge-note-space-after, 0); padding: 12px 14px; border: 0; border-left: 3px solid var(--edge-note-color, var(--border));
-  font-size: 14px; line-height: 1.5;
+  font-size: var(--text-body); line-height: 1.5;
   /* Lift the ground a little before tinting it: on pure black a mix this
      faint is invisible, and on pure white it has nowhere to go. */
   background: var(--edge-note-ground, color-mix(in oklab, var(--edge-note-color, var(--border)) 8%, color-mix(in oklab, var(--fg) 7%, var(--bg))));
@@ -2781,7 +2824,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 /* A tool intro titles the page rather than raising an alarm, so it keeps the
    plain lettering while warning notes take their edge colour. */
 .tool-intro.edge-note > :is(h2, h3) { color: var(--fg); }
-.edge-note > :is(h2, h3) { margin: 0 0 var(--space-control); font: inherit; font-size: 16px; font-weight: 600; letter-spacing: normal; color: var(--edge-note-color, inherit); }
+.edge-note > :is(h2, h3) { margin: 0 0 var(--space-control); font: inherit; font-size: var(--text-heading-note); font-weight: 600; letter-spacing: normal; color: var(--edge-note-color, inherit); }
 /* Paragraphs inside a note sit on the note's padding, not on their own
    default margins; only the gap between them is stated. */
 .edge-note > p { margin: 0; }
@@ -2847,7 +2890,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   background: var(--surface);
   /* One row size for the script type buttons and the privacy bar, so the two
      stack as matching strips: same edge, padding and lettering. */
-  --toolbar-row-padding: 10px 14px; --toolbar-row-font: 14px; --toolbar-row-weight: 600;
+  --toolbar-row-padding: 10px 14px; --toolbar-row-font: var(--text-control-small); --toolbar-row-weight: 600;
 }
 /* The script type stays one horizontal strip at every width: it never wraps,
    so the shared stacking never engages, and on phones the two SegWit labels
@@ -2856,7 +2899,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 /* Two buttons do not need the whole card; phones take the full row back. */
 .segmented-control.is-wide.is-half { max-width: 50%; }
 .key-view-toolbar .segmented-control > .tab, .segmented-control.is-wide > .tab {
-  flex: 1 1 0; min-height: 0; padding: var(--toolbar-row-padding, 10px 14px); font-size: var(--toolbar-row-font, 14px); font-weight: var(--toolbar-row-weight, 600);
+  flex: 1 1 0; min-height: 0; padding: var(--toolbar-row-padding, 10px 14px); font-size: var(--toolbar-row-font, var(--text-control-small)); font-weight: var(--toolbar-row-weight, 600);
 }
 .script-label-short { display: none; }
 @media (max-width: 520px) {
@@ -2875,7 +2918,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
   padding: var(--toolbar-row-padding, 10px 14px);
   border: 1px solid var(--border); border-radius: 10px;
-  background: var(--surface-2); color: var(--muted); font-size: var(--toolbar-row-font, 14px); cursor: pointer;
+  background: var(--surface-2); color: var(--muted); font-size: var(--toolbar-row-font, var(--text-control-small)); cursor: pointer;
   transition: background-color .14s ease, border-color .14s ease, color .14s ease;
 }
 .privacy-bar input { margin: 0; }
@@ -2896,7 +2939,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .private-heading { display: inline-flex; align-items: center; }
 .private-field.is-revealed > .label, .private-heading.is-revealed { color: var(--danger-bright); }
 .privacy-bar-state { color: var(--fg); font-weight: var(--toolbar-row-weight, 600); }
-.privacy-bar-hint { font-size: 12px; }
+.privacy-bar-hint { font-size: var(--text-note); }
 .privacy-bar.is-revealed {
   border-color: var(--danger-bright);
   background: color-mix(in oklab, var(--danger-bright) 10%, var(--surface));
@@ -2944,7 +2987,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
      the 44px toggle beside it rather than keeping a button's side padding. */
   .page-footer-links .github-repo-link { flex: 0 0 44px; width: 44px; padding: 0; justify-content: center; }
   /* The wordmark gives back the width the icon-only buttons still need. */
-  .site-title { font-size: 19px; }
+  .site-title { font-size: var(--text-brand-compact); }
   .download-controls { gap: 6px; }
 }
 /* Below the common 412/414px Android widths the lockup is the last thing with
@@ -2959,7 +3002,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
      specificity. */
   .wrap { padding-left: 10px; padding-right: 10px; }
   .workspace-panel { padding: 20px 10px; }
-  .site-title { font-size: 17px; }
+  .site-title { font-size: var(--text-brand-narrow); }
   .download-controls { gap: 4px; }
 }
 @media (max-width: 520px) {
@@ -2989,7 +3032,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 /* The MS ring does not shrink its Station mark: normalize the key cluster to
    an 18px core. SP deliberately keeps its original compact 18px whole mark. */
 .multisig-tab-icon.bench-tab-icon { flex-basis: 21px; width: 21px; height: 24px; }
-.key-tab-label { display: inline-block; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.key-tab-label { display: inline-block; white-space: nowrap; font-size: var(--text-label); font-weight: 600; }
 .key-tab-editing { height: 44px; }
 .key-tabs .key-tab-editing input.key-tab-name-input {
   width: auto; min-width: 72px; max-width: none; min-height: 28px; height: 28px; margin: 0; padding: 3px 7px;
