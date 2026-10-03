@@ -330,7 +330,8 @@ cannot overwrite them:
 - Copies made inside the libraries the WebAssembly modules use, where the
   library offers no way to erase them (HMAC engines, `bip39::Mnemonic`, and
   the per-pair copies rust-bitcoin and serde_json make while the PSBT module
-  parses or rebuilds a file).
+  parses or rebuilds a file). End session zeroes both modules' whole memory,
+  which removes these too.
 
 Other copies are outside the browser, where the page cannot reach them at
 all. They can outlast the page and the browser, and some outlast a restart:
@@ -350,9 +351,18 @@ all. They can outlast the page and the browser, and some outlast a restart:
   encryption on and hibernation off before you load a key.
 - Avoid the clipboard for secrets where you can. If you use it, turn off
   clipboard history and sync first.
-- When you are done, close the browser and restart the computer. That is a
-  precaution, not a guarantee: a restart does not erase memory, and its
-  contents can survive a short power-off.
+- When you are done, press End session in the header. It wipes the page,
+  zeroes the WebAssembly modules' memory, empties the clipboard if
+  EntropyLab copied something, and asks the browser to close the tab.
+  Closing the tab is what erases the copies above: in a 2026-10-03 audit it
+  was the only step that left no copy of a secret in any Chrome or Edge
+  process. A tab you opened straight to the file closes; if it stays open,
+  close it yourself. Chrome and Edge keep running after the last window
+  closes unless "Continue running background apps" is off in their System
+  settings.
+- Then close the browser and restart the computer. That is a precaution, not
+  a guarantee: a restart does not erase memory, and its contents can survive
+  a short power-off.
 - None of this protects a computer that is already compromised: malware or a
   malicious browser extension can read a secret as you type it.
 

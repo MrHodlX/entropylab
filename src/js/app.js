@@ -33,11 +33,11 @@ import {
 import { inspectPsbtInscriptions, describeEnvelope } from "./inscription.js";
 import { parseOpReturn, describeOpReturn } from "./opreturn.js";
 import { parseRawTx, extractEcdsaSignatures, inscriptionHints, isPsbtMagic, serializeTx } from "./tx.js";
-import { wasmExports as hodlWasm, withInput as hodlWasmIn, withOutput as hodlWasmOut } from "./entropylab-wasm.js";
+import { retireWasm as hodlRetireWasm, wasmExports as hodlWasm, withInput as hodlWasmIn, withOutput as hodlWasmOut } from "./entropylab-wasm.js";
 // Published test vectors run through that same engine before boot; a host
 // that computes any of them wrong never gets a seed field (self-test.js).
 import { selfTestGate as hodlSelfTestGate, SELF_TESTS as hodlSelfTests, PSBT_SELF_TESTS as hodlPsbtSelfTests } from "./self-test.js";
-import { psbtWasmReady, psbtInspectDoc } from "./psbt-wasm.js";
+import { psbtWasmReady, psbtInspectDoc, retirePsbtWasm as hodlRetirePsbtWasm } from "./psbt-wasm.js";
 import { indexHdKey, indexSingleKey, matchOwnership, pathLabel } from "./ownership.js";
 import { hex as hodlHex } from "./coders.js";
 import { addressFor, addressFromScript, descriptorDerive, p2pkhScript, p2shP2wpkhScript, p2shScript, p2trKeyScript, p2wpkhScript, p2wshScript } from "./addresses.js";
@@ -113,7 +113,8 @@ import {
   wipeJournal,
 } from "./journal.js";
 import { keyVaultIdentity, parseKeyVault, serializeKeyVault } from "./keymanager.js";
-import { copyText } from "./clipboard.js";
+import { clearClipboard as hodlClearClipboard, copyText } from "./clipboard.js";
+import { endSession as hodlEndSession, initEndSessionConfirm } from "./end-session.js";
 const hodlBip39Wordlist = Object.freeze(bip39English);
 function hodlNote(key, vars) {
   return vars == null ? { key } : { key, vars };
@@ -16922,6 +16923,14 @@ function hodlInitTheme() {
     if (!hodlStoredThemeMode()) hodlApplyTheme(hodlReadThemeMode());
   });
 }
+// The header's End session control (end-session.js): wipes what the page
+// holds, retires both WebAssembly modules, empties a clipboard the page
+// wrote, and asks the browser to close the tab.
+function hodlInitEndSession() {
+  let button = document.getElementById("end-session");
+  let confirm = initEndSessionConfirm(() => hodlEndSession({ retireModules: [hodlRetireWasm, hodlRetirePsbtWasm], clearClipboard: hodlClearClipboard }));
+  if (button && confirm) button.addEventListener("click", () => confirm.open(button));
+}
 function hodlInitSecretFieldAutoClear() {
   let clearSecretFields = () => {
     hodlInvalidateDerivation();
@@ -17152,6 +17161,7 @@ async function hodlBoot() {
   hodlInitSegmentedControls();
   initQrReferences({ copy: hodlClipboardIconMarkup, copied: hodlCopiedIconMarkup });
   hodlInitDescriptorCopy();
+  hodlInitEndSession();
   hodlInitLocale(hodlApplyLocale);
 }
 // Curve operations need the WebAssembly module instantiated first (async in
