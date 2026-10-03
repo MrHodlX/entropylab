@@ -2221,7 +2221,7 @@ test("BIP-85 and SP Stations can bring in compatible existing roots", () => {
   assert.match(appSource, /function hodlPickSpSessionKey\(state\) \{/);
   assert.match(appSource, /document\.getElementById\("bip85-key"\)\.value = rootXprv;/);
   assert.match(appSource, /document\.getElementById\("sp-key"\)\.value = hodlResultMnemonic\(state\.result\) \|\| hodlResultRootXprv\(state\.result\) \|\| "";/);
-  assert.match(appSource, /document\.getElementById\("sp-pass"\)\.value = hodlResultHasSeed\(state\.result\) \? hodlPassphraseText\(state\.fields\?\.pass\) : "";/);
+  assert.match(appSource, /hodlSetStationPassphrase\("sp-pass", hodlResultHasSeed\(state\.result\) \? state\.fields\?\.pass : ""\);/);
   assert.match(appSource, /document\.getElementById\("bip85-key"\)\.addEventListener\("input"/);
   assert.match(appSource, /document\.getElementById\("sp-key"\)\.addEventListener\("input", detachStationKey\)/);
   // The selected chip is unmistakable: accent border and tint plus a check

@@ -689,6 +689,7 @@ function hodlQrSvg(e, t = "#111111", r = "#ffffff") {
 // the browser harness stages a --test-hooks variant instead.
 if (__ENTROPYLAB_TEST_HOOKS__ && globalThis.__entropyLabTest) globalThis.__entropyLabCrypto = { entropyToMnemonic: (hex) => hodlEntropyToMnemonic(hodlHex.decode(hex), hodlBip39Wordlist), mnemonicToEntropy: (mnemonic) => hodlHex.encode(hodlMnemonicToEntropy(mnemonic, hodlBip39Wordlist)), mnemonicToSeed: (mnemonic, passphrase) => hodlHex.encode(hodlMnemonicToSeed(mnemonic, passphrase)), validateMnemonic: (mnemonic) => hodlValidateMnemonic(mnemonic).ok, masterXprv: (mnemonic, passphrase) => hodlHDKey.fromMasterSeed(hodlMnemonicToSeed(mnemonic, passphrase)).privateExtendedKey, privateKeyInputIsValid: () => hodlPrivateKeyInputIsValid(), computeTargetLastWords: (words, targetWords) => hodlComputeTargetLastWords(words, targetWords), clearLastWordCache: () => hodlLastWordCache.clear(), validateTargetMnemonic: (value, targetWords) => hodlValidateTargetMnemonic(value, targetWords), bruteTargetLastWords: (value) => hodlLastWordCandidates(value) };
 if (__ENTROPYLAB_TEST_HOOKS__ && globalThis.__entropyLabTest) globalThis.__entropyLabPassphrase = () => hodlPassphraseText(hodlPassphraseFieldBytes());
+if (__ENTROPYLAB_TEST_HOOKS__ && globalThis.__entropyLabTest) globalThis.__entropyLabStationRoot = () => hodlStationSessionXprv();
 if (__ENTROPYLAB_TEST_HOOKS__ && globalThis.__entropyLabTest) globalThis.__entropyLabI18n = { sanitizeCatalogHtml: hodlSanitizeCatalogHtml, tHtml: hodlT, tAttr: hodlTAttr };
 var hodlRootEl = document.getElementById("btc-calc");
 if (!hodlRootEl) throw new Error("#app missing");
@@ -4284,6 +4285,64 @@ function hodlClearPassphraseField() {
     let field = document.getElementById("pass");
     if (field) field.value = "";
   }
+}
+// Silent Payments, the PSBT Inspector and the Nonce Inspector each keep a
+// BIP39 passphrase. The field shows bullets; the vault holds the code points.
+// None of these fields has the Key Station's BIP39-word editor, so the vault
+// stays active. A reader takes a byte copy and wipes it.
+var hodlStationPassphraseFields = Object.create(null);
+function hodlInitStationPassphraseVaults() {
+  for (let id of ["sp-pass", "psbt-pass", "nonce-pass"]) {
+    if (hodlStationPassphraseFields[id]) continue;
+    let field = document.getElementById(id);
+    if (!field) continue;
+    let vault = new PassphraseVault();
+    hodlStationPassphraseFields[id] = { vault, api: bindVaultField(field, vault) };
+  }
+}
+function hodlStationPassphraseBytes(id) {
+  let bound = hodlStationPassphraseFields?.[id];
+  if (bound) {
+    let bytes = bound.vault.bytes();
+    return bytes.length ? bytes : "";
+  }
+  let value = document.getElementById(id)?.value ?? "";
+  return value ? new TextEncoder().encode(value) : "";
+}
+// The run stamp has to change when the passphrase changes, including an edit
+// that keeps the same number of bullets. A hash does that without storing
+// the passphrase in the stamp.
+function hodlStationPassphraseStamp(id) {
+  let bytes = hodlStationPassphraseBytes(id);
+  try {
+    return bytes ? hodlHex.encode(hodlSha256(bytes)) : "";
+  } finally {
+    if (bytes) bytes.fill(0);
+  }
+}
+function hodlSetStationPassphrase(id, value) {
+  let bytes = hodlStoredPassphraseBytes(value);
+  let bound = hodlStationPassphraseFields?.[id];
+  try {
+    if (bound) bound.api.setBytes(bytes || new Uint8Array(0));
+    else {
+      let field = document.getElementById(id);
+      if (field) field.value = bytes ? hodlPassphraseText(bytes) : "";
+    }
+  } finally {
+    if (bytes) bytes.fill(0);
+  }
+}
+function hodlClearStationPassphrase(id) {
+  let bound = hodlStationPassphraseFields?.[id];
+  if (bound) bound.api.clear();
+  else {
+    let field = document.getElementById(id);
+    if (field) field.value = "";
+  }
+}
+function hodlStationSessionXprv() {
+  return (hodlPsbtHd || hodlSpHd)?.privateExtendedKey || "";
 }
 function hodlAnalyzeBip39Passphrase(value, activeCaret = null) {
   value = String(value ?? "");
@@ -8418,6 +8477,8 @@ function hodlPickPsbtSessionKey(state) {
       let field = document.getElementById(id);
       if (field) field.value = "";
     }
+    hodlClearStationPassphrase("psbt-pass");
+    hodlClearStationPassphrase("nonce-pass");
   } catch (exception) {
     let spec = hodlPsbtErrorSpec !== prior ? hodlPsbtErrorSpec : null;
     hodlPsbtErrorSpec = null;
@@ -10357,7 +10418,7 @@ var hodlPsbtCards = [
 // result on screen, so the card's run button waits for one of them to change.
 var hodlPsbtInspected = {};
 function hodlPsbtRunStamp(card) {
-  let value = (id) => String(document.getElementById(id)?.value || "").trim();
+  let value = (id) => id === "psbt-pass" || id === "nonce-pass" ? hodlStationPassphraseStamp(id) : String(document.getElementById(id)?.value || "").trim();
   return JSON.stringify([value(card.text), ...card.fields.map(value), hodlPsbtSessionSpec]);
 }
 function hodlMarkPsbtInspected(go) {
@@ -10421,6 +10482,8 @@ function hodlEndPsbtSession() {
     let field = document.getElementById(id);
     if (field) field.value = "";
   }
+  hodlClearStationPassphrase("psbt-pass");
+  hodlClearStationPassphrase("nonce-pass");
   for (let id of ["psbt-out", "nonce-out"]) {
     let output = document.getElementById(id);
     if (output) output.innerHTML = "";
@@ -10441,9 +10504,14 @@ function hodlRunNonce() {
   let prior = hodlPsbtErrorSpec;
   try {
     if (manual.trim()) {
-      hodlLoadPsbtKey(manual, document.getElementById("nonce-pass").value);
+      let pass = hodlStationPassphraseBytes("nonce-pass");
+      try {
+        hodlLoadPsbtKey(manual, pass || "");
+      } finally {
+        if (pass) pass.fill(0);
+      }
       document.getElementById("nonce-key").value = "";
-      document.getElementById("nonce-pass").value = "";
+      hodlClearStationPassphrase("nonce-pass");
     }
     // A run with no key loaded starts from no session, whatever the last one
     // said: an "ended" confirmation belongs to the session that ended.
@@ -10978,6 +11046,7 @@ function hodlDeleteActiveBip85() {
       hodlSpWipeKeys();
       document.getElementById("sp-key").value = "";
       document.getElementById("sp-pass").value = "";
+      hodlClearStationPassphrase("sp-pass");
       document.getElementById("sp-out").replaceChildren();
       document.getElementById("sp-session").textContent = hodlSpNote;
     }
@@ -11071,9 +11140,14 @@ function hodlRunPsbt() {
   output.innerHTML = "";
   try {
     if (manual.trim()) {
-      hodlLoadPsbtKey(manual, document.getElementById("psbt-pass").value);
+      let pass = hodlStationPassphraseBytes("psbt-pass");
+      try {
+        hodlLoadPsbtKey(manual, pass || "");
+      } finally {
+        if (pass) pass.fill(0);
+      }
       document.getElementById("psbt-key").value = "";
-      document.getElementById("psbt-pass").value = "";
+      hodlClearStationPassphrase("psbt-pass");
     }
     // A run with no key loaded starts from no session, whatever the last one
     // said: an "ended" confirmation belongs to the session that ended.
@@ -11131,6 +11205,7 @@ function hodlSpResetStation(message) {
     let field = document.getElementById(id);
     if (field) field.value = "";
   });
+  hodlClearStationPassphrase("sp-pass");
   let labels = document.getElementById("sp-verify-labels");
   if (labels) labels.value = "0";
   let account = document.getElementById("sp-account");
@@ -11272,7 +11347,7 @@ function hodlPickSpSessionKey(state) {
     hodlSpUseKey(state);
     // The station's key field shows the words, as the user would type them.
     document.getElementById("sp-key").value = hodlResultMnemonic(state.result) || hodlResultRootXprv(state.result) || "";
-    document.getElementById("sp-pass").value = hodlResultHasSeed(state.result) ? hodlPassphraseText(state.fields?.pass) : "";
+    hodlSetStationPassphrase("sp-pass", hodlResultHasSeed(state.result) ? state.fields?.pass : "");
     document.getElementById("sp-session").textContent = hodlSpNote;
   } catch (exception) {
     if (error) error.textContent = exception.message || String(exception);
@@ -11282,7 +11357,14 @@ function hodlPickSpSessionKey(state) {
 function hodlSpEnsureHd() {
   let manual = document.getElementById("sp-key")?.value;
   if (manual && manual.trim()) {
-    if (!hodlSpHd || !hodlSpSource.startsWith("key:")) hodlSpLoadKey(manual, document.getElementById("sp-pass")?.value);
+    if (!hodlSpHd || !hodlSpSource.startsWith("key:")) {
+      let pass = hodlStationPassphraseBytes("sp-pass");
+      try {
+        hodlSpLoadKey(manual, pass || "");
+      } finally {
+        if (pass) pass.fill(0);
+      }
+    }
     hodlRefreshStationKeyPickers();
   }
   if (!hodlSpHd || !hodlSpHd.privateKey) throw new Error("Choose a compatible existing key, or enter a BIP39 seed or root xprv.");
@@ -17062,6 +17144,7 @@ function hodlInitSecretFieldAutoClear() {
     let psbtKey = document.getElementById("psbt-key"), psbtPass = document.getElementById("psbt-pass");
     if (psbtKey) psbtKey.value = "";
     if (psbtPass) psbtPass.value = "";
+    hodlClearStationPassphrase("psbt-pass");
     let psbtText = document.getElementById("psbt-text"), psbtAxTranscript = document.getElementById("psbt-ax-transcript");
     if (psbtText) psbtText.value = "";
     if (psbtAxTranscript) psbtAxTranscript.value = "";
@@ -17069,6 +17152,7 @@ function hodlInitSecretFieldAutoClear() {
       let field = document.getElementById(id);
       if (field) field.value = "";
     }
+    hodlClearStationPassphrase("nonce-pass");
     hodlSyncPsbtControls();
     let bip85Key = document.getElementById("bip85-key"), bip85Out = document.getElementById("bip85-out"), bip85Error = document.getElementById("bip85-error"), bip85Session = document.getElementById("bip85-session");
     if (bip85Key) bip85Key.value = "";
@@ -17080,6 +17164,7 @@ function hodlInitSecretFieldAutoClear() {
     let spKey = document.getElementById("sp-key"), spPass = document.getElementById("sp-pass");
     if (spKey) spKey.value = "";
     if (spPass) spPass.value = "";
+    hodlClearStationPassphrase("sp-pass");
     let spVins = document.getElementById("sp-send-vins");
     if (spVins) spVins.value = "";
     let spOut = document.getElementById("sp-out"), spError = document.getElementById("sp-error"), spSession = document.getElementById("sp-session");
@@ -17221,6 +17306,7 @@ function hodlApplyLocale() {
 }
 async function hodlBoot() {
   hodlInitPassphraseVault();
+  hodlInitStationPassphraseVaults();
   hodlInitWorkspace();
   hodlInitAddressQr(hodlQrSvg, { copy: hodlClipboardIconMarkup, copied: hodlCopiedIconMarkup }, { frames: hodlPsbtQrFrames });
   hodlLowEntropyConfirm = initLowEntropyConfirm();
