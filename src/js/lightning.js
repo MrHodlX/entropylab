@@ -140,7 +140,7 @@ function hodlLnRender() {
       ${hodlLnCopyButton("ln-node-pubkey", "Copy node pubkey")}
       <p class="muted">Identity key path <code>${escapeHtml(r.path)}</code>${aezeed ? ` · coin type ${r.coinType} (${r.coinType === 1 ? "testnet" : "mainnet"})` : " · the LDK node identity does not depend on the network"}</p>
       ${aezeed ? `<p class="muted">Internal (key-derivation) version ${r.internalVersion} · wallet birthday day ${r.birthdayDays} (${escapeHtml(hodlLnBirthdayIso(r.birthdayTimestamp))} UTC, day 0 = Bitcoin genesis). Rescans from the birthday recover on-chain funds; channel funds need the node's channel backup.</p>` : `<p class="muted">Derived the ldk-node way: BIP39 seed → master key → its private key re-seeds a second BIP32 tree → node secret at <code>m/0'</code>.</p>`}
-      <label class="choice"><input type="checkbox" id="ln-reveal" ${secrets ? "checked" : ""}> <span>Reveal the root private key${aezeed ? " and decoded entropy" : ""}</span></label>
+      <label class="choice"><input type="checkbox" id="ln-reveal" data-private-reveal ${secrets ? "checked" : ""}> <span>Reveal the root private key${aezeed ? " and decoded entropy" : ""}</span></label>
       ${secrets ? `
         ${aezeed ? `<p class="label">Decoded entropy (the BIP32 master seed)</p>
         <p class="psbt-kv" id="ln-entropy" translate="no">${hex.encode(r.entropy)}</p>

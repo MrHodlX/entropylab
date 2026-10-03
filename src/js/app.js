@@ -115,6 +115,7 @@ import {
 import { keyVaultIdentity, parseKeyVault, serializeKeyVault } from "./keymanager.js";
 import { copyText } from "./clipboard.js";
 import { initTextServiceOptOuts, initTranslationWarning } from "./text-services.js";
+import { initConcealOnLeave } from "./conceal-on-leave.js";
 const hodlBip39Wordlist = Object.freeze(bip39English);
 function hodlNote(key, vars) {
   return vars == null ? { key } : { key, vars };
@@ -1698,7 +1699,7 @@ function hodlWalletMessages(wallet, idPrefix) {
 // their own switch id and description.
 function hodlPrivacyBarMarkup({ id = "reveal", revealed = hodlRevealPrivate, describedBy = "recovery-sheet-disclosure" } = {}) {
   return `<label class="privacy-bar${revealed ? " is-revealed" : ""}">
-    <input type="checkbox" role="switch" id="${id}" ${revealed ? "checked" : ""}${describedBy ? ` aria-describedby="${describedBy}"` : ""} />
+    <input type="checkbox" role="switch" id="${id}" data-private-reveal ${revealed ? "checked" : ""}${describedBy ? ` aria-describedby="${describedBy}"` : ""} />
     <span class="privacy-bar-state">${revealed ? hodlT("Private data visible") : hodlT("Private data hidden")}</span>
     <span class="privacy-bar-hint">${revealed ? hodlT("Hide it before sharing your screen or stepping away") : hodlT("Reveal only offline, on an air-gapped computer")}</span>
   </label>`;
@@ -15546,7 +15547,7 @@ function hodlJournalOpenView(id) {
       </div>
       <div class="wallet-data-actions no-print">
         <label class="reveal-private-toggle">
-          <input type="checkbox" id="journal-reveal" ${hodlJournalReveal ? "checked" : ""} aria-describedby="journal-private-description">
+          <input type="checkbox" id="journal-reveal" data-private-reveal ${hodlJournalReveal ? "checked" : ""} aria-describedby="journal-private-description">
           <span>Show seed <span class="reveal-private-toggle-note">(air-gap only)</span></span>
         </label>
         <button class="btn secondary" id="journal-copy-input" type="button">Copy input</button>
@@ -16925,6 +16926,22 @@ function hodlInitTheme() {
     if (!hodlStoredThemeMode()) hodlApplyTheme(hodlReadThemeMode());
   });
 }
+// Leaving the page hides every revealed private value (conceal-on-leave.js
+// says when). The tabs not on screen drop their flag first, so none comes
+// back revealed; then each switch on screen is turned off through its own
+// change handler, so its view re-renders masked exactly as a click would.
+// Five minutes untouched is long enough to copy a phrase onto paper.
+var hodlRevealIdleMs = 5 * 60 * 1000;
+function hodlConcealPrivateValues() {
+  for (let state of [...hodlKeys, ...hodlBip85Children, ...hodlSpAddresses]) state.reveal = false;
+  if (hodlSpVerifyMatches) hodlSpVerifyMatches.reveal = false;
+  hodlRevealPrivate = hodlBip85Reveal = hodlVanityReveal = hodlJournalReveal = false;
+  for (let toggle of document.querySelectorAll("input[data-private-reveal]")) {
+    if (!toggle.checked || !toggle.isConnected) continue;
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
 function hodlInitSecretFieldAutoClear() {
   let clearSecretFields = () => {
     hodlInvalidateDerivation();
@@ -17143,6 +17160,7 @@ async function hodlBoot() {
   hodlInitMsigManager();
   hodlInitSpBench();
   hodlInitClearActionState();
+  initConcealOnLeave({ conceal: hodlConcealPrivateValues, idleMs: hodlRevealIdleMs });
   hodlInitSecretFieldAutoClear();
   hodlInitNetworkPicker();
   hodlInitTheme();

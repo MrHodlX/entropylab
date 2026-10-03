@@ -364,6 +364,10 @@ EntropyLab uses it:
   never offered to a cloud-synced vault.
 - Session restore. Chrome saves field contents in its session-restore files
   on disk unless a field is marked `autocomplete="off"`. Every field is.
+- The screen. Revealed private values are masked again when the window loses
+  focus or is hidden, and after five minutes without input, so that Windows
+  Recall, a screen share or a phone's app-switcher picture is less likely to
+  catch them.
 
 These opt-outs only work when the software honors them. They do not stop an
 extension that ignores them, or one written to steal.
