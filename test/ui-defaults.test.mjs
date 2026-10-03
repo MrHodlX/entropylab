@@ -367,7 +367,7 @@ test("the BitBox word counter is coloured and its next roll sits on its own line
 test("seed phrase calculations and copy controls precede every numbered word grid", () => {
   // Fairness toggle, then its panel, then the seed phrase title row carrying
   // the copy button, then the grid it copies from.
-  assert.match(appSource, /\$\{dicePad\}[\s\S]*?hodlCalculationsSwitchMarkup\("manual", "dice-manual-calculations"[\s\S]*?<div class="dice-fairness-row" hidden>\$\{hodlDiceFairnessToggleMarkup\([\s\S]*?\)\}<\/div>[\s\S]*?\$\{hodlDerivedSeedRowMarkup\(\)\}\s*<div id="dice-words"/);
+  assert.match(appSource, /\$\{dicePad\}[\s\S]*?hodlCalculationsSwitchMarkup\("manual", "dice-manual-calculations"[\s\S]*?\$\{hodlDiceFairnessControlsMarkup\(hodlDiceMethod,[^\n]+\}\s*\$\{hodlDerivedSeedRowMarkup\(\)\}\s*<div id="dice-words"/);
   assert.match(appSource, /<div class="dealt-cards"[^>]*><\/div>[\s\S]*?hodlCalculationsSwitchMarkup\("manual", "cards-manual-calculations"[\s\S]*?\$\{hodlDerivedSeedRowMarkup\(\)\}\s*<div id="dice-words"/);
   assert.match(appSource, /\$\{entropyPad\}\s*\$\{[^\n]*hodlCalculationsSwitchMarkup\("number-base", "number-base-calculations"[^\n]*\n\s*\$\{hodlDerivedSeedRowMarkup\(\)\}\s*<div id="entropy-words"/);
   assert.match(appSource, /<\/div>\$\{hodlSeedPhraseRowMarkup\(hodlT\("Your seed phrase"\)\)\}<div id="seed-number-words"/);

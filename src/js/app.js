@@ -3250,24 +3250,9 @@ function hodlDiceFairnessAssess(rolls, labels, title) {
   return { title: title || "Die", sides, n, minimum, remaining: Math.max(0, minimum - n), expected, chi, cdf, df, counts, enough, verdict };
 }
 function hodlDiceFairnessSamples(value, method, targetWords = hodlTargetWordCount) {
-  if (method === "dplus") {
-    let parsed = hodlDPlusRolls(value, targetWords), d8 = [], d16 = [], coins = [];
-    for (let group of parsed.groups) group.faces.forEach((face, position) => {
-      if (group.validity[position]) (position === 0 ? d8 : d16).push(face);
-    });
-    hodlDPlusFinalSteps(targetWords).forEach((step, index) => {
-      let face = (parsed.entries || [])[hodlSeedConfig(targetWords).partialWords * 3 + index]?.face;
-      if (!face) return;
-      if (step === "d8" && /^[1-8]$/.test(face)) d8.push(face);
-      else if (step === "d16" && hodlDPlusD16Value(face) !== null) d16.push(face);
-      else if (step === "coin" && /^[1-8]$/.test(face)) coins.push(Number(face) >= 5 ? "Tails" : "Heads");
-    });
-    return [
-      { id: "d8", title: "D8", rolls: d8, labels: ["1", "2", "3", "4", "5", "6", "7", "8"] },
-      { id: "d16", title: "D16 (0–F)", rolls: d16, labels: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"] },
-      { id: "coin", title: "Coin", rolls: coins, labels: ["Heads", "Tails"] }
-    ];
-  }
+  // Even the longest D++ transcript has only 24 D8 and 46 D16 rolls, below
+  // this panel's Pearson thresholds of 40 and 80, so it cannot complete.
+  if (method === "dplus") return [];
   if (method === "bitbox") {
     let config = hodlSeedConfig(targetWords), d4 = [], coins = [], diceInWord = [], words = 0;
     for (let character of String(value ?? "")) {
@@ -3325,6 +3310,12 @@ function hodlDiceFairnessIsOpen() {
 function hodlDiceFairnessToggleMarkup(open) {
   let expanded = Boolean(open);
   return `<button type="button" class="dice-fairness-toggle" id="dice-fairness-toggle" aria-controls="dice-fairness" aria-expanded="${expanded}" aria-label="${expanded ? hodlT("Hide die distribution / fairness analysis") : hodlT("Show die distribution / fairness analysis")}"><span data-dice-fairness-glyph aria-hidden="true">${expanded ? "\u25BE" : "\u25B8"}</span>${hodlT("Die Distribution / Fairness Analysis")}</button>`;
+}
+function hodlDiceFairnessControlsMarkup(method, open) {
+  // A complete D++ transcript can never reach the Pearson sample threshold,
+  // so do not put an unusable analysis control in the D++ document at all.
+  if (method === "dplus") return "";
+  return `<div class="dice-fairness-row" hidden>${hodlDiceFairnessToggleMarkup(open)}</div><aside id="dice-fairness" class="dice-fairness" hidden role="status" aria-live="polite"></aside>`;
 }
 function hodlSetDiceFairnessOpen(open) {
   let expanded = Boolean(open), state = hodlKeys[hodlActiveKey], toggle = document.getElementById("dice-fairness-toggle"), glyph = toggle?.querySelector("[data-dice-fairness-glyph]");
@@ -5962,8 +5953,7 @@ function hodlRenderKeyForm() {
       <div class="dice-input-shell"><pre class="dice-input-highlight" id="dice-highlight" aria-hidden="true"></pre><textarea id="dice" placeholder="${dicePlaceholder}" aria-describedby="dice-meta"></textarea></div>
       ${dicePad}
       ${hodlDiceMethod === "bitbox" || hodlDiceMethod === "dplus" ? hodlCalculationsSwitchMarkup("manual", "dice-manual-calculations", hodlT("show how direct word selection produces each BIP39 index"), hodlManualCalculationsOpen) : ""}
-      <div class="dice-fairness-row" hidden>${hodlDiceFairnessToggleMarkup(hodlKeys[hodlActiveKey]?.showDiceFairness)}</div>
-      <aside id="dice-fairness" class="dice-fairness" hidden role="status" aria-live="polite"></aside>
+      ${hodlDiceFairnessControlsMarkup(hodlDiceMethod, hodlKeys[hodlActiveKey]?.showDiceFairness)}
       ${hodlDerivedSeedRowMarkup()}
       <div id="dice-words" class="dice-word-grid" aria-label="${hodlT("{n} seed-word slots", { n: config.words })}"></div><div id="last-words" class="row last-word-options"></div>`;
     let input = document.getElementById("dice");

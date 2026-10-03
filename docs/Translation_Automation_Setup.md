@@ -42,12 +42,17 @@ Create it, then:
 
 ## 2. Configure the repository
 
-Settings → Secrets and variables → Actions:
+Secrets go in the `release` Environment, never at repository level: both
+translation jobs declare `environment: release`, and that environment's
+deployment-branch policy admits only `rock`, so a job on a collaborator's
+branch cannot read them (audit SC-1). Settings → Environments → `release`
+→ Environment secrets. Variables stay at repository level: Settings →
+Secrets and variables → Actions → Variables.
 
 | Kind | Name | Value |
 | --- | --- | --- |
-| Secret | `TRANSLATION_APP_PRIVATE_KEY` | full `.pem` contents, including the BEGIN/END lines |
-| Secret | `TRANSLATE_API_KEY` | API key for the chat-completions endpoint (e.g. an OpenRouter key) |
+| Environment secret | `TRANSLATION_APP_PRIVATE_KEY` | full `.pem` contents, including the BEGIN/END lines |
+| Environment secret | `TRANSLATE_API_KEY` | API key for the chat-completions endpoint (e.g. an OpenRouter key) |
 | Variable | `TRANSLATION_APP_ID` | the App ID from step 1 |
 | Variable | `TRANSLATION_APP_SLUG` | the App's slug, without `[bot]` |
 | Variable | `TRANSLATE_MODEL` | model id, e.g. `anthropic/claude-sonnet-4` on OpenRouter |

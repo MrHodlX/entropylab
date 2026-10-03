@@ -231,7 +231,7 @@ test("OpenTimestamps stamps the tested HTML off the Pages/test critical path", (
   const timestamp = workflowJob(workflow, "timestamp");
   assert.ok(timestamp, "timestamp job is missing");
   assert.match(timestamp, /ots stamp entropylab\.html/, "must stamp the candidate HTML");
-  assert.match(timestamp, /opentimestamps-client==0\.7\.2/, "pin the OTS client");
+  assert.match(timestamp, /--require-hashes --no-deps --only-binary :all: -r "\$GITHUB_WORKSPACE\/\.github\/ots-requirements\.txt"/, "install the hash-locked OTS client");
   assert.match(timestamp, /sha256sum -c -/, "must verify the candidate digest before stamping");
   assert.ok(jobNeeds(timestamp).includes("build"), "timestamp needs build (digest)");
   assert.ok(jobNeeds(timestamp).includes("artifact"), "timestamp runs after the HTML commit");
@@ -246,7 +246,7 @@ test("OpenTimestamps stamps the tested HTML off the Pages/test critical path", (
   // A still-pending proof exits non-zero; that is the normal state, not a
   // broken job.
   assert.match(upgrade, /if "\$OTS" upgrade entropylab\.html\.ots; then/, "a pending proof must not fail the upgrade job");
-  assert.match(upgrade, /opentimestamps-client==0\.7\.2/);
+  assert.match(upgrade, /--require-hashes --no-deps --only-binary :all: -r "\$GITHUB_WORKSPACE\/\.github\/ots-requirements\.txt"/);
   assert.doesNotMatch(upgrade, /npm run build/);
   assert.doesNotMatch(upgrade, /SHA256SUMS\.txt/);
   assert.match(upgrade, /uses: actions\/checkout@[0-9a-f]{40}/, "upgrade workflow pins checkout");
@@ -343,6 +343,78 @@ test("the artifact commit rebases over [skip ci] commits and steps aside for new
   // run for a superseded build: rock would carry a proof for HTML it does not.
   assert.match(artifact, /^    outputs:\n      superseded: \$\{\{ steps\.commit\.outputs\.superseded \}\}\n/m, "the artifact job exposes whether its build was superseded");
   assert.match(workflowJob(workflow, "timestamp"), /^    if: .*needs\.artifact\.outputs\.superseded != 'true'/m, "the timestamp job skips a superseded build");
+});
+
+// A release's assets come from two commits on rock: the HTML, its checksum
+// and its CID from the artifact commit, the OpenTimestamps proof from the
+// stamp commit after it. v1.0.0rc1 shipped the proof committed before its
+// build, which stamps the previous HTML. The release check fails any release
+// whose proof, checksum or CID describes other bytes. Its own script runs here
+// against scratch releases, with a stub `ots info` that reports the digest
+// each scratch proof holds.
+test("the release check rejects assets that describe other bytes than the released HTML", { skip: !shellTools && "needs bash and git" }, () => {
+  const workflow = read(".github/workflows/release-assets.yml");
+  assert.match(workflow, /^on:\n  release:\n    types: \[published\]\n/m, "the check runs when a release is published");
+  assert.match(workflow, /^permissions:\n  contents: read\n/m, "the check only reads");
+  for (const [, spec] of workflow.matchAll(/^\s*-?\s*uses:\s*(\S+)/gm)) {
+    assert.match(spec, /@[0-9a-f]{40}$/, `${spec} must be pinned to a 40-character commit SHA`);
+  }
+  assert.match(workflow, /--require-hashes --no-deps --only-binary :all: -r "\$GITHUB_WORKSPACE\/\.github\/ots-requirements\.txt"/, "install the hash-locked OTS client");
+  assert.match(workflow, /gh release download "\$TAG"/, "the check reads the published assets");
+  const step = workflowSteps(workflowJob(workflow, "check")).find((entry) => /name: Check the assets against the released HTML\n/.test(entry)) ?? "";
+  const script = step.split(/\n +run: \|\n/)[1]?.replace(/^ {10}/gm, "");
+  assert.ok(script, "the check step runs a script");
+
+  // "hello world" and its SHA-256 and CIDv1 from the published vectors. The
+  // other digest is the build before v1.0.0rc1, which its first proof
+  // stamped; the other CID names the empty input.
+  const html = "hello world";
+  const digest = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+  const cid = "bafkreifzjut3te2nhyekklss27nh3k72ysco7y32koao5eei66wof36n5e";
+  const other = "b75d8bc576074e4b0756284bd18cecf83d64408ca005c0334fd26cbb9dbfc1a7";
+  const otherCid = "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
+  const stub = "#!/bin/sh\n[ \"$1\" = info ] && [ -f \"$2\" ] || exit 1\nprintf 'File sha256 hash: %s\\nTimestamp:\\n' \"$(cat \"$2\")\"\n";
+
+  const temp = mkdtempSync(join(tmpdir(), "release-assets-"));
+  const check = (name, overrides = {}) => {
+    const runnerTemp = join(temp, name), release = join(runnerTemp, "release");
+    mkdirSync(join(runnerTemp, "ots/bin"), { recursive: true });
+    mkdirSync(release);
+    writeFileSync(join(runnerTemp, "ots/bin/ots"), stub, { mode: 0o755 });
+    const assets = {
+      "entropylab.html": html,
+      "SHA256SUMS.txt": `${digest}  entropylab.html\n`,
+      "CID.txt": `${cid}  entropylab.html\n`,
+      "entropylab.html.ots": digest,
+      ...overrides,
+    };
+    for (const [file, body] of Object.entries(assets)) {
+      if (body !== null) writeFileSync(join(release, file), body);
+    }
+    const result = spawnSync("bash", ["-c", script], { cwd: runnerTemp, env: { ...process.env, RUNNER_TEMP: runnerTemp, GITHUB_WORKSPACE: root }, encoding: "utf8" });
+    return { status: result.status, log: `${result.stdout}${result.stderr}` };
+  };
+  try {
+    const good = check("good");
+    assert.equal(good.status, 0, good.log);
+
+    const staleProof = check("stale-proof", { "entropylab.html.ots": other });
+    assert.notEqual(staleProof.status, 0, "a proof of the previous build must fail the release");
+    assert.match(staleProof.log, new RegExp(`title=Stale OpenTimestamps proof::.*${other}`));
+
+    const noProof = check("no-proof", { "entropylab.html.ots": null });
+    assert.notEqual(noProof.status, 0, "a release without a proof must fail");
+    assert.match(noProof.log, /title=Stale OpenTimestamps proof::/);
+
+    const staleSums = check("stale-sums", { "SHA256SUMS.txt": `${other}  entropylab.html\n` });
+    assert.notEqual(staleSums.status, 0, "a checksum of other bytes must fail the release");
+
+    const staleCid = check("stale-cid", { "CID.txt": `${otherCid}  entropylab.html\n` });
+    assert.notEqual(staleCid.status, 0, "a CID of other bytes must fail the release");
+    assert.match(staleCid.log, /title=Stale CID::/);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
 });
 
 test("repository links follow the Team Ooga Booga ownership", () => {

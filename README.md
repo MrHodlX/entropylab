@@ -1,7 +1,5 @@
 # EntropyLab
 
-## DO NOT USE WITH ACTUAL BITCOIN IN ANY WAY. ENTROPY LAB IS FOR TESTNET | SIGNET | REGTEST USE ONLY
-
 EntropyLab is a self-contained Bitcoin key and wallet calculator designed for
 offline, air-gapped use. It converts user-supplied entropy, seed phrases, and
 private keys into wallet recovery information without intentionally sending
@@ -29,15 +27,19 @@ import from restoring cleared secrets. Locking the journal also invalidates
 pending notebook and Key Manager imports. See [SECURITY.md](SECURITY.md) for
 the limits of browser-memory cleanup.
 
-- Accepts dice rolls, coin flips, hexadecimal entropy, BIP39 seed phrases,
-  extended keys, WIF keys, raw private keys, and Casascius mini private keys.
+- Accepts dice rolls, coin flips, playing-card transcripts, number-base
+  transcripts (binary through base64), hexadecimal entropy, BIP39 seed
+  phrases, extended keys, WIF keys, raw private keys, and Casascius mini
+  private keys. Optional live chi-squared fairness analysis flags biased dice
+  as rolls are entered for hashed-dice and BitBox input. D++ omits the panel
+  because a complete transcript cannot reach the panel's Pearson threshold.
   All five BIP39 phrase lengths (12, 15, 18, 21, and 24 words) are supported
   for every entropy entry method. A separate **Brain wallet — lab** mode hashes
   exact UTF-8 text with SHA-256 and uses the 32-byte digest as 256-bit BIP39
   entropy (24 words). That is not a BIP39 passphrase, not a Bitcoin Core hdseed
   or address-key backup, and not the private-key brain-wallet path (which treats
   the same hash as a secp256k1 scalar). Strength is the entropy of the text, not
-  the word count. Derive Wallet is required; the lab does not preview the
+  the word count. Derive Key is required; the lab does not preview the
   mnemonic while typing.
 - Derives BIP39 seeds, BIP32 extended keys, wallet fingerprints, addresses,
   and Bitcoin Core-compatible descriptors. Each master fingerprint is shown
@@ -62,8 +64,9 @@ the limits of browser-memory cleanup.
    type 1 uses Bitcoin Testnet, and custom indexes retain Mainnet address
    serialization. Hardened address children require private key material and
    therefore cannot be derived from multisig co-signer xpubs.
-   A network picker in the header (the Bitcoin-orange coin next to the network
-   name) shows the network every tool is set to and switches it — address
+    A network picker in the header (the Bitcoin-orange coin next to the network
+    name) offers Bitcoin, Testnet, Signet, and Regtest; it shows the network
+    every tool is set to and switches it — address
    formats, extended key versions, WIF prefixes, and coin-type defaults all
    follow, and each menu entry spells out the checks its choice implies. The
    PSBT tools read the picker's choice directly and have no network control of
@@ -74,7 +77,10 @@ the limits of browser-memory cleanup.
   requiring private keys. Multisig script type and purpose are separate as
   well; conventional script choices restore their standard purpose, while
   pasted co-signer origins auto-detect and must agree with the selected path
-  indexes and hardening choices. Addresses are derived from the exported
+  indexes and hardening choices. An exported wallet descriptor can also be
+  pasted to repopulate the station — quorum, script type, key order, and
+  co-signers; descriptors carrying private keys are refused. Addresses are
+  derived from the exported
   output descriptor itself by rust-miniscript (in the WASM crate), so the two
   cannot drift.
 - Inspects PSBT v0 transactions (paste, or upload a binary .psbt / hex or
@@ -86,7 +92,8 @@ the limits of browser-memory cleanup.
   anti-exfil (sign-to-contract) transcripts without a key, and can compare supported
   SegWit v0 SIGHASH_ALL signatures with RFC 6979, including Bitcoin Core-style low-r grinding, in a temporary session.
   Every input's declared sighash policy and each signature's appended sighash
-  byte are decoded without a key; anything other than exact SIGHASH_ALL is a
+  byte are decoded without a key; anything other than exact SIGHASH_ALL (or
+  Taproot's equivalent SIGHASH_DEFAULT) is a
   blocking warning. Finalized signatures that cannot be decoded or associated
   with a key block any clean nonce verdict. The report gives each check a
   completed, problem, or incomplete state and gives an overall incomplete
@@ -115,7 +122,8 @@ the limits of browser-memory cleanup.
 - Scans PSBT tap-leaf scripts and finalized witnesses for inscription envelopes
   (`OP_FALSE OP_IF "ord"`). Reports content-type, size, and text previews; does
   not number sats, fetch chain data, create inscriptions, or render images.
-- Edits PSBT v0 files field by field (a bip174.org-style editor backed by
+- Edits PSBT v0 and v2 (BIP-370) files field by field (a bip174.org-style
+  editor backed by
   rust-bitcoin compiled to WebAssembly): a mempool.space-style
   transaction-flow diagram draws one box per input and output (claimed
   amount, address or script template, signing status) with per-column totals
@@ -135,7 +143,11 @@ the limits of browser-memory cleanup.
   transaction, the signing state, and the PSBT metadata are diffed separately
   on the decoded contents, so reordered map serialization is not reported as
   a change. The comparison reports differences only; it does not judge
-  whether a change is safe. The editor never signs anything.
+  whether a change is safe. An edited PSBT too large for a static QR code is
+  shown as an animated `ur:crypto-psbt` fragment sequence for air-gapped
+  scanning, and an **Insane editing** switch lifts the consensus-layer checks
+  for deliberately broken files while still listing their problems. The
+  editor never signs anything.
 - Derives BIP-85 child entropy from the active key's BIP32 root (or a pasted
   root xprv): English BIP-39 mnemonics (12–24 words), HD-seed WIF, XPRV, HEX,
   and Base64/Base85 passwords. Same parent, application, and index always
@@ -177,7 +189,8 @@ the limits of browser-memory cleanup.
   so the Keys tab, its exports, and the Journal show the vanity wallet. BIP-85
   children stay unchanged. Found passphrases stay in
   page memory, are masked until revealed, and are wiped with the session.
-- Derives Lightning node identity public keys (Lightning tab) from a seed
+- Derives Lightning node identity public keys (a Lightning tab held back from
+  release navigation while its UI is polished) from a seed
   phrase: an LND 24-word **aezeed** cipher seed is deciphered in WebAssembly
   (scrypt key derivation, AEZ v5, CRC-32C checksum; a wrong passphrase is
   detected, unlike BIP39) and its entropy derives the node key at LND's
@@ -335,6 +348,23 @@ the limits of browser-memory cleanup.
   re-prefixed only when the path/script match: x = legacy, y = nested BIP49,
   z = native BIP84, Y = nested BIP48 multisig, Z = native BIP48 native-msig.
   Testnet uses t / u / v / U / V. There is no Taproot SLIP prefix.
+- Gates each release behind a two-step disclaimer: the first step warns that
+  the software is experimental, and the second names what the browser cannot
+  protect (keys paged to disk, clipboard history, memory surviving close) and
+  unlocks only after the reader types a proof digit — derived from how long
+  the warning was read, never from a CSPRNG. Acceptance is remembered per
+  version, so each new release asks again.
+- Guards the session with just-in-time warnings: deriving from less entropy
+  than recommended requires an explicit confirmation, and a newly derived key
+  whose master fingerprint matches another open key asks before it is kept.
+  While the page is offline, external reference links open as QR codes to
+  scan with an online device instead of navigating.
+- Offers optional on-screen keyboards for mouse-only entry of seed words,
+  passphrases, private keys, and Base64/Base32 text, and a footer toggle
+  between dark and light themes.
+- Speaks five languages: a header selector switches the interface between
+  English, German, Spanish, French, and Portuguese, with untranslated strings
+  falling back to English.
 
 ## Usage
 

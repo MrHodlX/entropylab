@@ -3435,6 +3435,20 @@
     assert(fairnessRow.hidden, "Cleared rolls left the fairness control behind");
   });
 
+  await test("D++ never renders fairness controls at any supported seed length", async () => {
+    await chooseMode("Dice rolls");
+    document.querySelector('input[name="dm"][value="dplus"]').click();
+    for (const words of [12, 15, 18, 21, 24]) {
+      chooseSeedWords(words);
+      await wait(0);
+      assert(document.querySelector('input[name="dm"][value="dplus"]')?.checked, `D++ was not active for ${words} words`);
+      assert(!document.getElementById("dice-fairness-toggle"), `D++ rendered the fairness toggle for ${words} words`);
+      assert(!document.getElementById("dice-fairness"), `D++ rendered the fairness panel for ${words} words`);
+    }
+    document.querySelector('input[name="dm"][value="coldcard"]').click();
+    assert(document.getElementById("dice-fairness-toggle") && document.getElementById("dice-fairness"), "Leaving D++ did not restore fairness controls");
+  });
+
   await test("dice, binary, passphrase, multisig, and PSBT inputs cannot inject markup", async () => {
     const payload = '<img src=x onerror="window.__browserTestInjected=true">';
     await chooseMode("Dice rolls");
