@@ -39,6 +39,7 @@ jobs:
     # (docs/Translation_Automation_Setup.md).
     if: vars.TRANSLATION_APP_ID != ''
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 60
     permissions:
       contents: read
@@ -85,6 +86,7 @@ jobs:
     needs: [translate]
     if: vars.TRANSLATION_APP_ID != ''
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 15
     permissions:
       contents: read
