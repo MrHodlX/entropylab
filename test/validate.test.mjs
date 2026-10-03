@@ -231,7 +231,7 @@ test("OpenTimestamps stamps the tested HTML off the Pages/test critical path", (
   const timestamp = workflowJob(workflow, "timestamp");
   assert.ok(timestamp, "timestamp job is missing");
   assert.match(timestamp, /ots stamp entropylab\.html/, "must stamp the candidate HTML");
-  assert.match(timestamp, /opentimestamps-client==0\.7\.2/, "pin the OTS client");
+  assert.match(timestamp, /--require-hashes --no-deps --only-binary :all: -r "\$GITHUB_WORKSPACE\/\.github\/ots-requirements\.txt"/, "install the hash-locked OTS client");
   assert.match(timestamp, /sha256sum -c -/, "must verify the candidate digest before stamping");
   assert.ok(jobNeeds(timestamp).includes("build"), "timestamp needs build (digest)");
   assert.ok(jobNeeds(timestamp).includes("artifact"), "timestamp runs after the HTML commit");
@@ -246,7 +246,7 @@ test("OpenTimestamps stamps the tested HTML off the Pages/test critical path", (
   // A still-pending proof exits non-zero; that is the normal state, not a
   // broken job.
   assert.match(upgrade, /if "\$OTS" upgrade entropylab\.html\.ots; then/, "a pending proof must not fail the upgrade job");
-  assert.match(upgrade, /opentimestamps-client==0\.7\.2/);
+  assert.match(upgrade, /--require-hashes --no-deps --only-binary :all: -r "\$GITHUB_WORKSPACE\/\.github\/ots-requirements\.txt"/);
   assert.doesNotMatch(upgrade, /npm run build/);
   assert.doesNotMatch(upgrade, /SHA256SUMS\.txt/);
   assert.match(upgrade, /uses: actions\/checkout@[0-9a-f]{40}/, "upgrade workflow pins checkout");
@@ -359,7 +359,7 @@ test("the release check rejects assets that describe other bytes than the releas
   for (const [, spec] of workflow.matchAll(/^\s*-?\s*uses:\s*(\S+)/gm)) {
     assert.match(spec, /@[0-9a-f]{40}$/, `${spec} must be pinned to a 40-character commit SHA`);
   }
-  assert.match(workflow, /opentimestamps-client==0\.7\.2/, "pin the OTS client");
+  assert.match(workflow, /--require-hashes --no-deps --only-binary :all: -r "\$GITHUB_WORKSPACE\/\.github\/ots-requirements\.txt"/, "install the hash-locked OTS client");
   assert.match(workflow, /gh release download "\$TAG"/, "the check reads the published assets");
   const step = workflowSteps(workflowJob(workflow, "check")).find((entry) => /name: Check the assets against the released HTML\n/.test(entry)) ?? "";
   const script = step.split(/\n +run: \|\n/)[1]?.replace(/^ {10}/gm, "");
