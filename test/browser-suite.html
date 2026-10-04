@@ -346,21 +346,25 @@
     assert(imageRequests.length === 0, "Hosted mode fetched an inlined image: " + imageRequests.join(", "));
   });
 
-  await test("header network picker switches the defaults every tool uses", async () => {
+  await test("footer network picker switches the defaults every tool uses", async () => {
     const picker = document.getElementById("network-picker");
     const button = document.getElementById("network-picker-button");
     const menu = document.getElementById("network-picker-menu");
     const label = document.getElementById("network-picker-label");
-    assert(picker && button && menu && label, "Header network picker is missing");
+    assert(picker && button && menu && label, "Network picker is missing");
     assert(menu.hidden && button.getAttribute("aria-expanded") === "false", "Network menu did not start closed");
-    equal(label.textContent, "Bitcoin", "Network picker did not start on Bitcoin");
+    // The closed button names the control; the choice is carried by the
+    // accessible name and data-network, so the label does not follow it.
+    const closedLabel = label.textContent;
+    assert(button.getAttribute("aria-label").includes("Bitcoin"), "Network picker did not start on Bitcoin");
     equal(picker.dataset.network, "mainnet", "Network picker did not tag mainnet");
     button.click();
     assert(!menu.hidden && button.getAttribute("aria-expanded") === "true", "Network menu did not open");
     const testnet = menu.querySelector('[data-network="testnet"]');
     assert(testnet && testnet.getAttribute("role") === "menuitemradio", "Testnet option is missing");
     testnet.click();
-    equal(label.textContent, "Testnet", "Network picker did not switch to Testnet");
+    assert(button.getAttribute("aria-label").includes("Testnet"), "Network picker did not switch to Testnet");
+    equal(label.textContent, closedLabel, "The picker label followed the choice");
     equal(picker.dataset.network, "testnet", "Network picker did not tag testnet");
     assert(menu.hidden, "Network menu stayed open after a pick");
     // Every tool's own network control follows the header's choice, through
@@ -378,7 +382,8 @@
     for (const network of ["signet", "regtest"]) {
       button.click();
       menu.querySelector(`[data-network="${network}"]`).click();
-      equal(label.textContent, network === "signet" ? "Signet" : "Regtest", "Network picker did not switch to " + network);
+      assert(button.getAttribute("aria-label").includes(network === "signet" ? "Signet" : "Regtest"), "Network picker did not switch to " + network);
+      equal(label.textContent, closedLabel, "The picker label followed the choice");
       equal(picker.dataset.network, network, "Network picker did not tag " + network);
       equal(document.getElementById("network").value, "1'", "Keys coin type did not follow " + network);
       equal(document.getElementById("msig-network").value, "1", "Multisig coin type did not follow " + network);
@@ -386,7 +391,7 @@
     }
     button.click();
     menu.querySelector('[data-network="mainnet"]').click();
-    equal(label.textContent, "Bitcoin", "Network picker did not switch back to Bitcoin");
+    assert(button.getAttribute("aria-label").includes("Bitcoin"), "Network picker did not switch back to Bitcoin");
     equal(document.getElementById("network").value, "0'", "Keys coin type did not restore mainnet");
     assert(document.getElementById("derivation-path").value.startsWith("m/84'/0'/0'"), "Derivation path did not restore mainnet");
     equal(document.getElementById("msig-network").value, "0", "Multisig coin type did not restore mainnet");
@@ -1258,8 +1263,8 @@
     const links = document.querySelector(".page-footer-links");
     const background = () => getComputedStyle(document.body).backgroundColor;
     assert(toggle && links && links.contains(toggle), "Theme toggle is missing from the footer control row");
-    assert(links.lastElementChild === toggle, "Theme toggle is not the last control in the footer row");
-    // It closes the page now; the header bar keeps only Download and the picker.
+    assert(links.lastElementChild.matches('a[href*="github.com"]') && toggle.nextElementSibling === links.lastElementChild, "Theme toggle is not just before the repository link at the end of the footer row");
+    // It closes the page now; the header bar keeps only Download and End session.
     assert(!document.querySelector(".download-controls").contains(toggle), "Theme toggle is still in the header bar");
     assert(links.querySelector(".github-repo-link"), "The repository link did not move to the footer with it");
     // Two icons, because there are two states to show.

@@ -34,7 +34,7 @@ export const endSessionCardHtml = () => `
   <div class="modal-card is-warning end-session-card" id="end-session-dialog" role="dialog" aria-modal="true" aria-labelledby="end-session-title" aria-describedby="end-session-message">
     <svg class="modal-warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
     <p class="modal-warning-title" id="end-session-title"></p>
-    <p id="end-session-message"></p>
+    <div class="end-session-text"><p id="end-session-message"></p></div>
     <div class="row tool-actions">
       <button class="btn red" id="end-session-confirm" type="button"></button>
       <button class="btn secondary" id="end-session-cancel" type="button"></button>
@@ -47,20 +47,34 @@ export const renderSessionEnded = (doc, { clipboardCleared = false } = {}) => {
   const main = doc.createElement("main");
   main.className = "sanity-failure";
   main.dataset.sessionEnded = "";
+  // The same card as the disclaimer gate: the power mark, the title in the
+  // warning red, then the sentences in one centred column.
   const card = doc.createElement("div");
-  card.className = "sanity-failure-card";
+  card.className = "modal-card is-warning end-session-card";
   card.setAttribute("role", "status");
-  const line = (tag, className, text) => {
-    const element = doc.createElement(tag);
-    element.className = className;
-    element.textContent = text;
-    card.append(element);
+  const svg = "http://www.w3.org/2000/svg";
+  const icon = doc.createElementNS(svg, "svg");
+  for (const [name, value] of [["class", "modal-warning-icon"], ["viewBox", "0 0 24 24"], ["fill", "none"], ["stroke", "currentColor"], ["stroke-width", "2"], ["stroke-linecap", "round"], ["stroke-linejoin", "round"], ["aria-hidden", "true"]]) icon.setAttribute(name, value);
+  for (const d of ["M12 3v9", "M6.3 6.3a8 8 0 1 0 11.4 0"]) {
+    const path = doc.createElementNS(svg, "path");
+    path.setAttribute("d", d);
+    icon.append(path);
+  }
+  const title = doc.createElement("h1");
+  title.className = "modal-warning-title";
+  title.textContent = t("Session ended");
+  const text = doc.createElement("div");
+  text.className = "end-session-text";
+  const line = (value) => {
+    const element = doc.createElement("p");
+    element.textContent = value;
+    text.append(element);
   };
-  line("h1", "sanity-failure-title", t("Session ended"));
-  line("p", "sanity-failure-message", t("EntropyLab wiped every key, seed and field this page held. A Vanity grind cut short mid-run is the one exception: its workers are stopped, not wiped — closing the tab covers them."));
-  line("p", "sanity-failure-advice", t("Close this tab now, or quit the browser: that is what erases the copies the browser keeps for itself. Reloading starts a new session but does not erase them."));
-  if (clipboardCleared) line("p", "sanity-failure-advice", t("The clipboard was emptied. Clipboard history and cloud clipboard sync keep their own copies of what was copied."));
-  line("p", "sanity-failure-advice", t("Chrome and Edge keep running after the last window closes unless “Continue running background apps” is off in their System settings."));
+  line(t("EntropyLab wiped every key, seed and field this page held. A Vanity grind cut short mid-run is the one exception: its workers are stopped, not wiped — closing the tab covers them."));
+  line(t("Close this tab now, or quit the browser: that is what erases the copies the browser keeps for itself. Reloading starts a new session but does not erase them."));
+  if (clipboardCleared) line(t("The clipboard was emptied. Clipboard history and cloud clipboard sync keep their own copies of what was copied."));
+  line(t("Chrome and Edge keep running after the last window closes unless “Continue running background apps” is off in their System settings."));
+  card.append(icon, title, text);
   main.append(card);
   doc.body.replaceChildren(main);
 };

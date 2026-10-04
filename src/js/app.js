@@ -16969,7 +16969,10 @@ function hodlInitNetworkPicker() {
     let key = ["mainnet", "testnet", "signet", "regtest"].includes(hodlNetworkChoice) ? hodlNetworkChoice : "mainnet";
     let name = hodlTText(hodlNetworkNames[key]);
     root.dataset.network = hodlNetworkChoice;
-    label.textContent = name;
+    // The closed picker names the control, not the choice: the options and
+    // their notes are read in the open menu, and the coin's colour and the
+    // accessible name still carry the current network.
+    label.textContent = hodlTText("Network");
     button.setAttribute("aria-label", hodlTText("Bitcoin network: {network}. Change the network the tools derive and check for", { network: name }));
     options.forEach((option) => option.setAttribute("aria-checked", String(option.dataset.network === hodlNetworkChoice)));
   };

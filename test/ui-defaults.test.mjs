@@ -70,27 +70,23 @@ test("wallet coin type indexes enable and default to mainnet", () => {
   assert.match(app, /coinType:String\(hodlDefaultCoinType\(\)\),coinTypeHarden:!0,network:hodlNetworkDefault/);
 });
 
-test("the header network picker sets the network every tool defaults to", () => {
+test("the network picker sets the network every tool defaults to", () => {
   for (const markup of [shell]) {
-    // The control rides the fixed header's action row, between the GitHub
-    // link and the theme toggle, and ships in the mainnet state.
-    const header = markup.indexOf('<div class="site-header no-print">');
-    const wrapper = markup.indexOf('<div class="wrap">');
+    // The control opens the footer's control row, before the language picker,
+    // and ships in the mainnet state.
+    const row = markup.indexOf('class="page-footer-links"');
     const picker = markup.indexOf('id="network-picker"');
-    assert.ok(header >= 0 && header < picker && picker < wrapper, "the network picker must sit inside the header");
-    const controls = markup.indexOf('class="download-controls"');
-    const download = markup.indexOf("download-html");
-    assert.ok(
-      controls >= 0 && controls < picker && download < picker,
-      "the picker belongs inside the header controls, after the download button",
-    );
+    const locale = markup.indexOf('id="locale-select"');
+    assert.ok(row >= 0 && row < picker && picker < locale, "the network picker opens the footer control row, before the language picker");
     assert.match(markup, /id="network-picker" data-network="mainnet"/);
     assert.match(markup, /id="network-picker-button"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*aria-controls="network-picker-menu"/);
     assert.match(markup, /aria-label="Bitcoin network: Bitcoin\. Change the network the tools derive and check for"/);
     // The Bitcoin Core icon's coin — orange disc, white B — beside the name.
     assert.match(markup, /<circle class="network-picker-coin" cx="12" cy="12" r="12"\/>/);
     assert.match(markup, /<path class="network-picker-b" fill-rule="evenodd"/);
-    assert.match(markup, /id="network-picker-label"[^>]*>Bitcoin</);
+    // The closed button names the control; the current network is carried by
+    // its accessible name (above) and data-network, not by the label.
+    assert.match(markup, /id="network-picker-label"/);
     assert.match(markup, /id="network-picker-menu" role="menu" aria-label="Bitcoin network"[^>]* hidden/);
     // Bitcoin Core's four networks, each carrying its coin beside the name.
     assert.match(markup, /role="menuitemradio" aria-checked="true" data-network="mainnet"/);
@@ -1192,11 +1188,12 @@ test("the page closes on a footer in both markups", () => {
       markup,
       /<footer class="page-footer muted no-print"><div>Team Ooga Booga<\/div><div class="page-footer-emoji">(?:🪨|\\u\{1FAA8\}) (?:🔥|\\u\{1F525\}) (?:🎲|\\u\{1F3B2\}) (?:🍌|\\u\{1F34C\})<\/div><div data-i18n-skip>Since 964013 (?:·|\\x[Bb]7|\\u00[Bb]7) <span class="page-footer-build">v\{\{VERSION\}\} (?:·|\\x[Bb]7|\\u00[Bb]7) commit <code>\{\{COMMIT_SHORT\}\}<\/code> <img class="page-footer-lifehash" id="page-footer-lifehash" data-commit="\{\{COMMIT\}\}" width="20" height="20" alt="LifeHash of the build commit" hidden><\/span><\/div><div class="page-footer-links">/,
     );
-    // A fourth row closes it: the two controls that left the header bar.
-    assert.match(
-      markup,
-      /<div class="page-footer-links"><a class="btn secondary blue github-repo-link"[\s\S]*?<button type="button" class="theme-toggle" id="theme-toggle"[\s\S]*?<\/button><\/div><\/footer>/,
-    );
+    // A fourth row closes it, in this order: network, language, theme, and
+    // the repository link last.
+    const row = markup.indexOf('class="page-footer-links"');
+    const order = ['id="network-picker"', 'id="locale-select"', 'id="theme-toggle"', 'github-repo-link'].map((handle) => markup.indexOf(handle, row));
+    assert.ok(order.every((at, i) => at > row && (i === 0 || at > order[i - 1])), `footer control row is out of order: ${order}`);
+    assert.ok(markup.indexOf("</footer>", row) > order.at(-1), "the footer control row must close the footer");
     // It closes the wrap, so nothing of the page follows it.
     assert.ok(
       markup.indexOf('class="page-footer') > markup.indexOf('class="card muted sources"'),
@@ -1380,12 +1377,12 @@ test("the site header is fixed, carries the logo, and holds the version, downloa
     // The version left the bar: it is the footer's build stamp now, and the
     // row needed the width for the network picker.
     assert.doesNotMatch(markup.slice(header, wrapper), /site-version/);
-    for (const control of [/class="btn secondary green download-html header-button"/, /id="network-picker-button"/]) {
+    for (const control of [/class="btn secondary green download-html header-button"/, /id="end-session"/]) {
       assert.match(markup.slice(header, wrapper), control, `the fixed header is missing ${control}`);
     }
-    // The repository link and the theme toggle close the page instead: they
-    // are in the footer's fourth row, not the bar.
-    for (const moved of [/github-repo-link/, /id="theme-toggle"/]) {
+    // The pickers, the repository link and the theme toggle close the page
+    // instead: they are in the footer's fourth row, not the bar.
+    for (const moved of [/github-repo-link/, /id="theme-toggle"/, /id="network-picker-button"/, /id="locale-select"/]) {
       assert.doesNotMatch(markup.slice(header, wrapper), moved, `${moved} should have left the header`);
       assert.match(markup.slice(markup.indexOf('class="page-footer-links"')), moved);
     }
