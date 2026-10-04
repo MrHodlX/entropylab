@@ -5964,7 +5964,8 @@
       // the same way; its own test extends a key's passphrase.)
       const keyId = await until(() => offered("sp-session-keys").find((id) => !before.has(id)), "the derived key in the SP picker");
       document.querySelector(`#sp-session-keys [data-key-id="${keyId}"]`).click();
-      await until(() => document.getElementById("sp-pass")?.value === "TREZOR", "the SP station to take the key's passphrase");
+      await until(() => document.getElementById("sp-pass")?.value === bullets(6), "the SP station to take the key's passphrase as bullets");
+      assert(!document.getElementById("sp-pass").value.includes("T"), "the SP passphrase field held the passphrase");
     } finally {
       if (document.getElementById("reveal")?.checked) document.getElementById("reveal").click();
       input(pass, "");
@@ -5973,6 +5974,93 @@
         document.getElementById("delete-key").click();
       }
       chooseSeedWords(24);
+    }
+  });
+
+  // The same vault on the station passphrase fields. Typing is cancelable
+  // beforeinput, as a browser delivers it. The SP tab name is the master
+  // fingerprint of the published xprv above (vectors[0].xprv), and the PSBT
+  // and Nonce session roots are that xprv itself. @scure/bip32 reports the
+  // fingerprint as b4e3f5ed; the empty passphrase is 73c5da0a.
+  await test("station passphrase fields hold only bullets, and the passphrase still derives the published seed", async () => {
+    const bullets = (n) => "\u2022".repeat(n);
+    const mnemonic = vectors[0].mnemonic;
+    const typePass = (field, text) => {
+      field.focus();
+      for (const character of text) field.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: character, cancelable: true, bubbles: true }));
+    };
+    const masked = (field, text) => {
+      equal(field.value, bullets([...text].length));
+      assert(!field.value.includes(text[0]), "the passphrase field held the passphrase");
+    };
+    try {
+      document.querySelector('#workspace [data-workspace="sp"]').click();
+      await until(() => !document.getElementById("sp-card").hidden, "SP station");
+      // The key-station vault test copies its passphrase here and leaves it.
+      // End session clears the vault; emptying the field by itself does not.
+      document.getElementById("sp-wipe").click();
+      await until(() => document.getElementById("sp-pass").value === "", "SP passphrase cleared before typing");
+      input(document.getElementById("sp-key"), mnemonic);
+      const spPass = document.getElementById("sp-pass");
+      typePass(spPass, "TREZOR");
+      masked(spPass, "TREZOR");
+      document.getElementById("sp-derive").click();
+      await until(() => [...document.querySelectorAll("#sp-tabs [role=tab]")].some((tab) => tab.textContent.includes("b4e3f5ed")), "SP address for the published TREZOR seed");
+      equal(spPass.value, "", "Derive left the SP passphrase in the field");
+      const created = [...document.querySelectorAll("#sp-tabs [role=tab]")].find((tab) => tab.textContent.includes("b4e3f5ed"));
+      created.click();
+      document.getElementById("delete-sp").click();
+      await until(() => ![...document.querySelectorAll("#sp-tabs [role=tab]")].some((tab) => tab.textContent.includes("b4e3f5ed")), "SP address tab removed");
+
+      document.querySelector('#workspace [data-workspace="psbt"]').click();
+      document.querySelector('#psbt-tool-tabs [data-psbt-tool="inspector"]').click();
+      await until(() => !document.getElementById("psbt-card").hidden, "PSBT Inspector");
+      document.getElementById("psbt-wipe").click();
+      input(document.getElementById("psbt-text"), "0000000000");
+      input(document.getElementById("psbt-key"), mnemonic);
+      const psbtPass = document.getElementById("psbt-pass");
+      typePass(psbtPass, "TREZOR");
+      masked(psbtPass, "TREZOR");
+      document.getElementById("psbt-go").click();
+      await until(() => document.getElementById("psbt-session").textContent.includes("passphrase"), "PSBT session from the passphrase");
+      equal(window.__entropyLabStationRoot(), vectors[0].xprv, "PSBT session root is not the published TREZOR xprv");
+      equal(psbtPass.value, "", "the PSBT run left the passphrase in the field");
+
+      document.querySelector('#psbt-tool-tabs [data-psbt-tool="nonce"]').click();
+      await until(() => !document.getElementById("nonce-card").hidden, "Nonce Inspector");
+      document.getElementById("nonce-wipe").click();
+      input(document.getElementById("nonce-text"), "0000000000");
+      input(document.getElementById("nonce-key"), mnemonic);
+      const noncePass = document.getElementById("nonce-pass");
+      typePass(noncePass, "TREZOR");
+      masked(noncePass, "TREZOR");
+      document.getElementById("nonce-go").click();
+      await until(() => document.getElementById("nonce-session").textContent.includes("passphrase"), "Nonce session from the passphrase");
+      equal(window.__entropyLabStationRoot(), vectors[0].xprv, "Nonce session root is not the published TREZOR xprv");
+      equal(noncePass.value, "", "the Nonce run left the passphrase in the field");
+
+      // A same-length edit stays bullets and must still re-enable Inspect.
+      document.querySelector('#psbt-tool-tabs [data-psbt-tool="inspector"]').click();
+      document.getElementById("psbt-wipe").click();
+      input(document.getElementById("psbt-text"), "0000000000");
+      typePass(psbtPass, "ab");
+      document.getElementById("psbt-go").click();
+      await until(() => document.getElementById("psbt-go").disabled, "Inspect to record the run");
+      equal(psbtPass.value, bullets(2));
+      psbtPass.focus();
+      psbtPass.setSelectionRange(0, 2);
+      psbtPass.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: "cd", cancelable: true, bubbles: true }));
+      equal(psbtPass.value, bullets(2), "a same-length edit put the passphrase in the field");
+      assert(!document.getElementById("psbt-go").disabled, "Inspect stayed disabled after a same-length passphrase edit");
+    } finally {
+      document.getElementById("sp-wipe")?.click();
+      document.getElementById("psbt-wipe")?.click();
+      const leftover = [...document.querySelectorAll("#sp-tabs [role=tab]")].find((tab) => tab.textContent.includes("b4e3f5ed"));
+      if (leftover) {
+        leftover.click();
+        document.getElementById("delete-sp").click();
+      }
+      document.querySelector('#workspace [data-workspace="calc"]').click();
     }
   });
 
