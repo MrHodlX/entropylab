@@ -5999,6 +5999,11 @@
     await until(() => written.length === 1, "the copy");
     assert(written[0], "the copy wrote nothing");
 
+    // Both modules' memory as the app holds it; after End session every byte
+    // must be zero (the pattern passes themselves are pinned in
+    // wasm-retire.test.mjs).
+    const memories = window.__entropyLabWasmMemory();
+    assert(memories.every((buffer) => new Uint8Array(buffer).some((b) => b !== 0)), "a module's memory was empty before End session");
     const button = document.getElementById("end-session");
     const overlay = () => document.getElementById("end-session-overlay");
     assert(button && overlay(), "End session control or its dialog is missing");
@@ -6025,6 +6030,7 @@
       refused = String(error?.message || error);
     }
     assert(/session has ended/.test(refused), "the crypto module still ran after End session");
+    assert(memories.every((buffer) => new Uint8Array(buffer).every((b) => b === 0)), "a module's memory survived End session");
   });
 
   await test("hosted application makes only expected same-origin connections", () => {

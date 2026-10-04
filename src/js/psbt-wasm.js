@@ -23,7 +23,7 @@
 // PSBT self-test vectors if it loaded; see self-test.js), Node initializes
 // synchronously at import time so the test suite stays synchronous.
 import { PSBT_WASM_B64 } from "./psbt-wasm-b64.js";
-import { makeStackScrub } from "./wasm-stack-scrub.js";
+import { makeStackScrub, overwriteWithPatterns } from "./wasm-stack-scrub.js";
 
 const wasmBytes = (() => {
   const binary = atob(PSBT_WASM_B64);
@@ -57,10 +57,11 @@ const requireReady = () => {
   if (retired) throw new Error("This session has ended; reload the page to start a new one.");
   if (!wasm) throw new Error("PSBT WebAssembly is not initialized yet; await psbtWasmReady.");
 };
-// End session: zeroes the whole linear memory and drops the instance, as
-// retireWasm does for the crypto module; every later call is refused.
-export const retirePsbtWasm = () => {
-  if (wasm) new Uint8Array(wasm.memory.buffer).fill(0);
+// End session: overwrites the whole linear memory with patterns, ending at
+// zero, and drops the instance, as retireWasm does for the crypto module;
+// every later call is refused.
+export const retirePsbtWasm = ({ onPass } = {}) => {
+  if (wasm) overwriteWithPatterns(new Uint8Array(wasm.memory.buffer), onPass);
   wasm = null;
   retired = true;
 };

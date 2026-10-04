@@ -4,7 +4,7 @@
 //
 // Contract: End session runs, in this order, every wipe the page runs when it
 // is left (a pagehide that is not a bfcache entry), the modules' retirement
-// (their whole linear memory zeroed), the clipboard clear, the page's
+// (their whole linear memory overwritten with patterns, then zeroed), the clipboard clear, the page's
 // replacement by the ended screen (nothing of the old DOM left), and
 // window.close(). A clipboard the browser refuses to clear does not stop the
 // rest. The live page (the header control, the dialog, a real tab) is covered
