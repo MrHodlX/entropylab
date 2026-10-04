@@ -6102,6 +6102,7 @@
     const missingOnFocus = problems(focused);
     focused.remove();
     assert(missingOnFocus.length === 0, `a field focused as it is added is missing ${missingOnFocus.join(" ")}`);
+  });
 
   // Browser translation (Chrome's and Edge's built-in translators) sends the
   // page's text to an online service, and the CSP cannot stop it, because the
