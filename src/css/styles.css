@@ -1093,20 +1093,20 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 /* min-width: 0 lets the row shrink on narrow screens rather than pushing the
    controls out of the bar. */
 .download-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-control); margin-left: auto; min-width: 0; }
-/* The download glyph sits left of the label at every width, and stands alone
-   once the labels collapse. */
-.download-mark { display: block; flex: 0 0 auto; }
+/* A header button's glyph (download, end session) sits left of the label at
+   every width, and stands alone once the labels collapse. */
+.download-mark, .download-controls > .btn > svg { display: block; flex: 0 0 auto; }
 /* Header controls sit below the app's default 44px so the bar stays slim.
    Keep --site-header-height in step. */
 .header-button, .journal-file-button { min-height: 40px; font-size: var(--text-control-small); }
-.download-controls > a, .journal-file-button { display: inline-flex; align-items: center; gap: var(--space-snug); text-decoration: none; }
+.download-controls > .btn, .journal-file-button { display: inline-flex; align-items: center; gap: var(--space-snug); text-decoration: none; }
 .journal-file-button .control-label { display: inline; }
 /* Centring puts the label's em box on the button's centre line, but a font's
    ascent leaves more room above the caps than its descent leaves below, so the
    glyphs land a pixel low next to a symmetric icon. This nudge is optical, not
    layout: it moves the ink, not the box. */
 .control-label { position: relative; top: -1px; }
-.download-controls .download-html { flex: 0 0 auto; }
+.download-controls > .btn { flex: 0 0 auto; }
 .locale-control { display: flex; align-items: center; flex: 0 0 auto; }
 .locale-select {
   min-height: 40px; padding: 0 8px; border-radius: var(--radius-control); border: 1px solid var(--border);
@@ -3040,7 +3040,7 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   .journal-page-tab.is-default .journal-page-tab-full { display: none; }
   .journal-page-tab.is-default .journal-page-tab-short { display: inline-block; }
   /* Icon-only: square them off against the 40px theme toggle. */
-  .download-controls .download-html { flex: 0 0 40px; width: 40px; padding: 0; justify-content: center; }
+  .download-controls > .btn { flex: 0 0 40px; width: 40px; padding: 0; justify-content: center; }
   /* The footer link loses its label with the rest, so it squares off against
      the 44px toggle beside it rather than keeping a button's side padding. */
   .page-footer-links .github-repo-link { flex: 0 0 44px; width: 44px; padding: 0; justify-content: center; }
