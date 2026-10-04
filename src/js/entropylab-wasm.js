@@ -17,7 +17,7 @@
 // waits on wasmReady. Node (the test suite) has no such limit, so there the
 // module is initialized synchronously at import time.
 import { ENTROPYLAB_WASM_B64 } from "./entropylab-wasm-b64.js";
-import { makeStackScrub, stackRegion } from "./wasm-stack-scrub.js";
+import { makeStackScrub, stackRegion, overwriteWithPatterns } from "./wasm-stack-scrub.js";
 
 export { stackRegion };
 
@@ -58,13 +58,13 @@ export const requireReady = () => {
   if (retired) throw new Error("This session has ended; reload the page to start a new one.");
   if (!wasm) throw new Error("EntropyLab WebAssembly is not initialized yet; await wasmReady.");
 };
-// End session: zeroes the whole linear memory (heap, shadow stack, the
-// module's own data) and drops the instance. What the buffers, the stack
-// scrub and the dependencies' unerasable heap copies held is gone at once;
-// the module cannot run again on the zeroed memory, so every later call is
-// refused.
-export const retireWasm = () => {
-  if (wasm) new Uint8Array(wasm.memory.buffer).fill(0);
+// End session: overwrites the whole linear memory (heap, shadow stack, the
+// module's own data) with patterns, ending at zero, and drops the instance.
+// What the buffers, the stack scrub and the dependencies' unerasable heap
+// copies held is gone at once; the module cannot run again on the zeroed
+// memory, so every later call is refused.
+export const retireWasm = ({ onPass } = {}) => {
+  if (wasm) overwriteWithPatterns(new Uint8Array(wasm.memory.buffer), onPass);
   wasm = null;
   retired = true;
 };

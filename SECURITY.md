@@ -335,8 +335,9 @@ cannot overwrite them:
 - Copies made inside the libraries the WebAssembly modules use, where the
   library offers no way to erase them (HMAC engines, `bip39::Mnemonic`, and
   the per-pair copies rust-bitcoin and serde_json make while the PSBT module
-  parses or rebuilds a file). End session zeroes both modules' whole memory,
-  which removes these too.
+  parses or rebuilds a file). End session overwrites both modules' whole
+  memory with the patterns 0x55, 0xAA and 0xFF and then zeroes it, which
+  removes these too.
 - A Vanity grind stopped mid-run. Its workers are terminated, not wiped:
   termination is a hard kill, so the worker never runs its own wipe and its
   memory — the seed words and passphrase it grinds on — is freed unzeroed.

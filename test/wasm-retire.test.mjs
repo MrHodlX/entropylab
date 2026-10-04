@@ -3,9 +3,10 @@
 // rust-bitcoin's per-pair copies) "remain until heap reuse" (SECURITY.md);
 // zeroing the whole linear memory removes them all at once.
 //
-// Contract: after retirement every byte of each module's linear memory is
-// zero, and every later call is refused with the session-ended error rather
-// than running on the zeroed memory. Its own test file, so retiring the
+// Contract: retirement overwrites each module's whole linear memory with the
+// patterns 0x55, 0xAA, 0xFF and then 0x00, every pass covering every byte, so
+// afterwards every byte is zero; every later call is refused with the
+// session-ended error rather than running on the zeroed memory. Its own test file, so retiring the
 // modules here cannot affect another suite.
 // Run with `npm test`.
 import { test } from "node:test";
@@ -13,6 +14,7 @@ import assert from "node:assert/strict";
 import { heap, retireWasm, wasmExports } from "../src/js/entropylab-wasm.js";
 import { sha256 } from "../src/js/hashes.js";
 import { psbtInspectDoc, psbtLoaderHeap, retirePsbtWasm } from "../src/js/psbt-wasm.js";
+import { overwriteWithPatterns } from "../src/js/wasm-stack-scrub.js";
 
 // BIP-174 valid vector 2 (hex form), the published vector the PSBT suites run.
 const VALID_PSBT = new Uint8Array(Buffer.from(
@@ -27,12 +29,45 @@ const VALID_PSBT = new Uint8Array(Buffer.from(
 // SHA-256("abc"), FIPS 180-2 appendix B.1.
 const ABC_SHA256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 const allZero = (bytes) => bytes.every((b) => b === 0);
+// The overwrite passes, in order; the last leaves the memory zeroed.
+const PASSES = [0x55, 0xaa, 0xff, 0x00];
+// Records each pass and whether it reached every byte of the memory.
+const passRecorder = () => {
+  const seen = [], lengths = [];
+  return {
+    seen,
+    lengths,
+    onPass: (pattern, bytes) => {
+      seen.push([pattern, bytes.every((b) => b === pattern)]);
+      lengths.push(bytes.length);
+    },
+  };
+};
+
+test("the pattern overwrite writes each pattern over every byte, in order, and ends at zero", () => {
+  const bytes = new Uint8Array(4096).map((_, i) => i * 31);
+  const { seen, onPass } = passRecorder();
+  overwriteWithPatterns(bytes, onPass);
+  assert.deepEqual(seen, PASSES.map((pattern) => [pattern, true]));
+  assert.ok(allZero(bytes));
+});
 
 test("retiring the crypto module zeroes its whole memory and refuses every later call", () => {
   assert.equal(Buffer.from(sha256(new TextEncoder().encode("abc"))).toString("hex"), ABC_SHA256);
-  const memory = heap();
-  assert.ok(!allZero(memory), "the module's memory holds its data before retirement");
-  retireWasm();
+  assert.ok(!allZero(heap()), "the module's memory holds its data before retirement");
+  // Regression: the heap grows during a session, which detaches every earlier
+  // view. Retirement must take the memory as it is at the end, so a secret in
+  // a page added late cannot sit outside the passes. The new page is marked so
+  // that a pass that skipped it would leave nonzero bytes behind.
+  const { memory } = wasmExports();
+  const grownFrom = memory.buffer.byteLength;
+  memory.grow(1);
+  new Uint8Array(memory.buffer, grownFrom).fill(0xa5);
+  const { seen, lengths, onPass } = passRecorder();
+  retireWasm({ onPass });
+  assert.deepEqual(lengths, PASSES.map(() => memory.buffer.byteLength), "a pass ran over a stale view of the memory");
+  assert.equal(memory.buffer.byteLength, grownFrom + 65536);
+  assert.deepEqual(seen, PASSES.map((pattern) => [pattern, true]), "a pass missed part of the memory");
   assert.ok(allZero(new Uint8Array(memory.buffer)), "bytes survived retirement");
   assert.throws(() => wasmExports(), /session has ended/);
   assert.throws(() => sha256(new TextEncoder().encode("abc")), /session has ended/);
@@ -42,7 +77,9 @@ test("retiring the PSBT module zeroes its whole memory and refuses every later c
   assert.ok(psbtInspectDoc(VALID_PSBT).inputs?.length, "the published vector must parse before retirement");
   const memory = psbtLoaderHeap();
   assert.ok(!allZero(memory));
-  retirePsbtWasm();
+  const { seen, onPass } = passRecorder();
+  retirePsbtWasm({ onPass });
+  assert.deepEqual(seen, PASSES.map((pattern) => [pattern, true]), "a pass missed part of the memory");
   assert.ok(allZero(new Uint8Array(memory.buffer)), "bytes survived retirement");
   assert.throws(() => psbtLoaderHeap(), /session has ended/);
   assert.throws(() => psbtInspectDoc(VALID_PSBT), /session has ended/);

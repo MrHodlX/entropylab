@@ -13,8 +13,9 @@
 //      is a hard kill, so the worker's message loop never runs wipeSecrets()
 //      and its linear memory is freed unzeroed — only closing the tab covers
 //      it;
-//   2. the WebAssembly modules' whole linear memory, zeroed, and the modules
-//      retired so nothing can run on them again;
+//   2. the WebAssembly modules' whole linear memory, overwritten with the
+//      patterns 0x55, 0xAA and 0xFF and then zeroed, and the modules retired
+//      so nothing can run on them again;
 //   3. the clipboard, emptied if this page wrote it;
 //   4. the page replaced by a short screen, which drops the old DOM;
 //   5. window.close(). A browser closes a tab by script only when it allows

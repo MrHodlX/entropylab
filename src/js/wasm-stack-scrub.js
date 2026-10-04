@@ -122,3 +122,15 @@ export const makeStackScrub = (bytes) => {
   };
   return { stackTop, bind, scrubStack, guard };
 };
+
+// End session's memory wipe, shared by both loaders' retirement: overwrites
+// every byte with 0x55, 0xAA and 0xFF, alternating and complementary bit
+// patterns, and finishes with 0x00, so the memory is left zeroed. Each pass
+// covers the whole region; `onPass(pattern, bytes)` lets the suite observe it.
+export const OVERWRITE_PATTERNS = Object.freeze([0x55, 0xaa, 0xff, 0x00]);
+export const overwriteWithPatterns = (bytes, onPass) => {
+  for (const pattern of OVERWRITE_PATTERNS) {
+    bytes.fill(pattern);
+    onPass?.(pattern, bytes);
+  }
+};
