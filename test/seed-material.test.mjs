@@ -14,6 +14,7 @@ import { mnemonicToSeedSync, entropyToMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { hex } from "@scure/base";
 import { renderSVG } from "uqr";
+import { VAULT_MASK } from "../src/js/passphrase-vault.js";
 import { loadAppFunctions } from "./app-slice-harness.mjs";
 
 // BIP39 test vectors (trezor/python-mnemonic vectors.json), passphrase "TREZOR".
@@ -174,6 +175,89 @@ test("PSBT, BIP-85, SP and Vanity load the wallet's own root and words", async (
   assert.equal(vanity.hodlVanityPlan(state, "passphrase", "p2wpkh").mnemonic, vector.words, "the passphrase grind's words");
   const parent = expected.derive("m/84'/0'"), plan = vanity.hodlVanityPlan(state, "derivation", "p2wpkh");
   assert.equal(hex.encode(plan.node), hex.encode(parent.privateKey) + hex.encode(parent.chainCode), "the derivation grind's node");
+});
+
+// Station passphrase fields (SP, PSBT, Nonce) keep the passphrase in a vault.
+// The field shows bullets. Readers take UTF-8 bytes. The root must be the
+// published BIP39 vector (VECTORS[0], passphrase TREZOR) as @scure/bip32
+// derives it from that seed; the field must not hold the passphrase text.
+class StationPassField {
+  constructor() {
+    this.value = "";
+    this.selectionStart = 0;
+    this.selectionEnd = 0;
+    this.listeners = new Map();
+  }
+  addEventListener(type, fn) {
+    const list = this.listeners.get(type) || [];
+    list.push(fn);
+    this.listeners.set(type, list);
+  }
+  setSelectionRange(start, end) {
+    this.selectionStart = start;
+    this.selectionEnd = end;
+  }
+  dispatchEvent(event) {
+    let prevented = false;
+    if (typeof event.preventDefault !== "function") event.preventDefault = () => { prevented = true; };
+    for (const fn of this.listeners.get(event.type) || []) fn(event);
+    return !(prevented || event.defaultPrevented);
+  }
+  type(text) {
+    for (const data of text) {
+      this.dispatchEvent({ type: "beforeinput", inputType: "insertText", data, cancelable: true, isComposing: false, dataTransfer: null, bubbles: true });
+    }
+  }
+}
+test("station passphrase fields hold only bullets and still derive the published TREZOR seed", async () => {
+  const vector = VECTORS[0], expected = rootOf(vector.words, vector.pass).privateExtendedKey;
+  const fields = new Map(["sp-pass", "psbt-pass", "nonce-pass", "psbt-text", "psbt-key", "nonce-text", "nonce-key"].map((id) => [id, new StationPassField()]));
+  const page = new Proxy(inert, { get: (target, key) => key === "getElementById" ? (id) => fields.get(id) || null : inert[key] });
+  const api = await load([
+    "hodlInitStationPassphraseVaults", "hodlStationPassphraseBytes", "hodlClearStationPassphrase", "hodlSetStationPassphrase",
+    "hodlSpLoadKey", "hodlSpHd", "hodlLoadPsbtKey", "hodlPsbtHd", "hodlPsbtWipeMem", "hodlPsbtRunStamp",
+  ], { document: page, hodlElement: () => inert });
+  api.hodlInitStationPassphraseVaults();
+  const bullets = VAULT_MASK.repeat(vector.pass.length);
+  const loadRoot = (kind, id) => {
+    const pass = api.hodlStationPassphraseBytes(id);
+    try {
+      if (kind === "sp") api.hodlSpLoadKey(vector.words, pass || "");
+      else api.hodlLoadPsbtKey(vector.words, pass || "");
+    } finally {
+      if (pass) pass.fill(0);
+    }
+    const node = kind === "sp" ? api.hodlSpHd : api.hodlPsbtHd;
+    assert.equal(node.privateExtendedKey, expected, `${id} derived a different root than the published TREZOR vector`);
+    node.wipePrivateData();
+  };
+  for (const id of ["sp-pass", "psbt-pass", "nonce-pass"]) {
+    const field = fields.get(id);
+    field.type(vector.pass);
+    assert.equal(field.value, bullets, `${id} showed the passphrase`);
+    assert.equal(field.value.includes("T"), false, `${id} kept a letter of the passphrase`);
+    loadRoot(id === "sp-pass" ? "sp" : "psbt", id);
+    api.hodlClearStationPassphrase(id);
+    assert.equal(field.value, "", `${id} stayed filled after clear`);
+    assert.equal(api.hodlStationPassphraseBytes(id), "", `${id} vault survived clear`);
+  }
+  // A key tab's stored passphrase is bytes. The station field shows bullets,
+  // and those bytes are the ones that derive.
+  const stored = new TextEncoder().encode(vector.pass);
+  api.hodlSetStationPassphrase("sp-pass", stored);
+  assert.equal(new TextDecoder().decode(stored), vector.pass, "setting the station passphrase wiped the caller's bytes");
+  assert.equal(fields.get("sp-pass").value, bullets, "setBytes wrote the passphrase into the field");
+  loadRoot("sp", "sp-pass");
+  // Same-length edits must change the PSBT run stamp. The field stays bullets
+  // either way, so stamping its value would treat "ab" and "cd" as the same run.
+  const pass = fields.get("psbt-pass");
+  pass.type("ab");
+  const first = api.hodlPsbtRunStamp({ text: "psbt-text", fields: ["psbt-key", "psbt-pass"] });
+  pass.setSelectionRange(0, pass.value.length);
+  pass.dispatchEvent({ type: "beforeinput", inputType: "insertText", data: "cd", cancelable: true, isComposing: false, dataTransfer: null, bubbles: true });
+  const second = api.hodlPsbtRunStamp({ text: "psbt-text", fields: ["psbt-key", "psbt-pass"] });
+  assert.equal(pass.value, VAULT_MASK.repeat(2), "a same-length edit put the passphrase in the field");
+  assert.notEqual(first, second, "a same-length passphrase edit did not change the run stamp");
 });
 
 test("the journal still records a derived key's words", async () => {

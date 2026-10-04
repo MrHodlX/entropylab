@@ -38,9 +38,9 @@ function functionSource(name) {
 // Every context gets the passphrase vault's helpers (passphrase-vault.js)
 // with no vault bound, so they read the field's own text, as these harnesses
 // model it, and the encoders a VM context lacks.
-const passphraseHelpers = ["hodlPassphraseVaultActive", "hodlPassphraseFieldBytes", "hodlStoredPassphraseBytes", "hodlPassphraseText", "hodlStorePassphrase", "hodlShowStoredPassphrase", "hodlClearPassphraseField"];
+const passphraseHelpers = ["hodlPassphraseVaultActive", "hodlPassphraseFieldBytes", "hodlStoredPassphraseBytes", "hodlPassphraseText", "hodlStorePassphrase", "hodlShowStoredPassphrase", "hodlClearPassphraseField", "hodlClearStationPassphrase"];
 function createContext(sandbox) {
-  const context = vm.createContext({ hodlPassphraseVaultField: null, hodlPassphraseShown: false, TextEncoder, TextDecoder, ...sandbox });
+  const context = vm.createContext({ hodlPassphraseVaultField: null, hodlPassphraseShown: false, hodlStationPassphraseFields: null, TextEncoder, TextDecoder, ...sandbox });
   for (const name of passphraseHelpers) vm.runInContext(functionSource(name), context);
   return context;
 }
@@ -232,6 +232,17 @@ const lifecycle = app.slice(start, end);
 // A key tab keeps its BIP39 passphrase as UTF-8 bytes (the passphrase
 // vault): leaving the page zeroes them, rather than dropping them for the
 // collector, and empties the field.
+test("pagehide clears a station passphrase vault, not only its field", () => {
+  const { context, events, fields } = raceHarness();
+  let cleared = false;
+  const field = { value: "\u2022\u2022\u2022\u2022\u2022\u2022", dataset: {} };
+  fields.set("sp-pass", field);
+  context.hodlStationPassphraseFields = { "sp-pass": { api: { clear() { cleared = true; field.value = ""; } } } };
+  events.pagehide({ persisted: false });
+  assert.equal(cleared, true, "pagehide left the SP passphrase vault in place");
+  assert.equal(field.value, "", "pagehide left the SP passphrase field filled");
+});
+
 test("pagehide zeroes each key tab's stored passphrase bytes", () => {
   const { context, events, fields } = raceHarness();
   const stored = new TextEncoder().encode("private passphrase");
