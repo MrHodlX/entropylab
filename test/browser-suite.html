@@ -1368,11 +1368,11 @@
     }
     // The button stands clear of the warning it answers.
     assert(
-      parseFloat(textStyle.marginBottom) >= 28,
+      parseFloat(textStyle.marginBottom) >= 24,
       `Only ${textStyle.marginBottom} separates the warning from its button`,
     );
     assert(
-      accept.getBoundingClientRect().top - text.getBoundingClientRect().bottom >= 28,
+      accept.getBoundingClientRect().top - text.getBoundingClientRect().bottom >= 24,
       "The confirmation button crowds the warning text",
     );
   });

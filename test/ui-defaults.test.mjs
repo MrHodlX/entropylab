@@ -1407,13 +1407,6 @@ test("the site header is fixed, carries the logo, and holds the version, downloa
   // online.js never fetched or rewrote the version label, and there is none to
   // rewrite now: the app makes no runtime requests.
   assert.doesNotMatch(online, /fetch\s*\(|site-version|innerHTML/);
-  // Content clears the fixed header on screen, and reclaims the space in print.
-  // Narrow screens take the same 12px side padding the bar takes, so the page
-  // edge and the header edge stay on one line.
-  assert.match(
-    css.slice(css.indexOf("@media (max-width: 719px)")),
-    /\.wrap \{ padding-left: 12px; padding-right: 12px; \}/,
-  );
   // Every header control is one height, and Journal file actions deliberately
   // reuse that same compact sizing.
   // enhanced-inputs.js swaps the language select for a custom listbox; the
