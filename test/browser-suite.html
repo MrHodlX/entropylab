@@ -6172,7 +6172,11 @@
       pass.focus();
       for (const character of "TREZOR") pass.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: character, cancelable: true, bubbles: true }));
       await wait(0);
-      assert(!document.body.textContent.includes("TREZOR"), "the hidden passphrase was on the page");
+      // The suite source itself contains the word, so this checks the app,
+      // not document.body. Hidden, the mirror is bullets.
+      const mirror = document.getElementById("passphrase-highlight");
+      assert(mirror && !mirror.textContent.includes("TREZOR"), "the hidden passphrase mirror showed the passphrase");
+      equal(mirror.textContent, "\u2022".repeat(6));
       const passReveal = document.getElementById("passphrase-reveal");
       assert(passReveal, "the passphrase show switch is missing");
       if (!passReveal.checked) passReveal.click();
