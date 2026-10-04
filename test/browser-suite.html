@@ -6193,68 +6193,6 @@
   });
 
 
-  // End session wipes what the page holds and asks the browser to close the
-  // tab, the one step the residue audit found removes every copy. It ends the
-  // page, so it runs after every test that needs one. window.close and the
-  // clipboard are stood in for: the suite's window must stay open, and the
-  // clipboard belongs to the machine running it.
-  await test("End session wipes the page, retires the modules, empties the clipboard and asks to close the tab", async () => {
-    const words = "legal winner thank year wave sausage worth useful legal winner thank yellow";
-    document.querySelector('#workspace [data-workspace="calc"]').click();
-    await until(() => !document.getElementById("key-manager").hidden, "key workspace");
-    chooseSeedWords(12);
-    await chooseMode("Seed phrase");
-    input(document.getElementById("seed"), words);
-    await until(() => !document.getElementById("go").disabled, "Derive Key to enable");
-    document.getElementById("go").click();
-    await until(() => document.getElementById("reveal"), "the derived wallet's privacy switch");
-    if (!document.getElementById("reveal").checked) document.getElementById("reveal").click();
-    const copy = await until(() => document.querySelector("#out [data-copy-field]"), "a copy button in the derived wallet");
-
-    const written = [], leaves = [];
-    let closed = 0;
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { written.push(text); } } });
-    const close = window.close;
-    window.close = () => { closed++; };
-    addEventListener("pagehide", (event) => leaves.push(event.persisted));
-    copy.click();
-    await until(() => written.length === 1, "the copy");
-    assert(written[0], "the copy wrote nothing");
-
-    // Both modules' memory as the app holds it; after End session every byte
-    // must be zero (the pattern passes themselves are pinned in
-    // wasm-retire.test.mjs).
-    const memories = window.__entropyLabWasmMemory();
-    assert(memories.every((buffer) => new Uint8Array(buffer).some((b) => b !== 0)), "a module's memory was empty before End session");
-    const button = document.getElementById("end-session");
-    const overlay = () => document.getElementById("end-session-overlay");
-    assert(button && overlay(), "End session control or its dialog is missing");
-    // Cancel ends nothing.
-    button.click();
-    assert(!overlay().hidden, "End session did not ask first");
-    equal(document.activeElement?.id, "end-session-cancel");
-    document.getElementById("end-session-cancel").click();
-    assert(overlay().hidden && document.getElementById("btc-calc") && leaves.length === 0 && closed === 0, "Cancel ended the session");
-
-    button.click();
-    document.getElementById("end-session-confirm").click();
-    await until(() => document.querySelector("[data-session-ended]"), "the ended screen");
-    window.close = close;
-    assert(leaves.length === 1 && leaves[0] === false, "End session did not run the page's leave-wipes");
-    equal(written.at(-1), "");
-    equal(closed, 1);
-    assert(!document.getElementById("btc-calc"), "the app's page survived End session");
-    assert(!document.body.textContent.includes("legal winner"), "the ended screen shows the session's words");
-    let refused = "";
-    try {
-      crypto.entropyToMnemonic("00000000000000000000000000000000");
-    } catch (error) {
-      refused = String(error?.message || error);
-    }
-    assert(/session has ended/.test(refused), "the crypto module still ran after End session");
-    assert(memories.every((buffer) => new Uint8Array(buffer).every((b) => b === 0)), "a module's memory survived End session");
-  });
-
   // A revealed secret left on screen is what Windows Recall snapshots, a
   // screen share broadcasts and iOS saves as the app-switcher picture.
   // Leaving the page (focus lost, page hidden) masks it again, through the
@@ -6316,6 +6254,68 @@
       }
       chooseSeedWords(24);
     }
+  });
+
+  // End session wipes what the page holds and asks the browser to close the
+  // tab, the one step the residue audit found removes every copy. It ends the
+  // page, so it runs after every test that needs one. window.close and the
+  // clipboard are stood in for: the suite's window must stay open, and the
+  // clipboard belongs to the machine running it.
+  await test("End session wipes the page, retires the modules, empties the clipboard and asks to close the tab", async () => {
+    const words = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    document.querySelector('#workspace [data-workspace="calc"]').click();
+    await until(() => !document.getElementById("key-manager").hidden, "key workspace");
+    chooseSeedWords(12);
+    await chooseMode("Seed phrase");
+    input(document.getElementById("seed"), words);
+    await until(() => !document.getElementById("go").disabled, "Derive Key to enable");
+    document.getElementById("go").click();
+    await until(() => document.getElementById("reveal"), "the derived wallet's privacy switch");
+    if (!document.getElementById("reveal").checked) document.getElementById("reveal").click();
+    const copy = await until(() => document.querySelector("#out [data-copy-field]"), "a copy button in the derived wallet");
+
+    const written = [], leaves = [];
+    let closed = 0;
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { written.push(text); } } });
+    const close = window.close;
+    window.close = () => { closed++; };
+    addEventListener("pagehide", (event) => leaves.push(event.persisted));
+    copy.click();
+    await until(() => written.length === 1, "the copy");
+    assert(written[0], "the copy wrote nothing");
+
+    // Both modules' memory as the app holds it; after End session every byte
+    // must be zero (the pattern passes themselves are pinned in
+    // wasm-retire.test.mjs).
+    const memories = window.__entropyLabWasmMemory();
+    assert(memories.every((buffer) => new Uint8Array(buffer).some((b) => b !== 0)), "a module's memory was empty before End session");
+    const button = document.getElementById("end-session");
+    const overlay = () => document.getElementById("end-session-overlay");
+    assert(button && overlay(), "End session control or its dialog is missing");
+    // Cancel ends nothing.
+    button.click();
+    assert(!overlay().hidden, "End session did not ask first");
+    equal(document.activeElement?.id, "end-session-cancel");
+    document.getElementById("end-session-cancel").click();
+    assert(overlay().hidden && document.getElementById("btc-calc") && leaves.length === 0 && closed === 0, "Cancel ended the session");
+
+    button.click();
+    document.getElementById("end-session-confirm").click();
+    await until(() => document.querySelector("[data-session-ended]"), "the ended screen");
+    window.close = close;
+    assert(leaves.length === 1 && leaves[0] === false, "End session did not run the page's leave-wipes");
+    equal(written.at(-1), "");
+    equal(closed, 1);
+    assert(!document.getElementById("btc-calc"), "the app's page survived End session");
+    assert(!document.body.textContent.includes("legal winner"), "the ended screen shows the session's words");
+    let refused = "";
+    try {
+      crypto.entropyToMnemonic("00000000000000000000000000000000");
+    } catch (error) {
+      refused = String(error?.message || error);
+    }
+    assert(/session has ended/.test(refused), "the crypto module still ran after End session");
+    assert(memories.every((buffer) => new Uint8Array(buffer).every((b) => b === 0)), "a module's memory survived End session");
   });
 
   await test("hosted application makes only expected same-origin connections", () => {
