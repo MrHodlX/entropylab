@@ -6165,9 +6165,20 @@
       // the passphrase and every address key.
       await chooseMode("Seed phrase");
       input(document.getElementById("seed"), words);
-      input(document.getElementById("pass"), "TREZOR");
+      // The passphrase vault keeps the text out of the field and the mirror.
+      // Show passphrase is the one path that puts it on the page, and that
+      // mirror has to be withheld from translation too.
+      const pass = document.getElementById("pass");
+      pass.focus();
+      for (const character of "TREZOR") pass.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: character, cancelable: true, bubbles: true }));
       await wait(0);
-      shown("TREZOR", "the typed passphrase");
+      assert(!document.body.textContent.includes("TREZOR"), "the hidden passphrase was on the page");
+      const passReveal = document.getElementById("passphrase-reveal");
+      assert(passReveal, "the passphrase show switch is missing");
+      if (!passReveal.checked) passReveal.click();
+      await wait(0);
+      shown("TREZOR", "the shown passphrase");
+      passReveal.click();
       await until(() => !document.getElementById("go").disabled, "Derive Key to enable");
       document.getElementById("go").click();
       keyDerived = true;
@@ -6176,7 +6187,7 @@
       await until(() => document.getElementById("out").textContent.includes(entropyHex), "revealed recovery material");
       shown(entropyHex, "the revealed entropy hex");
       shown(seedHex, "the revealed master seed");
-      shown("TREZOR", "the revealed passphrase");
+      if (holders("TREZOR").length) shown("TREZOR", "the revealed passphrase");
       if (holders(rootXprv).length) shown(rootXprv, "the revealed root xprv");
       assert(holders("legal").length > 0, "the revealed phrase is not on the page");
       const leaks = nodeLeaks();
