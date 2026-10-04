@@ -285,6 +285,10 @@ button:not(:disabled):active *,
    label at every width. */
 .page-footer-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-control); margin-top: var(--space-component); }
 .page-footer-links > a { display: inline-flex; align-items: center; gap: var(--space-snug); text-decoration: none; }
+/* The network and language pickers moved down from the header: here they
+   take the row's 44px height and their lists open upward. */
+.page-footer-links :is(.network-picker-button, .locale-control .custom-select-button) { min-height: 44px; }
+.page-footer-links .custom-select-list { top: auto; bottom: calc(100% + 6px); text-align: left; }
 .row { display: flex; flex-wrap: wrap; gap: var(--space-control); }
 .tab, .btn {
   min-height: 44px; padding: var(--inset-button); border-radius: var(--radius-control); border: 1px solid var(--border);
@@ -1059,11 +1063,12 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 .network-picker-b { fill: var(--on-color); }
 .network-picker-chevron { color: var(--accent); transition: transform 120ms ease; }
 .network-picker-button[aria-expanded="true"] .network-picker-chevron { transform: rotate(180deg); }
-/* Right-anchored: the button sits at the bar's right edge, so the menu opens
-   leftward into the page instead of past the viewport. */
+/* Opens upward from the footer row, centred on its button so it stays on
+   screen wherever the row wraps. */
 .network-picker-menu {
-  position: absolute; z-index: 100; top: calc(100% + 6px); right: 0; width: 340px;
-  max-width: calc(100vw - 2 * var(--site-header-pad));
+  position: absolute; z-index: 100; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: 340px;
+  max-width: calc(100vw - 2 * var(--gutter-page));
+  text-align: left;
   padding: var(--inset-menu); border: 1px solid var(--border); border-radius: var(--radius-container);
   background: var(--surface-2); box-shadow: 0 16px 36px var(--scrim);
 }
@@ -1093,8 +1098,10 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 /* min-width: 0 lets the row shrink on narrow screens rather than pushing the
    controls out of the bar. */
 .download-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-control); margin-left: auto; min-width: 0; }
-/* A header button's glyph (download, end session) sits left of the label at
-   every width, and stands alone once the labels collapse. */
+/* A header button's glyph sits left of its label at every width, and stands
+   alone once the labels collapse. End session is icon-only at every width:
+   a square button like the phone header's. */
+.download-controls > .end-session-button { flex: 0 0 40px; width: 40px; padding: 0; justify-content: center; }
 .download-mark, .download-controls > .btn > svg { display: block; flex: 0 0 auto; }
 /* Header controls sit below the app's default 44px so the bar stays slim.
    Keep --site-header-height in step. */
@@ -1227,8 +1234,11 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 .modal-warning-title {
   margin: var(--space-related) 0 var(--space-section); font-size: var(--text-heading-small); font-weight: 700; text-transform: uppercase;
   text-align: center; color: var(--danger-bright);
+  /* The same lettering whether the title is a paragraph or a page heading. */
+  font-family: var(--sans); letter-spacing: normal;
 }
-.disclaimer-card { --modal-width: 520px; text-align: center; }
+/* The End session dialog and the screen it leaves wear the gate's card. */
+.disclaimer-card, .end-session-card { --modal-width: 520px; text-align: center; }
 .exp-card { --modal-width: 760px; }
 .qr-ref-card { text-align: center; }
 .addr-qr-card { --modal-width: 400px; text-align: center; }
@@ -1236,9 +1246,10 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
    air between it and the warning it is answering. The side inset matches the
    card's own padding, so the sentence sits a clear step inside the frame and
    breaks into shorter lines. */
-.disclaimer-text { margin: 0 0 var(--space-intro); color: var(--fg); line-height: 1.5; }
-.disclaimer-text p { max-width: 400px; margin: 0 auto var(--space-component); }
-.disclaimer-text p:last-child { margin-bottom: 0; }
+.disclaimer-text, .end-session-text { margin: 0 0 var(--space-intro); color: var(--fg); line-height: 1.5; }
+:is(.disclaimer-text, .end-session-text) p { max-width: 400px; margin: 0 auto var(--space-component); }
+:is(.disclaimer-text, .end-session-text) p:last-child { margin-bottom: 0; }
+.end-session-card .tool-actions { justify-content: center; }
 /* The second step's answer: a one-digit field left of the button, which stays
    disabled until the reader types 3. The field takes the button's height. */
 .disclaimer-proof-row { display: flex; justify-content: center; align-items: center; gap: var(--space-control); }
@@ -3014,25 +3025,20 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   /* The page edge follows the bar's: narrow screens hand the 4px a side back
      to the content, and the card lines up with the header controls above it. */
   .control-label { display: none; }
+  /* The footer pickers square off with the GitHub link. The network picker
+     shows its coin only, label and arrow off; the coin colour still shows the
+     network. */
+  .page-footer-links .network-picker-chevron { display: none; }
+  .page-footer-links .network-picker-button { width: 44px; padding: 0; justify-content: center; }
+  /* The language picker squares off beside it: the code alone, arrow off.
+     Its list keeps room for the codes it no longer fits under the button. */
+  .page-footer-links .locale-control .custom-select-chevron { display: none; }
+  .page-footer-links .locale-control .custom-select { flex: 0 0 44px; width: 44px; }
+  .page-footer-links .locale-control .custom-select-button { width: 44px; padding: 0; justify-content: center; }
+  .page-footer-links .locale-control .custom-select-list { min-width: 72px; }
   /* The Station's dropdowns take the whole card from the same width the bar's
      controls collapse at, so the page changes shape in one step. */
   .key-mode-select, .seed-length-select { width: 100%; }
-  /* Icon-only in the row, square against the 40px theme toggle it sits
-     beside: the picker keeps its place among the header controls rather than
-     dropping out of the bar, and the coin's colour still carries the network.
-     .network-picker stays position: relative so the menu anchors to it. */
-  .network-picker { flex: 0 0 40px; }
-  .network-picker-label, .network-picker-chevron { display: none; }
-  .network-picker-button { width: 40px; padding: 0; justify-content: center; }
-  /* The other header dropdown collapses at the same width: arrow off, and
-     squared against the same 40px so the two read as one row of buttons. */
-  .locale-control .custom-select-chevron { display: none; }
-  .locale-control .custom-select { flex: 0 0 40px; width: 40px; }
-  .locale-control .custom-select-button { width: 40px; padding: 0; justify-content: center; }
-  /* The button is square; the menu is not. Right-anchored like the network
-     menu so it opens leftward into the page, and held wide enough for the
-     option text that no longer fits under a 40px button. */
-  .locale-control .custom-select-list { left: auto; right: 0; min-width: 72px; }
   /* Short tool names here: the strip is the page's only horizontal scroll, so
      fitting more of it on screen matters more than the fuller wording. */
   .workspace-tab-full { display: none; }
