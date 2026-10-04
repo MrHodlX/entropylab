@@ -1,11 +1,13 @@
 # Computer hardening checklist
 
-EntropyLab wipes what a web page can reach, and closing the tab lets the
-browser's own copies go with it. Some copies are out of any page's reach: the
-operating system writes memory to disk (the pagefile or swap, the hibernation
-file, crash dumps), and some browser and system features copy what you type
-or see. This checklist shuts those doors. Do it **before** you load a real
-key.
+EntropyLab wipes what a web page can reach. Press **End session** in the header
+when you are done: it wipes the page, zeroes the WebAssembly memory, empties
+the clipboard if EntropyLab copied something there, and asks the browser to
+close the tab. Closing the tab lets the browser's own copies go with it. Some
+copies are out of any page's reach: the operating system writes memory to disk
+(the pagefile or swap, the hibernation file, crash dumps), and some browser and
+system features copy what you type or see. This checklist shuts those doors. Do
+it **before** you load a real key.
 
 A residue audit on 2026-10-03 (Chrome, Edge and Firefox on Windows 11) found
 no secret in any browser profile file, and in Chrome and Edge no copy left once
@@ -24,6 +26,10 @@ already paged out or saved, which is what this list covers.
 - [ ] **Use a private window** (Chrome Incognito, Edge InPrivate, Firefox
       Private Window). It writes no session-restore files, and extensions are
       off in it unless you allowed them.
+- [ ] **Press End session when you are done.** It is in the header. It wipes
+      the page and asks the browser to close the tab. If the tab stays open,
+      close it yourself: that removes the browser's copies and reclaims a
+      Vanity grind stopped mid-run.
 - [ ] **Shut down when you are done; do not sleep.** Sleep keeps memory
       powered, and hibernation writes it to disk.
 - [ ] **Do not run EntropyLab in a virtual machine you suspend or
