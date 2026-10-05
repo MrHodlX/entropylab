@@ -3,7 +3,8 @@
 `npm run test:residue -- --browser chrome` runs a public fixture through the
 app, captures browser-process memory at defined checkpoints, and searches
 those captures for the fixture's actual secrets. This is a manual developer
-tool, outside `npm test` and CI. Its pure regression tests do run in the suite.
+tool, outside `npm test` and CI. Its regression tests and live Chromium driver
+checks run in the suite; those checks perform no memory captures.
 
 **Never fund the fixture wallet.** Its mnemonic, passphrase, and valid derived
 keys are public test data. The harness launches a new, temporary profile; it
@@ -31,7 +32,8 @@ driver with the same isolation and checkpoint contracts.
 
 Linux ptrace permissions and browser sandboxing can prevent gcore from reading
 some processes. Capture failures are reported and invalidate the run; they
-are not interpreted as zero residue. The harness does not change OS permissions.
+are not interpreted as zero residue. Reports retain the capture tool's diagnostic
+tail (up to 8,192 characters). The harness does not change OS permissions.
 
 If `MEMPROCFS_MOUNT` is set, the optional live-file path scans per-process
 files instead of creating dumps. It recognizes `<mount>/<pid>/` and
@@ -64,7 +66,9 @@ driver is injected. The staged file itself must contain none of the needles.
 Node drives the UI through Chromium's debugging pipe. Fixture text arrives
 through native input events, never evaluated JavaScript source, page globals,
 or checkpoint URLs. Values returned by the browser are compared on the host;
-protocol object groups are released. No debugging TCP listener is opened.
+protocol object groups are released. Revealed output and clipboard verification
+return only SHA-256 digests, rather than secret text, through the debugging pipe.
+No debugging TCP listener is opened.
 
 The session selects 12-word seed mode, enters the public mnemonic/passphrase,
 checks the input, and switches to the word-number view, which exposes the
@@ -75,7 +79,7 @@ master xprv and first WIF must match the host's expected fixture.
 |---|---|
 | `before-input` | App booted; no fixture entered; complete captures and no needle hits |
 | `after-derive` | Derive clicked and the completed wallet rendered |
-| `after-reveal` | The expected mnemonic, master xprv and first WIF are revealed |
+| `after-reveal` | Private values are revealed; capture precedes output verification and all clipboard actions |
 | `after-copy` | The app's seed-copy control ran and the clipboard equals the fixture mnemonic |
 | `after-wipe` | End Session completed and the ended screen is present |
 | `after-tab-close` | The fixture tab is confirmed closed; surviving processes are enumerated again |
@@ -84,6 +88,21 @@ The clipboard is cleared before the copy step to prevent a stale value passing
 the check. The check reads the clipboard after the real app copy; it never
 substitutes a successful mock write. Clipboard failure aborts the run.
 A blank keeper tab lets the browser process survive closing the fixture tab.
+
+After the `after-reveal` capture, digests of the rendered private fields are
+checked against the expected mnemonic, master xprv and first WIF. A mismatch
+stops the run before copying. Thus the derived xprv/WIF cannot pass the positive
+control just because output verification returned them through CDP. The capture
+alone does not establish that the wallet matches; the subsequent verification
+must also succeed for a complete valid run.
+
+`test/residue-browser.test.mjs` uses the same release build, debugging-pipe
+adapter and `Input.insertText` as the manual harness. It checks trusted,
+cancelable `beforeinput`, a masked passphrase field, and the independently
+pinned wallet. Blocking the edit must reject the wrong xprv; blocking the real
+Copy seed phrase action must reject the clipboard check. These tests require
+Chrome/Chromium or Edge and skip explicitly when neither is installed. The unit
+mock still assigns `.value`; it proves ordering, not native event delivery.
 
 ## Controls and reports
 
@@ -120,9 +139,22 @@ the captured data; it does not identify which app, browser, debugger or OS
 subsystem retained a copy.
 
 Automation, protocol input/return buffers, and clipboard verification can add
-copies of their own. Moving the driver outside the page removes persistent
-fixture literals, not every observer effect. Compare identical harness settings;
+copies of their own. The positive capture precedes output reads and clipboard
+actions, and private-key output is never returned as plaintext over CDP. Input
+buffers can still supply mnemonic/passphrase hits. Later verification reads and
+hashing create renderer-side temporaries; releasing protocol objects and wiping
+the hash input byte arrays cannot erase immutable strings or browser copies.
+Moving the driver outside the page removes persistent fixture literals, not
+every observer effect. Compare identical harness settings;
 do not treat counts as an exact inventory of application-owned allocations.
+
+On 2026-10-05, a real gcore attempt with GNU gdb 15.1 and Chromium 153.0.8010.0
+in the Ubuntu 24.04 development environment failed at `before-input`:
+`ptrace: Inappropriate ioctl for device.` No dump was produced, the report was
+invalid, and the driver refused to enter fixture data. This exercises actual
+capture failure handling, not successful acquisition or erasure. A successful
+gcore/ProcDump run on a host permitting capture remains required for measured
+residue results; ProcDump has not been run for this change.
 
 Process captures are sequential, not an atomic snapshot, and processes can
 appear or exit between enumeration and capture. The test does not cover swap,

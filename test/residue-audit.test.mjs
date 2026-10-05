@@ -11,7 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
 import { PassThrough } from "node:stream";
-import { pbkdf2Sync } from "node:crypto";
+import { EventEmitter } from "node:events";
+import { pbkdf2Sync, webcrypto } from "node:crypto";
 import { HDKey as ReferenceHDKey } from "@scure/bip32";
 import { base58check } from "@scure/base";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -56,13 +57,23 @@ test("regression: the fixture is absent from app self-tests and injected code", 
 // An independent UI state machine. It records effects, so emitting a checkpoint
 // name or a click without completing its operation cannot satisfy these tests.
 const exerciseDriver = async ({ copyWorks = true, wrongInput = false, wrongWallet = false } = {}) => {
-  const secrets = makeSecrets(), checkpoints = [], expressions = [], state = { derived: false, clipboard: "", ended: false };
+  const secrets = makeSecrets(), checkpoints = [], expressions = [], returnedValues = [], state = { derived: false, clipboard: "", ended: false, outputRead: false, clipboardRead: false };
   const element = (extra = {}) => ({ value: "", disabled: false, checked: false, hidden: false, textContent: "", dispatchEvent() {}, click() {}, ...extra });
   const ids = {
     "key-manager": element(), "seed-length-select": element(), seed: element(), pass: element(),
     out: element(), reveal: element({ click() { this.checked = true; } }),
     go: element({ click() { setImmediate(() => { state.derived = true; ids.out.textContent = wrongWallet ? "unrelated wallet" : [secrets.mnemonic, secrets.xprv, secrets.wif].join(" "); }); } }),
     "end-session": element(), "end-session-confirm": element({ click() { state.ended = true; ids.out.textContent = ""; } }),
+  };
+  let outputText = "";
+  Object.defineProperty(ids.out, "textContent", {
+    get() { state.outputRead = true; return outputText; },
+    set(value) { outputText = value; },
+  });
+  const outputElement = text => {
+    const el = element();
+    Object.defineProperty(el, "textContent", { get() { state.outputRead = true; return text; } });
+    return el;
   };
   const seedCopy = element({ click() { if (copyWorks) state.clipboard = secrets.mnemonic; } });
   const publicCopy = element({ click() { if (copyWorks) state.clipboard = "xpub-public-key"; } });
@@ -78,17 +89,24 @@ const exerciseDriver = async ({ copyWorks = true, wrongInput = false, wrongWalle
   const document = {
     getElementById: id => ids[id] || null,
     querySelector: select,
-    querySelectorAll: () => [element({ textContent: "Seed phrase" })],
+    querySelectorAll: selector => selector.startsWith("#out")
+      ? (wrongWallet ? [outputElement("unrelated wallet")] : [secrets.mnemonic, secrets.xprv, secrets.wif].map(outputElement))
+      : [element({ textContent: "Seed phrase" })],
     documentElement: { dataset: { selfTestsFailed: "0" } },
   };
   const record = async name => checkpoints.push({ name, ...state });
-  const context = vm.createContext({ document, Event: class {}, URLSearchParams, Date, setTimeout: fn => setImmediate(fn),
-    navigator: { clipboard: { writeText: async text => { state.clipboard = text; }, readText: async () => state.clipboard } },
+  const context = vm.createContext({ document, Event: class {}, URLSearchParams, Date, TextEncoder, crypto: webcrypto, setTimeout: fn => setImmediate(fn),
+    navigator: { clipboard: { writeText: async text => { state.clipboard = text; }, readText: async () => { state.clipboardRead = true; return state.clipboard; } } },
     window: { addEventListener() {}, close() {} },
     Image: class { set src(url) { record(new URL(url, "http://localhost").searchParams.get("name")).then(() => this.onload()); } },
   });
   const page = {
-    evaluate: expression => { expressions.push(expression); return Promise.resolve(vm.runInContext(expression, context)); },
+    evaluate: async expression => {
+      expressions.push(expression);
+      const value = await vm.runInContext(expression, context);
+      returnedValues.push(value);
+      return value;
+    },
     click: async selector => { const el = select(selector); assert.ok(el, selector); el.click(); },
     type: async (selector, text) => { select(selector).value = wrongInput && selector === "#seed" ? "different input" : text; },
     waitFor: async expression => {
@@ -98,7 +116,7 @@ const exerciseDriver = async ({ copyWorks = true, wrongInput = false, wrongWalle
       }
       assert.fail(expression);
     },
-    waitForClipboard: async expected => { if (state.clipboard !== expected) throw new Error("secret copy did not succeed"); },
+    waitForClipboard: async expected => { state.clipboardRead = true; if (state.clipboard !== expected) throw new Error("secret copy did not succeed"); },
     close: async () => { state.closed = true; },
   };
   // Execute the old implementation as well: the regressions first fail on its
@@ -108,7 +126,7 @@ const exerciseDriver = async ({ copyWorks = true, wrongInput = false, wrongWalle
     vm.runInContext(driverScript(secrets).replace(/<\/?script>/g, ""), context);
     await context.window.__residueDrive();
   }
-  return { checkpoints, state, expressions };
+  return { checkpoints, state, expressions, returnedValues };
 };
 
 test("regression: after-derive is captured only after a wallet exists", async () => {
@@ -133,6 +151,37 @@ test("driver rejects a changed input or a wallet that differs from the fixture",
 test("fixture values never become evaluated JavaScript source", async () => {
   const { expressions } = await exerciseDriver();
   for (const expression of expressions) for (const value of Object.values(makeSecrets())) assert.ok(!expression.includes(value));
+});
+
+test("observer regression: private-key controls precede output and clipboard reads", async () => {
+  const { checkpoints } = await exerciseDriver();
+  const control = checkpoints.find(row => row.name === CONTROL_CHECKPOINT);
+  assert.equal(control.outputRead, false, "output verification copied the keys before the control capture");
+  assert.equal(control.clipboardRead, false, "clipboard verification ran before the control capture");
+});
+
+test("observer regression: output verification returns digests, never private-key text", async () => {
+  const { returnedValues } = await exerciseDriver();
+  for (const label of ["xprv", "wif"]) {
+    assert.ok(!JSON.stringify(returnedValues).includes(makeSecrets()[label]), `${label} entered the debugging return buffers`);
+  }
+});
+
+test("capture regression: a denied capture records the tool's diagnostic", async () => {
+  const dir = tmp();
+  try {
+    const execFile = () => {
+      const child = new EventEmitter();
+      child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      setImmediate(() => {
+        child.stdout.end("capture started\n");
+        child.stderr.end("ptrace: Operation not permitted.\n");
+        child.emit("exit", 1); child.emit("close", 1);
+      });
+      return child;
+    };
+    await assert.rejects(audit.capture({ tool: { kind: "gcore", binary: "gcore" }, pid: 123, outDir: dir, checkpoint: "before-input", execFile }), /ptrace: Operation not permitted/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("CDP pipe correlates fragmented replies, ignores events, and rejects protocol errors", async () => {

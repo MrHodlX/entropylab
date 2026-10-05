@@ -17,6 +17,7 @@
 //
 // Run: npm run test:residue
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, createReadStream } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -192,8 +193,14 @@ export const capture = async ({ tool, pid, outDir, checkpoint, execFile = spawn 
     : ["-o", out, String(pid)]; // gcore writes <out>.<pid>
   await new Promise((resolve, reject) => {
     const child = execFile(tool.binary, args, { stdio: "pipe" });
+    // Drain both pipes: a verbose dumper must not block on a full output pipe.
+    // Keep only a bounded diagnostic tail for denied/failed captures.
+    let diagnostic = "";
+    const record = chunk => { diagnostic = (diagnostic + chunk.toString()).slice(-8192); };
+    child.stdout?.on("data", record); child.stderr?.on("data", record);
     child.on("error", reject);
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${tool.kind} exited ${code} on pid ${pid}`))));
+    child.on("close", code => code === 0 ? resolve()
+      : reject(new Error(`${tool.kind} exited ${code} on pid ${pid}${diagnostic.trim() ? `: ${diagnostic.trim()}` : ""}`)));
   });
   const file = tool.kind === "gcore" ? `${out}.${pid}` : out;
   if (existsSync(file) && statSync(file).size > MAX_DUMP_BYTES) {
@@ -294,6 +301,19 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Normalize only on the host, after reading the input by value.
 const normalizeSeed = (text) => String(text).trim().toLowerCase().replace(/\s+/g, " ");
+const fingerprint = text => createHash("sha256").update(text, "utf8").digest("hex");
+// Return only digests through CDP. Reading/hashing still creates renderer-side
+// temporaries, so use this only AFTER the positive-control capture.
+const digestValues = expression => `(async () => {
+  const values = ${expression};
+  return Promise.all(values.map(async value => {
+    const bytes = new TextEncoder().encode(value);
+    try {
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+    } finally { bytes.fill(0); }
+  }));
+})()`;
 
 // The only injected code suppresses the application's automatic tab close so
 // that after-wipe can be captured. No fixture, driver state, or callback stays
@@ -302,8 +322,8 @@ export const driverScript = () => "<script>window.close = () => {};</script>";
 
 // The page adapter accepts fixture text ONLY through native input events.
 // Never interpolate it into evaluate(), function arguments, page globals, URLs,
-// or clipboard instrumentation. Host-side equality checks receive values by
-// value and release protocol object groups after every evaluation.
+// or clipboard instrumentation. Output and clipboard checks return only
+// digests, and release protocol object groups after every evaluation.
 export const driveSession = async (page, secrets, checkpoint) => {
   await page.waitFor(`document.documentElement?.dataset.selfTestsFailed === "0"`);
   await page.waitFor(`document.querySelector('#workspace [data-workspace="calc"]')`);
@@ -339,11 +359,13 @@ export const driveSession = async (page, secrets, checkpoint) => {
   await page.waitFor(`document.querySelector('#out [data-key-group="identity"] [data-copy-field]')`);
   await checkpoint("after-derive");
   if (!await page.evaluate(`document.getElementById("reveal").checked`)) await page.click("#reveal");
-  const output = await page.evaluate(`document.getElementById("out").textContent`);
-  for (const label of ["mnemonic", "xprv", "wif"]) {
-    if (!output.includes(secrets[label])) throw new ResidueToolError(`the revealed wallet does not match the fixture's ${label}`);
-  }
+  // Capture before output verification or clipboard use can add observer copies.
+  // In particular, neither derived private key has ever crossed the pipe here.
   await checkpoint("after-reveal");
+  const output = await page.evaluate(digestValues(`[...document.querySelectorAll('#out [translate="no"]')].map(el => el.textContent.trim())`));
+  for (const label of ["mnemonic", "xprv", "wif"]) {
+    if (!output.includes(fingerprint(secrets[label]))) throw new ResidueToolError(`the revealed wallet does not match the fixture's ${label}`);
+  }
   // Remove any pre-existing clipboard value, then verify the real write. An
   // xpub click, permission rejection, or a no-op must not pass this checkpoint.
   await page.evaluate(`navigator.clipboard.writeText("")`);
@@ -398,7 +420,7 @@ export const createPipeClient = (writer, reader, { timeoutMs = 15000 } = {}) => 
   };
 };
 
-const createPage = async (client, origin) => {
+export const createPage = async (client, origin) => {
   const { targetId } = await client.send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
   const send = (method, params) => client.send(method, params, sessionId);
@@ -429,8 +451,10 @@ const createPage = async (client, origin) => {
     },
     async waitForClipboard(expected) {
       const deadline = Date.now() + 5000;
+      const expectedDigest = fingerprint(expected);
       while (Date.now() < deadline) {
-        if (await page.evaluate(`navigator.clipboard.readText()`) === expected) return;
+        const [actual] = await page.evaluate(digestValues(`[await navigator.clipboard.readText()]`));
+        if (actual === expectedDigest) return;
         await sleep(100);
       }
       throw new ResidueToolError("secret copy did not succeed; after-copy was not captured");
@@ -513,7 +537,7 @@ const chromiumSandboxArgs = () => {
   return [];
 };
 
-const spawnBrowser = (engine, { profile, logPath }) => {
+export const spawnBrowser = (engine, { profile, logPath }) => {
   const logFd = openSync(logPath, "w");
   const args = [
     "--headless", ...chromiumSandboxArgs(), "--no-first-run", "--no-default-browser-check",
@@ -550,7 +574,7 @@ export const stageRun = async (secrets = makeSecrets()) => {
 
 // Read-only loopback hosting. No checkpoint URLs or input values ever travel
 // through the page's network stack; the host controls checkpoint ordering.
-const createHarnessServer = ({ pagePath }) => {
+export const createHarnessServer = ({ pagePath }) => {
   const server = createServer((request, response) => {
     if (request.url !== "/") { response.writeHead(404); response.end(); return; }
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });

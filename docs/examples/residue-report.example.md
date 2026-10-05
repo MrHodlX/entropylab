@@ -22,7 +22,7 @@ Controls passed. Zero hits still do not prove erasure.
 |---|---|
 | before-input | Complete captures; no fixture hits |
 | after-derive | Mnemonic and private-key material found |
-| after-reveal | Mnemonic, xprv and WIF all found; positive control passed |
+| after-reveal | Mnemonic, xprv and WIF found before output/clipboard verification; positive control passed |
 | after-copy | Mnemonic found after the verified seed-copy action |
 | after-wipe | Mnemonic still found in a captured process |
 | after-tab-close | No hits in the surviving processes |
