@@ -4234,10 +4234,10 @@
     } finally {
       document.getElementById("psbt-wipe").click();
     }
-    // End Session leaves nothing selected and nothing to act on.
-    assert(!on("psbt-go") && !on("psbt-download") && !on("psbt-wipe"), "End Session left a PSBT action enabled");
-    equal(selected("psbt-session-keys").length, 0, "End Session left a chip selected");
-    assert(document.getElementById("psbt-session").textContent.includes("Session ended"), "End Session did not confirm itself");
+    // Clear Inspectors leaves nothing selected and nothing to act on.
+    assert(!on("psbt-go") && !on("psbt-download") && !on("psbt-wipe"), "Clear Inspectors left a PSBT action enabled");
+    equal(selected("psbt-session-keys").length, 0, "Clear Inspectors left a chip selected");
+    assert(document.getElementById("psbt-session").textContent.includes("cleared"), "Clear Inspectors did not confirm itself");
     // The confirmation belongs to the session that ended. Inspecting a new PSBT
     // without a key starts over, so the line must say so, not repeat "ended".
     input(text, psbt);

@@ -10508,7 +10508,7 @@ function hodlEndPsbtSession() {
   hodlPsbtClearNonceHistory(true);
   hodlPsbtLast = null;
   hodlPsbtInspected = {};
-  hodlPsbtSessionSpec = { key: "Session ended and accessible fields were cleared (best effort)." };
+  hodlPsbtSessionSpec = { key: "Accessible fields were cleared (best effort)." };
   for (let id of ["psbt-key", "psbt-pass", "psbt-text", "psbt-ax-transcript", "nonce-key", "nonce-pass", "nonce-text"]) {
     let field = document.getElementById(id);
     if (field) field.value = "";
@@ -11793,7 +11793,7 @@ function hodlInitSp() {
   document.getElementById("sp-send-go").onclick = () => { hodlSpMode = "send"; hodlRunSp(); };
   document.getElementById("sp-verify-go").onclick = () => { hodlSpMode = "verify"; hodlRunSp(); };
   document.getElementById("sp-wipe").onclick = () => {
-    hodlSpResetStation("Session ended and accessible fields were cleared (best effort).");
+    hodlSpResetStation("Accessible fields were cleared (best effort).");
   };
   document.getElementById("add-sp").onclick = () => hodlSelectStationBench(hodlSpTabs);
   document.getElementById("delete-sp").onclick = hodlDeleteActiveSp;
