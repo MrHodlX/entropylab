@@ -199,8 +199,14 @@ export const capture = async ({ tool, pid, outDir, checkpoint, execFile = spawn 
     const record = chunk => { diagnostic = (diagnostic + chunk.toString()).slice(-8192); };
     child.stdout?.on("data", record); child.stderr?.on("data", record);
     child.on("error", reject);
-    child.on("close", code => code === 0 ? resolve()
-      : reject(new Error(`${tool.kind} exited ${code} on pid ${pid}${diagnostic.trim() ? `: ${diagnostic.trim()}` : ""}`)));
+    // The two dumpers report success differently. gcore exits 0 on success
+    // and nonzero on a real failure (ptrace denial, dead pid). ProcDump
+    // exits 1 after a successful one-shot dump ("Dump count reached"), so
+    // its word is the dump file appearing, not the exit code.
+    child.on("close", code => {
+      if (tool.kind === "procdump" ? code !== null : code === 0) resolve();
+      else reject(new Error(`${tool.kind} exited ${code} on pid ${pid}${diagnostic.trim() ? `: ${diagnostic.trim()}` : ""}`));
+    });
   });
   const file = tool.kind === "gcore" ? `${out}.${pid}` : out;
   if (existsSync(file) && statSync(file).size > MAX_DUMP_BYTES) {
