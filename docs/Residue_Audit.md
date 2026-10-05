@@ -156,7 +156,16 @@ in the Ubuntu 24.04 development environment failed at `before-input`:
 invalid, and the driver refused to enter fixture data. This exercises actual
 capture failure handling, not successful acquisition or erasure. A successful
 gcore/ProcDump run on a host permitting capture remains required for measured
-residue results; ProcDump has not been run for this change.
+residue results.
+
+On 2026-10-05, a real ProcDump attempt (v12.01) against Chrome on Windows 11
+failed at `before-input`: a subset of Chrome's processes are protected (their
+command line is unreadable and a non-elevated ProcDump attach is refused,
+exiting `No process matching the specified PID`), so those captures were
+skipped and the fail-closed harness invalidated the run. A full-tree Chrome
+capture on Windows requires running the harness elevated, or a Chromium build
+without protected processes. The exit-code handling itself is unit-tested;
+end-to-end measured residue on Windows still needs an elevated run.
 
 Process captures are sequential, not an atomic snapshot, and processes can
 appear or exit between enumeration and capture. The test does not cover swap,
