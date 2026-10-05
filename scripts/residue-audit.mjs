@@ -550,6 +550,48 @@ export const spawnBrowser = (engine, { profile, logPath }) => {
   return child;
 };
 
+// Shut the browser down through the protocol first: it then stops its helper
+// processes and flushes the profile before it exits. SIGKILL on the browser
+// pid alone leaves helpers that can still write into the profile, and a
+// recursive delete racing them fails with ENOTEMPTY (seen under CI load).
+// SIGKILL stays the fallback for a browser that does not exit in time.
+export const stopBrowser = async (child, client, { timeoutMs = 10000 } = {}) => {
+  if (!child?.pid) return;
+  const running = () => child.exitCode === null && child.signalCode === null;
+  if (!running()) return;
+  const exited = new Promise(resolve => child.once("exit", resolve));
+  // The reply may never arrive: the pipe closes as the browser exits.
+  client?.send("Browser.close").catch(() => {});
+  let timer;
+  const stopped = await Promise.race([
+    exited.then(() => true),
+    new Promise(resolve => { timer = setTimeout(resolve, timeoutMs, false); }),
+  ]);
+  clearTimeout(timer);
+  if (!stopped) {
+    try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    await exited;
+  }
+};
+
+// rmSync's own retries only repeat the final rmdir, so a file a late browser
+// helper writes after the walk keeps failing ENOTEMPTY however long it waits.
+// Retry the whole walk instead, and return the last error rather than throw:
+// a cleanup problem must never replace the outcome of the run it follows.
+export const removeWorkDir = async (dir, { attempts = 5, delayMs = 500, remove = rmSync } = {}) => {
+  let last = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      remove(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      return null;
+    } catch (error) {
+      last = error;
+      if (attempt < attempts) await sleep(attempt * delayMs);
+    }
+  }
+  return last;
+};
+
 // Stage the release build, without test hooks or fixture literals. The only
 // bootstrap change delays window.close() until after the wipe capture.
 export const stageRun = async (secrets = makeSecrets()) => {
@@ -699,17 +741,18 @@ export const main = async (argv = process.argv.slice(2), { log = console.log, de
     writeReports({ outDir, meta: { ...meta, error: error.message }, results });
     throw error;
   } finally {
+    await stopBrowser(child, client);
     client?.dispose();
-    if (child) { try { child.kill("SIGKILL"); } catch { /* already gone */ } }
     if (served) { try { served.server.close(); } catch { /* already closed */ } }
-    await sleep(300); // Windows releases profile file handles after the kill
     // The browser log lives inside the work dir; failure messages point at it,
     // so keep a copy where the reports land (out/residue is gitignored).
     try {
       const logPath = join(staged.workDir, "browser.log");
       if (existsSync(logPath)) copyFileSync(logPath, join(outDir, "browser.log"));
     } catch { /* nothing to keep */ }
-    rmSync(staged.workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    // Windows can release profile file handles late; removeWorkDir retries.
+    const leftover = await removeWorkDir(staged.workDir);
+    if (leftover) log(`residue-audit: could not remove ${staged.workDir}: ${leftover.message}`);
   }
 };
 

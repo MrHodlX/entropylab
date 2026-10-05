@@ -184,6 +184,42 @@ test("capture regression: a denied capture records the tool's diagnostic", async
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+// A fake browser process: records signals and exits when told to.
+const fakeBrowser = () => {
+  const child = new EventEmitter();
+  Object.assign(child, { pid: 4242, exitCode: null, signalCode: null, signals: [] });
+  child.exit = (code, signal = null) => { child.exitCode = code; child.signalCode = signal; child.emit("exit", code, signal); };
+  child.kill = signal => { child.signals.push(signal); setImmediate(() => child.exit(null, signal)); return true; };
+  return child;
+};
+
+test("cleanup regression: the browser is closed through the protocol, not SIGKILLed out from under its helpers", async () => {
+  const child = fakeBrowser(), sent = [];
+  const client = { send: async method => { sent.push(method); setImmediate(() => child.exit(0)); throw new ResidueToolError("browser debugging pipe closed"); } };
+  await audit.stopBrowser(child, client, { timeoutMs: 1000 });
+  assert.deepEqual(sent, ["Browser.close"]);
+  assert.deepEqual(child.signals, [], "a browser that closes cleanly must not be SIGKILLed");
+  assert.equal(child.exitCode, 0);
+});
+
+test("cleanup regression: a browser that ignores Browser.close is still killed", async () => {
+  const child = fakeBrowser();
+  await audit.stopBrowser(child, { send: async () => new Promise(() => {}) }, { timeoutMs: 20 });
+  assert.deepEqual(child.signals, ["SIGKILL"]);
+  const gone = fakeBrowser();
+  gone.exit(1);
+  await audit.stopBrowser(gone, { send: async () => assert.fail("an exited browser needs no close") });
+});
+
+test("cleanup regression: work-dir removal retries the whole walk and never throws", async () => {
+  let calls = 0;
+  const raceThenClear = () => { if (++calls < 3) throw Object.assign(new Error("ENOTEMPTY: directory not empty"), { code: "ENOTEMPTY" }); };
+  assert.equal(await audit.removeWorkDir("/work", { delayMs: 1, remove: raceThenClear }), null);
+  assert.equal(calls, 3, "a late helper write must be retried with a fresh walk");
+  const stuck = await audit.removeWorkDir("/work", { attempts: 2, delayMs: 1, remove: () => { throw new Error("EBUSY"); } });
+  assert.match(stuck.message, /EBUSY/, "the last error is returned for the caller to report");
+});
+
 test("CDP pipe correlates fragmented replies, ignores events, and rejects protocol errors", async () => {
   const writer = new PassThrough(), reader = new PassThrough();
   const client = audit.createPipeClient(writer, reader);

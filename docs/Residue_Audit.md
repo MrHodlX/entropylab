@@ -3,8 +3,9 @@
 `npm run test:residue -- --browser chrome` runs a public fixture through the
 app, captures browser-process memory at defined checkpoints, and searches
 those captures for the fixture's actual secrets. This is a manual developer
-tool, outside `npm test` and CI. Its regression tests and live Chromium driver
-checks run in the suite; those checks perform no memory captures.
+tool, outside `npm test` and CI. Its unit tests run in `npm run test:ci`; its
+live Chromium driver checks need a browser, so they run with
+`npm run test:browser` (CI's browser job). Neither performs memory captures.
 
 **Never fund the fixture wallet.** Its mnemonic, passphrase, and valid derived
 keys are public test data. The harness launches a new, temporary profile; it
@@ -101,8 +102,9 @@ adapter and `Input.insertText` as the manual harness. It checks trusted,
 cancelable `beforeinput`, a masked passphrase field, and the independently
 pinned wallet. Blocking the edit must reject the wrong xprv; blocking the real
 Copy seed phrase action must reject the clipboard check. These tests require
-Chrome/Chromium or Edge and skip explicitly when neither is installed. The unit
-mock still assigns `.value`; it proves ordering, not native event delivery.
+Chrome/Chromium or Edge, skip explicitly when neither is installed, and run with
+`npm run test:browser`. The unit mock still assigns `.value`; it proves
+ordering, not native event delivery.
 
 ## Controls and reports
 

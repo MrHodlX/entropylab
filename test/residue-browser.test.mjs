@@ -1,8 +1,10 @@
 // Exercise the residue driver's actual Chromium input path, without claiming
 // any memory measurement: checkpoints here are assertions, not dump adapters.
+// It launches a real browser, so CI runs it in the test-browser job
+// (`npm run test:browser`), never in the dependency-free test:ci gate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as audit from "../scripts/residue-audit.mjs";
 
@@ -26,8 +28,9 @@ test("residue driver uses native input and rejects missed input or copy", { time
         : fault === "copy" ? "a blocked copy cannot pass the clipboard digest check" : "trusted beforeinput reaches the masked vault";
       await t.test(name, async () => {
         const profile = join(staged.workDir, `${fault}-profile`);
+        const logPath = join(staged.workDir, `${fault}.log`);
         mkdirSync(profile);
-        const child = audit.spawnBrowser(engine, { profile, logPath: join(staged.workDir, `${fault}.log`) });
+        const child = audit.spawnBrowser(engine, { profile, logPath });
         const client = audit.createPipeClient(child.stdio[3], child.stdio[4]);
         const secrets = audit.makeSecrets(), checkpoints = [], replies = [];
         const observedClient = {
@@ -84,17 +87,26 @@ test("residue driver uses native input and rejects missed input or copy", { time
             const allReplies = JSON.stringify(replies);
             for (const label of ["xprv", "wif"]) assert.ok(!allReplies.includes(secrets[label]), `${label} entered the debugging return buffers`);
           }
+        } catch (error) {
+          // The work dir, and this log with it, is deleted below. On a CI
+          // runner it is the only record of why the browser stopped (a sandbox
+          // abort reads as nothing more than "pipe closed"), so carry its tail.
+          const tail = existsSync(logPath) ? readFileSync(logPath, "utf8").trim().slice(-4000) : "";
+          if (tail && error instanceof Error) error.message += `\n--- ${engine.id} log (${engine.binary}) ---\n${tail}`;
+          throw error;
         } finally {
+          // A protocol close stops the helpers too; a bare SIGKILL left them
+          // writing into the profile and failed the cleanup below under load.
+          await audit.stopBrowser(child, client);
           client.dispose();
-          const exited = child.exitCode !== null || child.signalCode !== null || !child.pid
-            ? Promise.resolve() : new Promise(resolve => child.once("exit", resolve));
-          child.kill("SIGKILL");
-          await exited;
         }
       });
     }
   } finally {
     await new Promise(resolve => served.server.close(resolve));
-    rmSync(staged.workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    // The checks above are the contract; a leftover temp dir (public fixture
+    // only) is reported, never allowed to fail or mask them.
+    const leftover = await audit.removeWorkDir(staged.workDir);
+    if (leftover) t.diagnostic(`could not remove ${staged.workDir}: ${leftover.message}`);
   }
 });
