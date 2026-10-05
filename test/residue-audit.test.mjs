@@ -184,28 +184,56 @@ test("capture regression: a denied capture records the tool's diagnostic", async
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+// A fake ProcDump that reproduces the given stdout, writes a file of the
+// given size at the target path (or not), and exits with the given code.
+const fakeProcdump = ({ output, fileBytes = null, code }) => (binary, args) => {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  setImmediate(() => {
+    if (fileBytes !== null) writeFileSync(args[args.length - 1], Buffer.alloc(fileBytes, 1));
+    child.stdout.end(output);
+    child.emit("exit", code); child.emit("close", code);
+  });
+  return child;
+};
+
 test("capture: a successful ProcDump one-shot dump exits 1 and is accepted", async () => {
-  // Contract: ProcDump exits 1 after writing a successful one-shot dump
-  // ("Dump count reached"), verified against ProcDump v12.01 on Windows; the
-  // exit code is not its failure signal, the missing dump file is. gcore
-  // keeps the Unix contract (0 success, nonzero failure) covered above.
+  // Contract: ProcDump exits 1 after a successful one-shot dump, having
+  // printed "Dump 1 complete" (verified against ProcDump v12.01 on Windows).
+  // gcore keeps the Unix contract (0 success, nonzero failure) covered above.
   const dir = tmp();
   try {
-    const execFile = (binary, args) => {
-      const child = new EventEmitter();
-      child.stdout = new PassThrough(); child.stderr = new PassThrough();
-      setImmediate(() => {
-        // ProcDump's real behavior: the dump file appears at the given path,
-        // then it exits 1. Reproduce both, from the recorded live output.
-        writeFileSync(args[args.length - 1], "dump-bytes");
-        child.stdout.end("[13:22:43]Dump 1 complete: 1153 MB written in 17.8 seconds\n[13:22:43]Dump count reached.\n");
-        child.emit("exit", 1); child.emit("close", 1);
-      });
-      return child;
-    };
+    const execFile = fakeProcdump({ output: "[14:32:04]Dump 1 complete: 235 MB written in 3.9 seconds\n[14:32:05]Dump count reached.\n", fileBytes: 64, code: 1 });
     const result = await audit.capture({ tool: { kind: "procdump", binary: "procdump64" }, pid: 4242, outDir: dir, checkpoint: "before-input", execFile });
     assert.equal(result.out, join(dir, "before-input-pid4242.dmp"), "a ProcDump success resolves the dump file it wrote");
     assert.equal(result.skipped, null);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("capture: a failed ProcDump run that leaves a file is rejected, not counted as captured", async () => {
+  // Contract: fail closed. ProcDump can exit nonzero after "Dump 1 error: ..."
+  // and still leave a partial file at the target path. That file must not be
+  // mistaken for a complete capture. Verified output shape from ProcDump
+  // v12.01's error line.
+  const dir = tmp();
+  try {
+    const execFile = fakeProcdump({ output: "[14:32:04]Dump 1 error: Error writing dump file: Access is denied.\n", fileBytes: 64, code: 2 });
+    await assert.rejects(
+      audit.capture({ tool: { kind: "procdump", binary: "procdump64" }, pid: 4242, outDir: dir, checkpoint: "before-input", execFile }),
+      /without completing the dump|Dump 1 error/,
+    );
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("capture: an empty ProcDump dump file is no capture, never a clean one", async () => {
+  // Contract: a zero-byte dump holds no memory, so it must be treated as no
+  // capture (skipped), not as a scanned-clean process.
+  const dir = tmp();
+  try {
+    const execFile = fakeProcdump({ output: "[14:32:04]Dump 1 complete: 0 MB written in 0.1 seconds\n[14:32:05]Dump count reached.\n", fileBytes: 0, code: 1 });
+    const result = await audit.capture({ tool: { kind: "procdump", binary: "procdump64" }, pid: 4242, outDir: dir, checkpoint: "before-input", execFile });
+    assert.equal(result.out, null);
+    assert.equal(result.skipped, "empty dump written");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

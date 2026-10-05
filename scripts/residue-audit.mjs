@@ -201,10 +201,18 @@ export const capture = async ({ tool, pid, outDir, checkpoint, execFile = spawn 
     child.on("error", reject);
     // The two dumpers report success differently. gcore exits 0 on success
     // and nonzero on a real failure (ptrace denial, dead pid). ProcDump
-    // exits 1 after a successful one-shot dump ("Dump count reached"), so
-    // its word is the dump file appearing, not the exit code.
+    // exits 1 after a successful one-shot dump — but it can also leave a
+    // partial file and exit nonzero after "Dump 1 error: ...", so its exit
+    // code alone is not the success signal. Fail closed: a ProcDump capture
+    // counts only on an unambiguous successful completion ("Dump 1 complete"
+    // with no "Dump 1 error"); any other output is a failure. A leftover or
+    // truncated file must never be mistaken for a complete capture.
     child.on("close", code => {
-      if (tool.kind === "procdump" ? code !== null : code === 0) resolve();
+      if (tool.kind === "procdump") {
+        const completed = /Dump 1 complete/i.test(diagnostic) && !/Dump 1 error/i.test(diagnostic);
+        if (completed) resolve();
+        else reject(new Error(`procdump exited ${code} on pid ${pid} without completing the dump${diagnostic.trim() ? `: ${diagnostic.trim()}` : ""}`));
+      } else if (code === 0) resolve();
       else reject(new Error(`${tool.kind} exited ${code} on pid ${pid}${diagnostic.trim() ? `: ${diagnostic.trim()}` : ""}`));
     });
   });
@@ -212,6 +220,11 @@ export const capture = async ({ tool, pid, outDir, checkpoint, execFile = spawn 
   if (existsSync(file) && statSync(file).size > MAX_DUMP_BYTES) {
     rmSync(file, { force: true });
     throw new ResidueToolError(`capture of pid ${pid} exceeded ${MAX_DUMP_BYTES} bytes; deleted. Re-run with --browser-process to dump less.`);
+  }
+  // An empty dump holds no memory; treat it as no capture, never as clean.
+  if (existsSync(file) && statSync(file).size === 0) {
+    rmSync(file, { force: true });
+    return { pid, out: null, skipped: "empty dump written" };
   }
   return { pid, out: existsSync(file) ? file : null, skipped: existsSync(file) ? null : "no dump written" };
 };
