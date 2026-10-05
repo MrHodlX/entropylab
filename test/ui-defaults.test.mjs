@@ -2405,7 +2405,9 @@ test("the private recovery section lists the BIP39 passphrase beside the seed ph
 });
 
 // The estimate's grey note is hidden while there is no valid prefix, so it
-// cannot be the live region itself. Its parent is rendered from the start.
+// cannot be the live region itself: a region that enters the accessibility
+// tree together with its first text is often not announced. Its parent is
+// the region, rendered from the start, and the note is the content.
 test("the vanity estimate speaks through a live region that is never hidden", () => {
   const note = shell.match(/<p([^>]*\bid="vanity-estimate"[^>]*)>/);
   assert.ok(note, "the estimate note is missing");
