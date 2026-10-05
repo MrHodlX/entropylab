@@ -861,7 +861,7 @@ var hodlParseExtendedKey = function(value) {
     if (!entry) throw hodlError("Not a recognized extended key. Use xpub/xprv, tpub/tprv, ypub/yprv, zpub/zprv, upub/uprv, vpub/vprv, or a supported multisig export.");
     if (payload.length !== 78) throw hodlError("The extended key payload has an unexpected length.");
     let normalized = hodlReversionExtendedKey(input, entry.private ? hodlExtendedKeyVersions.mainnet.x.prv : hodlExtendedKeyVersions.mainnet.x.pub), node = hodlHDKey.fromExtendedKey(normalized);
-    if (Boolean(node.privateKey) !== entry.private) throw hodlError("The extended-key prefix does not match its key payload.");
+    if (hodlNodeHasPrivateKey(node) !== entry.private) throw hodlError("The extended-key prefix does not match its key payload.");
     let depth = payload[4], childNumber = new DataView(payload.buffer, payload.byteOffset + 9, 4).getUint32(0, false);
     if (node.depth !== depth) throw hodlError("The extended-key depth does not match its serialized payload.");
     return { xkey: normalized, isPrivate: entry.private, network: entry.network, family: entry.family, scope: entry.scope, prefix: entry.name, version: entry.ver, node, depth, childNumber };
@@ -889,6 +889,13 @@ function hodlSerializeExtendedKey(value, network, family, isPrivate) {
 // exported (#546 B2). Every standard extended key is 111 characters long,
 // which is the length a hidden one masks at.
 var hodlExtendedKeyLength = 111;
+// Whether a node holds a private key, without copying it out. Every caller
+// passes the app's own HDKey (or a test stub), never @scure/bip32 — the
+// pinned scure 2.4.0 getter also returns a fresh copy, so a fallback that
+// read it for truthiness would leak the very copy this removes (#546).
+function hodlNodeHasPrivateKey(node) {
+  return Boolean(node?.hasPrivateKey);
+}
 function hodlCopyPrivateNode(node) {
   let privateKey = node?.privateKey ?? null;
   if (!privateKey) return null;
@@ -1175,7 +1182,7 @@ function hodlRootWalletResult(root, network, source, accountIndex, masterFingerp
     // xpub serializations are versioned per network, the fingerprint is only
     // 4 display bytes.
     masterIdentity: hodlHex.encode(root.chainCode) + ":" + hodlHex.encode(root.publicKey),
-    multisigCosignerExports: root.privateKey ? hodlBuildMultisigCosignerExports(root, network, accountIndex, masterFingerprint, coinType) : [],
+    multisigCosignerExports: hodlNodeHasPrivateKey(root) ? hodlBuildMultisigCosignerExports(root, network, accountIndex, masterFingerprint, coinType) : [],
     imported: false,
     notes: source.notes,
     warnings: source.warnings,
@@ -11398,7 +11405,7 @@ function hodlSpEnsureHd() {
     }
     hodlRefreshStationKeyPickers();
   }
-  if (!hodlSpHd || !hodlSpHd.privateKey) throw new Error("Choose a compatible existing key, or enter a BIP39 seed or root xprv.");
+  if (!hodlNodeHasPrivateKey(hodlSpHd)) throw new Error("Choose a compatible existing key, or enter a BIP39 seed or root xprv.");
   document.getElementById("sp-session").textContent = hodlSpNote;
 }
 function hodlSpDeriveSessionKeys() {
@@ -11412,17 +11419,20 @@ function hodlSpDeriveSessionKeys() {
   let spendPath = `m/352'/${hodlSpCoinType()}'/${hodlSpAccount()}'/0'/0`;
   let scanNode = root.derive(scanPath);
   let spendNode = root.derive(spendPath);
-  if (!scanNode.privateKey || !spendNode.privateKey) throw new Error("BIP-352 child keys are missing private material.");
+  if (!scanNode.hasPrivateKey || !spendNode.hasPrivateKey) throw new Error("BIP-352 child keys are missing private material.");
+  // The getter copies, so one read per key is the whole private material;
+  // the session owns these copies and no slice() duplicates are made.
+  let scanPriv = scanNode.privateKey, spendPriv = spendNode.privateKey;
   hodlSpKeys = {
     scanPath,
     spendPath,
-    scanPriv: scanNode.privateKey.slice(),
-    spendPriv: spendNode.privateKey.slice(),
-    scanPub: hodlSecp256k1.getPublicKey(scanNode.privateKey, true),
-    spendPub: hodlSecp256k1.getPublicKey(spendNode.privateKey, true),
+    scanPriv,
+    spendPriv,
+    scanPub: hodlSecp256k1.getPublicKey(scanPriv, true),
+    spendPub: hodlSecp256k1.getPublicKey(spendPriv, true),
     fingerprint: hodlFingerprintHex(root.fingerprint),
   };
-  // The session owns the slices above; the derivation nodes are dead copies.
+  // The session owns the getter copies; the derivation nodes are dead.
   scanNode.wipePrivateData();
   spendNode.wipePrivateData();
 }
@@ -16312,10 +16322,15 @@ function hodlVanityPlan(state, method, scriptId) {
   let parent = null;
   try {
     parent = root.derive(vanityPathString(path.slice(0, 2)));
-    if (!parent.privateKey) throw new Error(`Key ${label} is watch-only; the derivation grind needs private material.`);
-    let node = new Uint8Array(64);
-    node.set(parent.privateKey, 0);
-    node.set(parent.chainCode, 32);
+    if (!parent.hasPrivateKey) throw new Error(`Key ${label} is watch-only; the derivation grind needs private material.`);
+    let node = new Uint8Array(64), parentKey = parent.privateKey, parentChain = parent.chainCode;
+    try {
+      node.set(parentKey, 0);
+      node.set(parentChain, 32);
+    } finally {
+      parentKey.fill(0); // the getters' copies; the node below keeps the key
+      parentChain.fill(0);
+    }
     return { ...plan, node, path: path.slice(2), pathPrefix: path.slice(0, 2), counterSlot: 0 };
   } finally {
     parent?.wipePrivateData();
