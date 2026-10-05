@@ -889,12 +889,12 @@ function hodlSerializeExtendedKey(value, network, family, isPrivate) {
 // exported (#546 B2). Every standard extended key is 111 characters long,
 // which is the length a hidden one masks at.
 var hodlExtendedKeyLength = 111;
-// Whether a node holds a private key, without copying it out: the app's
-// HDKey answers hasPrivateKey directly, and any injected @scure/bip32 node
-// falls back to the getter, whose scure read aliases the node instead of
-// copying (#546).
+// Whether a node holds a private key, without copying it out. Every caller
+// passes the app's own HDKey (or a test stub), never @scure/bip32 — the
+// pinned scure 2.4.0 getter also returns a fresh copy, so a fallback that
+// read it for truthiness would leak the very copy this removes (#546).
 function hodlNodeHasPrivateKey(node) {
-  return typeof node?.hasPrivateKey === "boolean" ? node.hasPrivateKey : Boolean(node?.privateKey);
+  return Boolean(node?.hasPrivateKey);
 }
 function hodlCopyPrivateNode(node) {
   let privateKey = node?.privateKey ?? null;

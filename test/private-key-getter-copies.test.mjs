@@ -84,23 +84,44 @@ test("BIP-85 entropy derivation zeroes every getter copy, and the watch-only ref
   assert.ok(copies.length > 0, "the derived child's key is read once and wiped");
   assert.equal(bytesToHex(entropy), BIP85_CASE1);
   // A watch-only root is refused, and the refusal leaves no copy behind.
+  // With no preflight, the fully-hardened path refuses inside derive()
+  // ("Could not derive hardened child key") before any private key exists.
   const watch = HDKey.fromExtendedKey(XPUB);
   const { copies: refuseCopies } = recordGetterCopies(() => {
-    assert.throws(() => deriveBip85Entropy(watch, "m/83696968'/0'/0'"), /Watch-only/);
+    assert.throws(() => deriveBip85Entropy(watch, "m/83696968'/0'/0'"));
   });
   assert.equal(refuseCopies.length, 0, "a watch-only refusal must not read the privateKey getter at all");
 });
 
-test("@scure/bip32 roots still derive the published BIP-85 vector (no zeroing of scure internals)", () => {
-  // The existing suites hand scure HDKeys to these functions; its getter
-  // returns the node's own array, which must never be zeroed by a check. The
-  // root is the BIP-85 spec's own master key (bip-0085.mediawiki), the one
-  // the published HMAC-SHA512 test case derives from.
+test("@scure/bip32 roots derive the published BIP-85 vector, and the compatibility path takes no discarded getter copy", () => {
+  // The existing suites hand @scure/bip32 HDKeys to deriveBip85Entropy. The
+  // pinned scure 2.4.0 getter returns a FRESH copy (Uint8Array.from), not an
+  // alias of the node — so a truthiness fallback like Boolean(root.privateKey)
+  // would create and discard an unzeroed copy. Record every copy scure's
+  // getter hands out and prove the only ones taken are wiped, never dropped.
   const scureRoot = ScureHDKey.fromExtendedKey(BIP85_MASTER);
-  const before = bytesToHex(scureRoot.privateKey);
-  const entropy = deriveBip85Entropy(scureRoot, "m/83696968'/0'/0'");
+  const copies = [];
+  const original = Object.getOwnPropertyDescriptor(ScureHDKey.prototype, "privateKey");
+  Object.defineProperty(ScureHDKey.prototype, "privateKey", {
+    configurable: true,
+    get() {
+      const copy = original.get.call(this);
+      if (copy) copies.push(copy);
+      return copy;
+    },
+  });
+  let entropy;
+  try {
+    entropy = deriveBip85Entropy(scureRoot, "m/83696968'/0'/0'");
+  } finally {
+    Object.defineProperty(ScureHDKey.prototype, "privateKey", original);
+  }
   assert.equal(bytesToHex(entropy), BIP85_CASE1);
-  assert.equal(bytesToHex(scureRoot.privateKey), before, "the scure root's private key must survive the call");
+  assertAllZero(copies, "deriveBip85Entropy on a scure root");
+  // The node's own key material must survive untouched as well.
+  const after = original.get.call(scureRoot);
+  assert.notEqual(after.every((b) => b === 0), true, "the scure root must still hold its key");
+  after.fill(0);
 });
 
 // ---- app.js sites, loaded through the slice harness ----
