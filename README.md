@@ -32,6 +32,12 @@ the limits of browser-memory cleanup.
   with local timestamps. It keeps the last 100 fixed messages in page memory,
   records no wallet data, and clears when the session ends or the page is left.
   It sends no network probes; an Offline report is not proof of an air gap.
+  Translation detection uses Chrome/Google's `translated-ltr` /
+  `translated-rtl` document-root classes or Edge/Microsoft's `_msthash`,
+  `_msttexthash`, or `_mstmutation` DOM attributes. This is best-effort
+  detection after the fact using browser markers, not prevention or a
+  guaranteed future browser API. Secret-bearing surfaces retain the
+  preventive `translate="no"` opt-out; see [SECURITY.md](SECURITY.md).
 
 - Accepts dice rolls, coin flips, playing-card transcripts, number-base
   transcripts (binary through base64), hexadecimal entropy, BIP39 seed
