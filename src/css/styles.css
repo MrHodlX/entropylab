@@ -5,6 +5,7 @@
   --surface-2: #202020;
   --fg: #eeeeee;
   --muted: #a3a3a3;
+  --muted-strong: color-mix(in oklab, var(--muted) 50%, var(--fg)); /* secondary text that must still read easily: halfway from --muted to the text colour */
   --faint: #737373;
   --border: #333333;
   --accent: #d8892b;
@@ -45,6 +46,8 @@
   --progress-start: #c66500; /* derive progress gradient, either side of --accent */
   --progress-end: #ffb347;
   --scrim: rgb(0 0 0 / 55%); /* the modal overlay; floating menu and modal shadows */
+  --option-hover-ground: color-mix(in oklab, var(--fg) 10%, var(--surface-2)); /* a hovered option in any dropdown list: raised toward the text colour */
+  --option-selected-ground: color-mix(in oklab, var(--bg) 25%, var(--surface-2)); /* the chosen option: a step toward the page ground (light theme: all the way) */
   --print-paper: white; /* print only: the page and the policy sheet */
   --print-ink: #111;
   --print-highlight: #f3d367; /* print only: the policy sheet's loud network label */
@@ -157,6 +160,8 @@
   --mono: ui-monospace, "Cascadia Code", Menlo, Consolas, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols", "DejaVu Sans Mono", "DejaVu Sans", monospace;
 }
 :root[data-theme="light"] {
+  --option-selected-ground: var(--bg);
+  --option-hover-ground: color-mix(in oklab, var(--fg) 6%, var(--surface-2));
   --wordmark: #000000;
   color-scheme: light;
   --bg: #ffffff;
@@ -285,6 +290,8 @@ button:not(:disabled):active *,
    label at every width. */
 .page-footer-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-control); margin-top: var(--space-component); }
 .page-footer-links > a { display: inline-flex; align-items: center; gap: var(--space-snug); text-decoration: none; }
+.page-footer-links { position: relative; }
+.page-footer-links .network-picker { position: static; }
 /* The network and language pickers moved down from the header: here they
    take the row's 44px height and their lists open upward. */
 .page-footer-links :is(.network-picker-button, .locale-control .custom-select-button) { min-height: 44px; }
@@ -1061,10 +1068,12 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 .network-picker[data-network="signet"] .network-picker-coin { fill: var(--signet); }
 .network-picker[data-network="regtest"] .network-picker-coin { fill: var(--faint); }
 .network-picker-b { fill: var(--on-color); }
-.network-picker-chevron { color: var(--accent); transition: transform 120ms ease; }
+.network-picker-chevron { width: 14px; height: 14px; color: var(--accent); transition: transform 120ms ease; }
 .network-picker-button[aria-expanded="true"] .network-picker-chevron { transform: rotate(180deg); }
-/* Opens upward from the footer row, centred on its button so it stays on
-   screen wherever the row wraps. */
+/* Opens upward from the footer row and centres on the row, not on its own
+   button: the row is centred on the page, so the menu is too, and at its
+   flexible width (340px, never wider than the screen less the gutters) it
+   stays on screen wherever the button sits. */
 .network-picker-menu {
   position: absolute; z-index: 100; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: 340px;
   max-width: calc(100vw - 2 * var(--gutter-page));
@@ -1072,10 +1081,12 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
   padding: var(--inset-menu); border: 1px solid var(--border); border-radius: var(--radius-container);
   background: var(--surface-2); box-shadow: 0 16px 36px var(--scrim);
 }
-.network-picker-title {
-  margin: var(--space-snug) 10px var(--space-tight); font-size: var(--text-label-small); letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--accent); font-weight: 600;
-}
+/* The menu opens on the shared label and its description, inset to line up
+   with the option text below. */
+/* Scoped through the menu so they outrank the shared label-to-description
+   margins further down. */
+.network-picker-menu > .label.network-picker-title { margin: var(--space-snug) 10px 0; }
+.network-picker-menu > .label + .network-picker-help { margin: var(--space-hairline) 10px var(--space-component); }
 .network-picker-option {
   display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: var(--inset-option);
   border: 0; border-radius: var(--radius-control); background: transparent; color: var(--fg);
@@ -1083,18 +1094,25 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 }
 /* Each option carries its network's coin, the mempool.space switcher
    convention: yellow mainnet, green testnet, purple signet, grey regtest. */
-.network-picker-option-glyph { flex: 0 0 auto; margin-top: 3px; }
+/* The coin and the network name share one 20px line, so the coin sits on
+   the name's centre line whatever the font's own line height. */
+.network-picker-option-glyph { flex: 0 0 auto; width: 20px; height: 20px; }
+.network-picker-option strong { display: block; line-height: 20px; }
+/* The name and what kind of coins it means share the coin's line: the plain
+   meaning sits beside the name in the small muted note text, centred on it,
+   and the technical detail follows on the line below. */
+.network-picker-option-head { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-control); min-height: 20px; }
+.network-picker-option-kind { color: var(--muted-strong); font-size: var(--text-note); line-height: 1.45; }
+/* A middle dot joins the name to its meaning; drawn here so it stays out of
+   the translated text. */
+.network-picker-option-kind::before { content: "·"; margin-right: var(--space-control); }
 .network-picker-option-coin { fill: var(--bitcoin); }
 .network-picker-option[data-network="testnet"] .network-picker-option-coin { fill: var(--testnet); }
 .network-picker-option[data-network="signet"] .network-picker-option-coin { fill: var(--signet); }
 .network-picker-option[data-network="regtest"] .network-picker-option-coin { fill: var(--faint); }
-.network-picker-option:hover, .network-picker-option:focus-visible,
-.custom-select-option:hover, .custom-select-option:focus-visible { background: color-mix(in oklab, var(--accent) 14%, var(--surface-2)); outline: none; }
-.network-picker-option[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 20%, var(--surface-2)); }
 .network-picker-option[aria-checked="true"] strong { color: var(--accent); }
 .network-picker-option-text { font-size: var(--text-control-small); }
 .network-picker-option-desc { display: block; margin-top: var(--space-hairline); color: var(--muted); font-size: var(--text-note); line-height: 1.45; }
-.network-picker-note { margin: var(--space-snug) 10px var(--space-control); color: var(--faint); font-size: var(--text-note); line-height: 1.45; }
 /* min-width: 0 lets the row shrink on narrow screens rather than pushing the
    controls out of the bar. */
 .download-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-control); margin-left: auto; min-width: 0; }
@@ -1137,7 +1155,10 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
   position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important;
   margin: 0 !important; padding: 0 !important; opacity: 0; pointer-events: none; overflow: hidden;
 }
-.custom-select { position: relative; width: 100%; margin-top: var(--space-control); font-family: var(--mono); font-size: var(--text-field); }
+/* Every dropdown starts from this base: regular mono at the field size. It
+   sets the weight itself, so a dropdown inside a bold label.field does not
+   inherit the label's weight. Only a dropdown with a real need overrides it. */
+.custom-select { position: relative; width: 100%; margin-top: var(--space-control); font-family: var(--mono); font-size: var(--text-field); font-weight: 400; }
 .custom-select-button {
   width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: var(--space-component);
   padding: var(--inset-field); border: 1px solid var(--border); border-radius: var(--radius-field);
@@ -1145,7 +1166,7 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 }
 .custom-select-button:hover, .custom-select.open .custom-select-button { border-color: var(--accent); }
 .custom-select-chevron {
-  display: block; flex: 0 0 auto; width: 12px; height: 12px;
+  display: block; flex: 0 0 auto; width: 14px; height: 14px;
   fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;
   color: var(--accent); transition: transform 120ms ease;
 }
@@ -1159,8 +1180,17 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
   width: 100%; min-height: 38px; padding: var(--inset-option); border: 0; border-radius: var(--radius-control);
   background: transparent; color: var(--fg); text-align: left; cursor: pointer;
 }
-.custom-select-option[aria-selected="true"] { background: color-mix(in oklab, var(--accent) 20%, var(--surface-2)); color: var(--accent); }
+:is(.custom-select-option[aria-selected="true"], .network-picker-option[aria-checked="true"]) { background: var(--option-selected-ground); color: var(--accent); }
 .custom-select-option:disabled { background: transparent; color: var(--faint); cursor: not-allowed; opacity: .48; }
+/* One option state for every list, the network menu included: the chosen
+   option sits on the page's own ground (as in the field it fills) in the
+   accent; the option under the pointer or keyboard is raised toward the text
+   colour and takes the bright hover ink the rest of the app's controls use.
+   Listed after the selected state so a hovered choice shows the hover. */
+:is(.custom-select-option, .network-picker-option):not(:disabled):is(:hover, :focus-visible) {
+  background: var(--option-hover-ground); color: var(--selection-accent-ink); outline: none;
+}
+.network-picker-option:is(:hover, :focus-visible) strong { color: var(--selection-accent-ink); }
 /* The banners are rows: the message takes the slack, a control column (only
    the beta banner carries one) does not. The noscript notice carries no
    control and stays a plain block, but its label is wrapped like the others
@@ -1576,8 +1606,8 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .key-mode-select .custom-select-button { --key-method-card-bg: var(--bg); }
 .key-mode-select .custom-select-list { --key-method-card-bg: var(--surface-2); }
 .key-mode-select .custom-select-option:hover,
-.key-mode-select .custom-select-option:focus-visible { --key-method-card-bg: color-mix(in oklab, var(--accent) 14%, var(--surface-2)); }
-.key-mode-select .custom-select-option[aria-selected="true"] { --key-method-card-bg: color-mix(in oklab, var(--accent) 20%, var(--surface-2)); }
+.key-mode-select .custom-select-option:focus-visible { --key-method-card-bg: var(--option-hover-ground); }
+.key-mode-select .custom-select-option[aria-selected="true"]:not(:hover, :focus-visible) { --key-method-card-bg: var(--option-selected-ground); }
 .key-method-icon {
   display: inline-flex; flex: 0 0 18px; width: 18px; height: 18px; color: currentColor;
 }
@@ -2284,21 +2314,26 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 .master-fingerprint-card {
   flex: 0 1 180px; min-width: 0; display: grid;
   grid-template-columns: minmax(0, 1fr) 40px; column-gap: var(--space-control); row-gap: var(--space-hairline);
-  align-items: center; padding: var(--inset-note); background: var(--surface-2);
+  align-items: center; padding: var(--inset-note);
+  /* Two steps toward the text colour: darker on the light ground, brighter on
+     the dark one, so the frame stands off the card in both themes. */
+  background: color-mix(in oklab, var(--fg) 10%, var(--surface-2));
   transition: background-color .16s ease;
 }
 /* The fixed-size frame stays present while the fingerprint is unavailable, so
    resolving a LifeHash never changes the card height or shifts nearby fields. */
 .master-fingerprint-lifehash-frame {
   grid-column: 2; grid-row: 1 / span 2; display: block; width: 40px; height: 40px;
-  border: 1px solid var(--border); border-radius: var(--radius-tiny); overflow: hidden; background: transparent;
+  /* Halfway from the border grey to --faint, so the empty frame still shows
+     on the word-slot ground. */
+  border: 1px solid color-mix(in oklab, var(--border) 50%, var(--faint)); border-radius: var(--radius-tiny); overflow: hidden; background: transparent;
 }
 .master-fingerprint-lifehash {
   display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--image-ground);
 }
 .master-fingerprint-lifehash[hidden] { display: none; }
 .master-fingerprint-label {
-  grid-column: 1; min-width: 0; color: var(--muted); font-size: var(--text-label-small); line-height: 1.35;
+  grid-column: 1; min-width: 0; color: var(--muted-strong); font-size: var(--text-label-small); line-height: 1.35;
   transition: color .16s ease, opacity .16s ease;
 }
 .master-fingerprint-value {
@@ -2309,11 +2344,18 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 /* The card sets its own display, which outranks the browser's rule for the
    attribute, so hiding it has to be said here. */
 .master-fingerprint-card[hidden], .master-fingerprint-arrow[hidden] { display: none; }
-.master-fingerprint-card.is-disabled { background: color-mix(in oklab, var(--surface-2) 62%, var(--bg)); }
-.master-fingerprint-card.is-disabled .master-fingerprint-label,
+/* On the light ground a filled frame takes a smaller step, one notch
+   brighter, still clearly darker than an empty one. */
+:root[data-theme="light"] .master-fingerprint-card:not(.is-disabled) { background: color-mix(in oklab, var(--fg) 6%, var(--surface-2)); }
+/* The empty frame takes the seed word slots' ground in both themes, a
+   clear step back from a filled one. */
+.master-fingerprint-card.is-disabled { background: var(--surface-2); }
 .master-fingerprint-card.is-disabled .master-fingerprint-value {
   color: var(--faint); opacity: .58;
 }
+/* The label names a fingerprint, so it waits for one: hidden while the frame
+   is empty, but still holding its line so nothing shifts when a key arrives. */
+.master-fingerprint-card.is-disabled .master-fingerprint-label { visibility: hidden; }
 .master-fingerprint-arrow {
   flex: 0 0 auto; color: var(--accent); font-size: var(--text-icon-medium); line-height: 1;
   transition: color .16s ease, opacity .16s ease;
@@ -2879,6 +2921,12 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
 /* On white the grey lift turns the brownish light-mode orange muddy; the
    orange note tints the white ground straight from the bright orange. */
 :root[data-theme="light"] .edge-note.is-info { --edge-note-ground: color-mix(in oklab, var(--selection-accent) 10%, var(--bg)); }
+/* Grey edge on the light ground: a step paler than --muted, toward the
+   border grey. */
+:root[data-theme="light"] .edge-note.is-muted { --edge-note-color: color-mix(in oklab, var(--faint) 60%, var(--border)); }
+/* The grey notes sit one notch closer to white on the light ground: the
+   shared lift reads heavy there with no hue to carry it. */
+:root[data-theme="light"] .edge-note:not(.is-private, .is-public, .is-info) { --edge-note-ground: color-mix(in oklab, var(--edge-note-color, var(--border)) 8%, color-mix(in oklab, var(--fg) 4%, var(--bg))); }
 .edge-note.is-private { --edge-note-color: var(--danger-bright); }
 .edge-note.is-public { --edge-note-color: var(--ok-bright); }
 .edge-note.is-info { --edge-note-color: var(--accent); }
