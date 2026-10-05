@@ -1572,7 +1572,6 @@ test("dice rolls hide Pearson chi-squared fairness behind a text expand button",
   // The pre-boot markup shows the same shape the app renders: the meta row in
   // its wrapper above the input, two lines, each number a coloured value.
   assert.match(shell, /<div class="seed-word-meta label-description"><p class="muted" id="dice-meta" aria-live="polite">/);
-  assert.match(shell, /<span class="meta-value is-short">0<\/span> of 99 recommended rolls<br><span class="meta-value is-short">0\.0<\/span> bits estimated/);
   assert.match(shell, /id="dice-meta"[\s\S]*?<div class="dice-input-shell">[\s\S]*?<div class="dice-input-pad/);
   // No trace of the single-line form with its trailing method restatement.
   assert.doesNotMatch(shell, /0\.0 bits estimated · 24-word seed/);

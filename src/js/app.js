@@ -2888,7 +2888,7 @@ var hodlSeedLengths = Object.freeze({
   15: Object.freeze({ words: 15, bits: 160, bytes: 20, hexChars: 40, hashRolls: 62, partialWords: 14, candidates: 64 }),
   18: Object.freeze({ words: 18, bits: 192, bytes: 24, hexChars: 48, hashRolls: 75, partialWords: 17, candidates: 32 }),
   21: Object.freeze({ words: 21, bits: 224, bytes: 28, hexChars: 56, hashRolls: 87, partialWords: 20, candidates: 16 }),
-  24: Object.freeze({ words: 24, bits: 256, bytes: 32, hexChars: 64, hashRolls: 99, partialWords: 23, candidates: 8 })
+  24: Object.freeze({ words: 24, bits: 256, bytes: 32, hexChars: 64, hashRolls: 100, partialWords: 23, candidates: 8 })
 });
 var hodlEntropyFormats = Object.freeze({
   bin: Object.freeze({ id: "bin", base: 2, bitsPerDigit: 1, alphabet: "01", ...hodlHexFormatLabels.bin, method: "binary" }),
