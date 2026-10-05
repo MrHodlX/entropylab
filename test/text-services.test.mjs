@@ -20,7 +20,9 @@
 // Browser translation sends the page's text to an online service too, and
 // the page can only see it afterwards: Chrome marks a translated page with a
 // translated-ltr or translated-rtl class on the root. Contract: either class
-// shows the warning, any other class does not, and it stays up.
+// shows the warning, any other class does not, and it stays up. The warning
+// is a bullet in the Important section, so showing it also opens that
+// section: a warning inside a closed disclosure is not seen.
 // The live page, with its observers, is covered in the browser suite.
 // Run with `npm test`.
 import { test } from "node:test";
@@ -161,8 +163,11 @@ test("a machine-translated page shows the translation warning and keeps it up", 
     return { doc, html, warning: doc.getElementById("translated-warning") };
   };
   try {
-    const { html, warning } = page("");
+    const { doc, html, warning } = page("");
     assert.ok(warning?.hidden, "the warning must start hidden");
+    const important = doc.getElementById("important");
+    assert.ok(important && warning.closest("#important") === important, "the warning must sit in the Important section");
+    important.removeAttribute("open");
     initTranslationWarning(warning.ownerDocument);
     const observer = observers.at(-1);
     assert.equal(observer.target, html);
@@ -173,6 +178,7 @@ test("a machine-translated page shows the translation warning and keeps it up", 
     html.setAttribute("class", "some-theme translated-ltr");
     observer.callback([]);
     assert.equal(warning.hidden, false, "translated-ltr must show the warning");
+    assert.ok(important.hasAttribute("open"), "showing the warning must open the Important section");
     assert.ok(observer.disconnected);
     html.setAttribute("class", "");
     assert.equal(warning.hidden, false, "showing the original again must not hide it: the text was already sent");

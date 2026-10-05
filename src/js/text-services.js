@@ -64,7 +64,9 @@ export function initTextServiceOptOuts(doc = document) {
 // service; translate="no" withholds what is inside it, and the page marks
 // every element that shows a secret. Chrome then marks the root with a
 // translated-ltr or translated-rtl class. By then the text has been sent, so
-// the warning cannot undo anything: it says what happened and stays up.
+// the warning cannot undo anything: it says what happened and stays up. It is
+// a bullet in the Important section, so showing it opens that section too:
+// a warning inside a closed disclosure would go unseen.
 export function initTranslationWarning(doc = document) {
   const warning = doc.getElementById("translated-warning");
   if (!warning) return;
@@ -73,6 +75,7 @@ export function initTranslationWarning(doc = document) {
   const check = () => {
     if (!/(^|\s)translated-(ltr|rtl)(\s|$)/.test(root.getAttribute("class") || "")) return;
     warning.removeAttribute("hidden");
+    warning.closest("details")?.setAttribute("open", "");
     observer.disconnect();
   };
   observer.observe(root, { attributes: true, attributeFilter: ["class"] });

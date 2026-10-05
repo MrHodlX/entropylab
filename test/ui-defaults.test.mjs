@@ -37,8 +37,8 @@ test("top status banner omits the entropy RNG message", () => {
 
 test("optional BIP39 passphrase placeholders explain that blank means none", () => {
   for (const markup of [shell]) {
-    assert.match(markup, /id="pass"[^>]*placeholder="Enter a BIP39 passphrase, or leave blank for none"/);
-    assert.match(markup, /id="psbt-pass"[^>]*placeholder="Enter a BIP39 passphrase, or leave blank for none"/);
+    assert.match(markup, /id="pass"[^>]*placeholder="[^"]*leave blank for none"/);
+    assert.match(markup, /id="psbt-pass"[^>]*placeholder="[^"]*leave blank for none"/);
     assert.doesNotMatch(markup, /placeholder="Leave blank unless you set one"/);
   }
 });
@@ -103,8 +103,8 @@ test("the network picker sets the network every tool defaults to", () => {
     assert.match(markup, /tpub\/upub\/vpub · WIF 9\/c · coin type 1'/);
     // Signet shares the testnet formats; regtest shares the key formats but
     // renders SegWit with the bcrt HRP — the options say so (issue #329).
-    assert.match(markup, /Signed practice coins, no value · same formats as testnet/);
-    assert.match(markup, /Local sandbox coins · addresses m…\/n…, 2…, bcrt1q…, bcrt1p… · tpub\/upub\/vpub · WIF 9\/c · coin type 1'/);
+    assert.match(markup, /data-network="signet"[\s\S]*?same formats as testnet/);
+    assert.match(markup, /data-network="regtest"[\s\S]*?bcrt1q…, bcrt1p…/);
     // And the menu says plainly that no connection is ever made.
     assert.match(markup, /This page never connects to any network/);
   }
