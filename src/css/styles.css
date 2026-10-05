@@ -265,19 +265,27 @@ button:not(:disabled):active *,
 .sources:has(+ .sources) { padding-bottom: 0; }
 /* A fine-print list steps its items like the Sources paragraphs above it. */
 .sources ul { display: grid; gap: var(--space-component); padding-left: var(--indent-list); }
-.security-log { padding: 0; overflow: hidden; }
+.security-log { max-width: 600px; margin: var(--space-lede) auto; padding: 0; overflow: hidden; border-radius: 0; }
 .security-log-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-component); padding: var(--inset-toolbar); border-bottom: 1px solid var(--border); }
-.security-log-header h2 { display: flex; align-items: center; gap: var(--space-control); margin: 0; font-size: var(--text-body); }
+/* The title is a heading for structure but wears the shared label style,
+   not the serif display face h2 carries elsewhere. */
+.security-log-header h2 { display: flex; align-items: center; gap: var(--space-control); margin: 0; font-family: var(--sans); font-size: var(--text-label); font-weight: 600; letter-spacing: normal; color: var(--fg); }
 .security-log-header svg { color: var(--muted); flex-shrink: 0; }
-.security-log-live { display: flex; align-items: center; gap: var(--space-snug); color: var(--muted); font-family: var(--mono); font-size: var(--text-data-small); }
-.security-log-live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--blue-bright); }
-.security-log-note { margin: 0; padding: var(--inset-toolbar); }
+/* The note closes the log as a footer that mirrors the header bar. */
+.security-log-note { margin: 0; padding: var(--space-control) var(--space-component); border-top: 1px solid var(--border); text-align: center; color: var(--faint); font-size: var(--text-caption); line-height: 1.4; }
 .security-log-output { list-style: none; margin: 0; padding: var(--inset-panel); background: var(--bg); font-family: var(--mono); font-size: var(--text-data-small); line-height: 1.6; max-height: 260px; overflow: auto; }
 .security-log-output li { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); gap: var(--space-control); padding: var(--space-tight) 0; overflow-wrap: anywhere; }
 .security-log-output time { color: var(--faint); font-variant-numeric: tabular-nums; }
 .security-log-output [data-security-level] { color: var(--blue-ink); }
-.security-log-output [data-level="warning"] [data-security-level], .security-log-output [data-level="warning"] [data-security-message] { color: var(--danger-bright); }
-@media (max-width: 520px) { .card.security-log { padding: 0; } .security-log-output li { grid-template-columns: max-content minmax(0, 1fr); } .security-log-output [data-security-message] { grid-column: 1 / -1; } }
+.security-log-output [data-security-message] { color: var(--muted-strong); }
+/* A faint hairline between entries, half the border grey. */
+.security-log-output li + li { border-top: 1px solid color-mix(in oklab, var(--border) 50%, transparent); }
+/* Only the level tag carries the colour; every message stays in the text
+   colour. A warning's tag takes the muted red. */
+.security-log-output [data-level="warning"] [data-security-level] { color: var(--danger); }
+/* Phones keep the three columns: the message wraps beside its time and tag
+   rather than dropping below them. */
+@media (max-width: 520px) { .card.security-log { padding: 0; } }
 .warn { background: color-mix(in oklab, var(--danger) 12%, var(--bg)); border-color: color-mix(in oklab, var(--danger) 40%, var(--border)); }
 .muted { color: var(--muted); font-size: var(--text-body); line-height: 1.5; }
 /* The pitch is a set of discrete claims rather than prose, so it reads as a

@@ -2040,10 +2040,10 @@ test("Key Station stays put and a derived key opens a fingerprint tab with a sum
     assert.match(markup, /id="key-edit-inputs"/);
     assert.match(markup, /id="key-summary-path"/);
     assert.match(markup, /Open Key Station to derive another key/);
-    assert.match(markup, /Base 10 \[0-9\] \/ Hashed rolls \(recommended\)/);
+    assert.match(markup, /Base 10 \[0-9\] \/ Hashed rolls/);
     assert.match(markup, /Dice \[1-6\] \/ Hashed rolls/);
   }
-  assert.match(appSource, /hodlT\("Base 10 \[0-9\] \/ Hashed rolls \(recommended\)"\)/);
+  assert.match(appSource, /hodlT\("Base 10 \[0-9\] \/ Hashed rolls"\)/);
   assert.match(appSource, /hodlT\("Dice \[1-6\] \/ Hashed rolls"\)/);
   assert.match(appSource, /function hodlSizeKeySummaryLifehash\(\) \{[\s\S]*getBoundingClientRect\(\)\.height[\s\S]*image\.style\.height = image\.style\.width = `\$\{height\}px`/);
   assert.match(appSource, /function hodlSnapshotKeySummary\(/);
