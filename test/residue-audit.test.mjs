@@ -15,6 +15,7 @@ import {
   DISCLAIMER,
   ResidueToolError,
   detectTools,
+  main,
   makeSecrets,
   makeNeedles,
   scanFile,
@@ -142,8 +143,10 @@ test("the driver script embeds only the fake secrets and parses as JavaScript", 
   assert.match(script, new RegExp(secrets.mnemonic));
   assert.match(script, new RegExp(secrets.passphrase));
   assert.doesNotMatch(script, /seedHex|fakeWif/, "the driver plants only the mnemonic and passphrase");
-  // Every checkpoint the harness expects is signalled, in order.
-  const order = [...script.matchAll(/say\("([a-z-]+)"\)/g)].map((match) => match[1]);
+  // Every checkpoint the harness expects is signalled, in order. The regex
+  // stops at the closing quote so `say("after-derive", value)` — the guard
+  // checkpoint also carries the field contents — still matches.
+  const order = [...script.matchAll(/say\("([a-z-]+)"/g)].map((match) => match[1]);
   assert.deepEqual(order, ["after-derive", "after-reveal", "after-copy", "after-wipe", "after-tab-close"]);
   // The embedded script is syntactically valid JS (strip the wrapper tags).
   const js = script.replace(/<\/?script>/g, "");
@@ -185,4 +188,99 @@ test("a run whose positive control finds nothing is marked invalid in the report
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("the positive control passes only on a mnemonic hit, never on some other secret", () => {
+  // The mnemonic is the value the control knows is on screen at after-reveal.
+  // A hit on any other needle (here the passphrase) must not pass the control:
+  // a run that found only "TREZOR" never proved it can find the phrase itself.
+  const dir = tmp();
+  try {
+    const { mdPath } = writeReports({
+      outDir: dir,
+      meta: { platform: "win32", browser: "firefox", tool: "procdump" },
+      results: [{ name: CONTROL_CHECKPOINT, hits: [{ pid: 4242, label: "passphrase", encoding: "utf16le", count: 4 }] }],
+    });
+    assert.match(
+      readFileSync(mdPath, "utf8"),
+      /POSITIVE CONTROL FAILED \(run invalid\)/,
+      "a control hit on a non-mnemonic label must invalidate the run",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a needle lying entirely inside the retained chunk overlap is counted exactly once", async () => {
+  const dir = tmp();
+  try {
+    const secrets = makeSecrets(), needles = makeNeedles(secrets);
+    const maxNeedle = Math.max(...needles.map((n) => n.bytes.length));
+    assert.ok(maxNeedle >= 64, "the fixture needles are shorter than this test assumes");
+    const needle = Buffer.from(secrets.seedHex, "utf8"); // 64 bytes
+    const file = join(dir, "overlap.bin");
+    // Plant the needle so it ends exactly at the 8 MiB chunk boundary: it is
+    // fully found in chunk one AND lies entirely within the tail that chunk
+    // two re-searches. It must still be counted once.
+    const before = Buffer.alloc(8 * 1024 * 1024 - needle.length, 0x46);
+    const after = Buffer.alloc(4096, 0x47);
+    writeFileSync(file, Buffer.concat([before, needle, after]));
+    const hits = await scanFile(file, needles);
+    assert.equal(
+      hits.get("seedHex|utf8").count,
+      1,
+      "a match fully inside the retained overlap was counted again in the next chunk",
+    );
+    assert.equal(hits.get("seedHex|utf8").offsets[0], before.length);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a checkpoint that captured nothing reports SKIPPED, never a clean 'No hits.'", () => {
+  // A blind checkpoint (every capture skipped, e.g. no debugging port to close
+  // the tab with) must not read like a clean zero: "No hits" on a checkpoint
+  // where no dump was ever scanned would silently overstate the result.
+  const dir = tmp();
+  try {
+    const { mdPath } = writeReports({
+      outDir: dir,
+      meta: { platform: "win32", browser: "firefox", tool: "procdump" },
+      results: [
+        { name: "after-tab-close", hits: [], entries: [{ pid: 99, out: null, skipped: "no debugging port on this engine" }] },
+        { name: "after-wipe", hits: [] },
+      ],
+    });
+    const md = readFileSync(mdPath, "utf8");
+    assert.match(md, /after-tab-close — SKIPPED: no dump was captured/, "a blind checkpoint must be labelled skipped with its reason");
+    assert.doesNotMatch(md.split("## after-wipe")[1], /SKIPPED/, "a checkpoint whose dumps were scanned still reports its (zero) hits");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("main wires the run: detection first, then staging — never a log-and-return stub", async () => {
+  // The entry point npm run test:residue invokes must proceed from tool
+  // detection into the browser drive. The staging seam throwing proves the
+  // call reached that stage; a main() that only logs and returns fulfills
+  // instead and fails this test. The browser override keeps this independent
+  // of any browser installed on the machine running the suite.
+  const order = [];
+  class Marker extends Error {}
+  const detect = () => {
+    order.push("detect");
+    return { kind: "procdump", binary: "fake-procdump", memprocfs: null };
+  };
+  const stage = async () => {
+    order.push("stage");
+    throw new Marker("staging reached");
+  };
+  let error = null;
+  try {
+    await main([], { log: () => {}, detect, stage, browser: { id: "fake", kind: "firefox", binary: "fake-browser" } });
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert.ok(error instanceof Marker, "main must proceed from detection into staging (it fulfilled without running the drive)");
+  assert.deepEqual(order, ["detect", "stage"], "detection must come before staging");
 });
