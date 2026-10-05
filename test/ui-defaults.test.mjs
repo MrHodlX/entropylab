@@ -99,12 +99,12 @@ test("the network picker sets the network every tool defaults to", () => {
     assert.match(markup, /<strong[^>]*>Testnet<\/strong>/);
     assert.match(markup, /<strong[^>]*>Signet<\/strong>/);
     assert.match(markup, /<strong[^>]*>Regtest<\/strong>/);
-    assert.match(markup, /xpub\/ypub\/zpub · WIF 5\/K\/L · coin type 0'/);
-    assert.match(markup, /tpub\/upub\/vpub · WIF 9\/c · coin type 1'/);
-    // Signet shares the testnet formats; regtest shares the key formats but
-    // renders SegWit with the bcrt HRP — the options say so (issue #329).
-    assert.match(markup, /data-network="signet"[\s\S]*?same formats as testnet/);
-    assert.match(markup, /data-network="regtest"[\s\S]*?bcrt1q…, bcrt1p…/);
+    // Each option names its key-version prefixes; signet shares testnet's
+    // formats and regtest renders SegWit with the bcrt HRP (issue #329).
+    assert.match(markup, /data-network="mainnet"[\s\S]*?xpub ypub zpub[\s\S]*?WIF 5 K L/);
+    assert.match(markup, /data-network="testnet"[\s\S]*?tpub upub vpub[\s\S]*?WIF 9 c/);
+    assert.match(markup, /data-network="signet"[\s\S]*?testnet[\s\S]*?tb1q…[\s\S]*?tpub upub vpub/);
+    assert.match(markup, /data-network="regtest"[\s\S]*?bcrt1q… bcrt1p…/);
     // And the menu says plainly that no connection is ever made.
     assert.match(markup, /This page never connects to any network/);
   }

@@ -1124,8 +1124,18 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
 .network-picker-option[data-network="signet"] .network-picker-option-coin { fill: var(--signet); }
 .network-picker-option[data-network="regtest"] .network-picker-option-coin { fill: var(--faint); }
 .network-picker-option[aria-checked="true"] strong { color: var(--accent); }
-.network-picker-option-text { font-size: var(--text-control-small); }
-.network-picker-option-desc { display: block; margin-top: var(--space-hairline); color: var(--muted); font-size: var(--text-note); line-height: 1.45; }
+/* The text column fills the row beside the coin, so its lines wrap
+   against the menu's width rather than against their own content. */
+.network-picker-option-text { flex: 1 1 auto; min-width: 0; font-size: var(--text-control-small); }
+/* The technical line reads as data: the address, key and WIF prefixes and
+   the coin type, in the small monospace the app uses for values. Each group
+   holds together with its trailing dot, so a line only breaks between
+   groups. */
+.network-picker-option-desc > span { white-space: nowrap; }
+/* The addresses always take the first line and the key and WIF prefixes the
+   second, so every option breaks in the same place. */
+.network-picker-option-desc > .network-picker-option-addresses { display: block; }
+.network-picker-option-desc { display: block; margin-top: var(--space-hairline); color: var(--muted); font-family: var(--mono); font-size: var(--text-data-small); line-height: 1.5; }
 /* min-width: 0 lets the row shrink on narrow screens rather than pushing the
    controls out of the bar. */
 .download-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-control); margin-left: auto; min-width: 0; }
@@ -1194,6 +1204,20 @@ td { border-top: 1px solid var(--border); padding: var(--inset-cell); vertical-a
   background: transparent; color: var(--fg); text-align: left; cursor: pointer;
 }
 :is(.custom-select-option[aria-selected="true"], .network-picker-option[aria-checked="true"]) { background: var(--option-selected-ground); color: var(--accent); }
+/* The chosen option also carries a check at its right edge, so the current
+   choice does not rest on the ground colour alone. Drawn as a mask in the
+   accent; every option keeps room for it so the text never moves. */
+.custom-select-option, .network-picker-option { position: relative; padding-right: calc(10px + 14px + var(--space-control)); }
+:is(.custom-select-option[aria-selected="true"], .network-picker-option[aria-checked="true"])::after {
+  content: ""; position: absolute; right: 10px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%);
+  background: var(--accent); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+/* The language list is a column of short codes: the selected ground marks
+   the choice there, with no check and no room kept for one. */
+.locale-control .custom-select-option { padding-right: 10px; }
+.locale-control .custom-select-option::after { content: none; }
+/* In the network menu the check sits on the name's line, beside the coin. */
+.network-picker-option[aria-checked="true"]::after { top: calc(8px + 10px); }
 .custom-select-option:disabled { background: transparent; color: var(--faint); cursor: not-allowed; opacity: .48; }
 /* One option state for every list, the network menu included: the chosen
    option sits on the page's own ground (as in the field it fills) in the
