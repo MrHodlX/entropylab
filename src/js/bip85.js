@@ -82,7 +82,11 @@ export function assertValidSecp256k1Secret(bytes) {
 
 export function deriveBip85Entropy(root, path) {
   if (!root || typeof root.derive !== "function") throw new Error("BIP-85 needs a BIP32 root private key.");
-  if (!root.privateKey) throw new Error("BIP-85 needs a BIP32 root private key. Watch-only keys cannot derive children.");
+  // The app's HDKey answers hasPrivateKey without copying the key out; a
+  // root without it (tests inject @scure/bip32) falls back to the getter,
+  // whose scure read aliases the node instead of copying.
+  const hasKey = typeof root.hasPrivateKey === "boolean" ? root.hasPrivateKey : Boolean(root.privateKey);
+  if (!hasKey) throw new Error("BIP-85 needs a BIP32 root private key. Watch-only keys cannot derive children.");
   let child = root.derive(path), key = child.privateKey;
   try {
     if (!key) throw new Error("BIP-85 needs a BIP32 root private key. Watch-only keys cannot derive children.");
