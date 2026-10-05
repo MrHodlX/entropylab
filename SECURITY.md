@@ -403,10 +403,12 @@ extension that ignores them, or one written to steal.
   [computer hardening checklist](docs/Computer_Hardening_Checklist.md) gives
   the steps for Windows, macOS and Linux, and the browser settings that copy
   what is on the page.
-- Developers can measure what a wipe actually removes with the
+- Developers can inspect browser-memory residue with the
   [residue audit harness](docs/Residue_Audit.md) (`npm run test:residue`),
-  which captures browser process memory at checkpoints and scans it for
-  planted test secrets. Its zero is not proof — see the doc.
+  which drives Chrome/Edge with a public fixture, requires a clean baseline
+  and positive controls, and scans process captures for actual derived secrets.
+  Missing captures invalidate the run; uncalibrated needles prove nothing.
+  Its zero is not proof, and automation can add copies — see the doc.
 - Avoid the clipboard for secrets where you can. If you use it, turn off
   clipboard history and sync first.
 - When you are done, press End session in the header. It wipes the page,

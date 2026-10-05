@@ -9,6 +9,13 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import vm from "node:vm";
+import { PassThrough } from "node:stream";
+import { pbkdf2Sync } from "node:crypto";
+import { HDKey as ReferenceHDKey } from "@scure/bip32";
+import { base58check } from "@scure/base";
+import { sha256 } from "@noble/hashes/sha2.js";
+import * as audit from "../scripts/residue-audit.mjs";
 import {
   CHECKPOINTS,
   CONTROL_CHECKPOINT,
@@ -25,8 +32,178 @@ import {
 
 const tmp = () => mkdtempSync(join(tmpdir(), "residue-test-"));
 
+// Contract: accept only measurements of the actual public fixture after the
+// requested UI operation; reject contaminated controls and failed secret copies.
+test("regression: fixture needles describe the actual BIP39/BIP84 wallet", () => {
+  const secrets = makeSecrets();
+  const seed = pbkdf2Sync(secrets.mnemonic.normalize("NFKD"), "mnemonic" + secrets.passphrase.normalize("NFKD"), 2048, 64, "sha512");
+  const root = ReferenceHDKey.fromMasterSeed(seed);
+  const child = root.derive("m/84'/0'/0'/0/0");
+  assert.equal(secrets.seedHex, seed.toString("hex"), "the seed needle must be the derived BIP39 seed");
+  assert.equal(secrets.xprv, root.privateExtendedKey, "the root needle must be the derived master xprv");
+  assert.equal(secrets.wif, base58check(sha256).encode(Uint8Array.from([128, ...child.privateKey, 1])), "the WIF needle must be the first BIP84 receive key");
+});
+
+test("regression: the fixture is absent from app self-tests and injected code", () => {
+  const secrets = makeSecrets();
+  const selfTests = readFileSync(new URL("../src/js/self-test.js", import.meta.url), "utf8");
+  for (const value of Object.values(secrets)) {
+    assert.ok(!selfTests.includes(value), "fixture data already exists before input");
+    assert.ok(!driverScript(secrets).includes(value), "the injected script must not retain a fixture literal");
+  }
+});
+
+// An independent UI state machine. It records effects, so emitting a checkpoint
+// name or a click without completing its operation cannot satisfy these tests.
+const exerciseDriver = async ({ copyWorks = true, wrongInput = false, wrongWallet = false } = {}) => {
+  const secrets = makeSecrets(), checkpoints = [], expressions = [], state = { derived: false, clipboard: "", ended: false };
+  const element = (extra = {}) => ({ value: "", disabled: false, checked: false, hidden: false, textContent: "", dispatchEvent() {}, click() {}, ...extra });
+  const ids = {
+    "key-manager": element(), "seed-length-select": element(), seed: element(), pass: element(),
+    out: element(), reveal: element({ click() { this.checked = true; } }),
+    go: element({ click() { setImmediate(() => { state.derived = true; ids.out.textContent = wrongWallet ? "unrelated wallet" : [secrets.mnemonic, secrets.xprv, secrets.wif].join(" "); }); } }),
+    "end-session": element(), "end-session-confirm": element({ click() { state.ended = true; ids.out.textContent = ""; } }),
+  };
+  const seedCopy = element({ click() { if (copyWorks) state.clipboard = secrets.mnemonic; } });
+  const publicCopy = element({ click() { if (copyWorks) state.clipboard = "xpub-public-key"; } });
+  const select = (selector) => {
+    if (selector.includes("data-session-ended")) return state.ended ? element() : null;
+    if (selector.includes("data-copy-seed-phrase")) return seedCopy;
+    if (selector.includes("data-copy-field")) return state.derived ? publicCopy : null;
+    if (selector.includes("data-key-group") || selector === "#acct-tabs") return state.derived ? element() : null;
+    if (selector.startsWith("#workspace")) return element();
+    if (selector === 'input[name="seed-method"][value="numbers"]') return element();
+    return ids[selector.replace(/^#/, "")] || null;
+  };
+  const document = {
+    getElementById: id => ids[id] || null,
+    querySelector: select,
+    querySelectorAll: () => [element({ textContent: "Seed phrase" })],
+    documentElement: { dataset: { selfTestsFailed: "0" } },
+  };
+  const record = async name => checkpoints.push({ name, ...state });
+  const context = vm.createContext({ document, Event: class {}, URLSearchParams, Date, setTimeout: fn => setImmediate(fn),
+    navigator: { clipboard: { writeText: async text => { state.clipboard = text; }, readText: async () => state.clipboard } },
+    window: { addEventListener() {}, close() {} },
+    Image: class { set src(url) { record(new URL(url, "http://localhost").searchParams.get("name")).then(() => this.onload()); } },
+  });
+  const page = {
+    evaluate: expression => { expressions.push(expression); return Promise.resolve(vm.runInContext(expression, context)); },
+    click: async selector => { const el = select(selector); assert.ok(el, selector); el.click(); },
+    type: async (selector, text) => { select(selector).value = wrongInput && selector === "#seed" ? "different input" : text; },
+    waitFor: async expression => {
+      for (let i = 0; i < 10; i++) {
+        if (await page.evaluate(expression)) return;
+        await new Promise(resolve => setImmediate(resolve));
+      }
+      assert.fail(expression);
+    },
+    waitForClipboard: async expected => { if (state.clipboard !== expected) throw new Error("secret copy did not succeed"); },
+    close: async () => { state.closed = true; },
+  };
+  // Execute the old implementation as well: the regressions first fail on its
+  // actual effects, not a missing new export.
+  if (audit.driveSession) await audit.driveSession(page, secrets, record);
+  else {
+    vm.runInContext(driverScript(secrets).replace(/<\/?script>/g, ""), context);
+    await context.window.__residueDrive();
+  }
+  return { checkpoints, state, expressions };
+};
+
+test("regression: after-derive is captured only after a wallet exists", async () => {
+  const { checkpoints } = await exerciseDriver();
+  assert.equal(checkpoints.find(p => p.name === "after-derive")?.derived, true, "capture occurred before Derive");
+});
+
+test("regression: after-copy follows a successful secret copy, not an xpub copy", async () => {
+  const { checkpoints } = await exerciseDriver();
+  assert.equal(checkpoints.find(p => p.name === "after-copy")?.clipboard, makeSecrets().mnemonic);
+});
+
+test("regression: a refused clipboard write prevents after-copy", async () => {
+  await assert.rejects(exerciseDriver({ copyWorks: false }), /copy/);
+});
+
+test("driver rejects a changed input or a wallet that differs from the fixture", async () => {
+  await assert.rejects(exerciseDriver({ wrongInput: true }), /refusing to derive/);
+  await assert.rejects(exerciseDriver({ wrongWallet: true }), /does not match/);
+});
+
+test("fixture values never become evaluated JavaScript source", async () => {
+  const { expressions } = await exerciseDriver();
+  for (const expression of expressions) for (const value of Object.values(makeSecrets())) assert.ok(!expression.includes(value));
+});
+
+test("CDP pipe correlates fragmented replies, ignores events, and rejects protocol errors", async () => {
+  const writer = new PassThrough(), reader = new PassThrough();
+  const client = audit.createPipeClient(writer, reader);
+  const sent = [];
+  writer.on("data", chunk => sent.push(JSON.parse(chunk.toString().slice(0, -1))));
+  try {
+    const one = client.send("One", {}, "session"), two = client.send("Two");
+    const failed = assert.rejects(client.send("Bad"), /browser command failed: Bad/);
+    assert.equal(sent[0].sessionId, "session");
+    const bytes = Buffer.from(JSON.stringify({ id: sent[1].id, result: { text: "réponse" } }) + "\0");
+    const split = bytes.indexOf(Buffer.from("é")) + 1;
+    reader.write(bytes.subarray(0, split)); reader.write(bytes.subarray(split));
+    reader.write(JSON.stringify({ method: "Unsolicited.event" }) + "\0" + JSON.stringify({ id: sent[0].id, result: { ok: true } }) + "\0");
+    reader.write(JSON.stringify({ id: sent[2].id, error: { message: "refused" } }) + "\0");
+    assert.deepEqual(await one, { ok: true });
+    assert.deepEqual(await two, { text: "réponse" });
+    await failed;
+  } finally { client.dispose(); }
+});
+
+test("CDP pipe rejects a lost browser and times out an unanswered command", async () => {
+  const writer = new PassThrough(), reader = new PassThrough();
+  const client = audit.createPipeClient(writer, reader, { timeoutMs: 10 });
+  try {
+    await assert.rejects(client.send("NoReply"), /timed out/);
+    const failed = assert.rejects(client.send("BrowserGone"), /pipe closed/);
+    reader.end();
+    await failed;
+    await assert.rejects(client.send("TooLate"), /pipe closed/);
+  } finally { client.dispose(); }
+});
+
+test("Firefox is rejected before a contaminated legacy driver can run", () => {
+  assert.throws(() => audit.resolveBrowser({ browser: "firefox", browserExplicit: true }), /external driver/);
+});
+
+const completeMeasurements = () => ["before-input", "after-derive", "after-reveal", "after-copy", "after-wipe", "after-tab-close"].map(name => ({
+  name, entries: [{ pid: 123, scanned: 1 }],
+  hits: name === "after-reveal" ? ["mnemonic", "wif", "xprv"].map(label => ({ pid: 123, label, encoding: "utf8", count: 1 })) : [],
+}));
+
+test("measurement validity requires a clean captured baseline and complete captures", () => {
+  assert.equal(typeof audit.assessRun, "function");
+  const good = completeMeasurements();
+  assert.equal(audit.assessRun(good).valid, true);
+  const contaminated = structuredClone(good);
+  contaminated[0].hits.push({ pid: 123, label: "mnemonic", encoding: "utf8", count: 1 });
+  assert.equal(audit.assessRun(contaminated).valid, false);
+  const blind = structuredClone(good);
+  blind[0].entries[0] = { pid: 123, skipped: "access denied" };
+  assert.equal(audit.assessRun(blind).valid, false);
+  const partial = structuredClone(good);
+  partial[4].entries.push({ pid: 456, skipped: "access denied" });
+  assert.equal(audit.assessRun(partial).valid, false);
+  assert.equal(audit.assessRun(good.slice(0, -1)).valid, false);
+});
+
+test("a missing private-key control invalidates the run; unseen seed bytes are uncalibrated", () => {
+  assert.equal(typeof audit.assessRun, "function");
+  const results = completeMeasurements();
+  const assessment = audit.assessRun(results);
+  assert.equal(assessment.coverage.find(row => row.label === "seedHex").calibrated, false);
+  assert.equal(assessment.coverage.find(row => row.label === "xprv").calibrated, true);
+  results[2].hits = results[2].hits.filter(hit => hit.label !== "wif");
+  assert.equal(audit.assessRun(results).valid, false);
+});
+
 test("the checkpoint list is the documented order, with the positive control before the wipe", () => {
-  assert.deepEqual([...CHECKPOINTS], ["after-derive", "after-reveal", "after-copy", "after-wipe", "after-tab-close"]);
+  assert.deepEqual([...CHECKPOINTS], ["before-input", "after-derive", "after-reveal", "after-copy", "after-wipe", "after-tab-close"]);
   assert.equal(CONTROL_CHECKPOINT, "after-reveal");
   assert.ok(CHECKPOINTS.indexOf(CONTROL_CHECKPOINT) < CHECKPOINTS.indexOf("after-wipe"), "the control must run while secrets are still on screen");
 });
@@ -70,23 +247,23 @@ test("the fake secrets are deterministic, well-shaped, and the mnemonic is the p
   const first = makeSecrets(), second = makeSecrets();
   assert.deepEqual(first, second, "the factory must be deterministic");
   assert.equal(first.mnemonic.split(" ").length, 12);
-  assert.equal(first.mnemonic, "legal winner thank year wave sausage worth useful legal winner thank yellow", "the published BIP39 vector, recognizable as test data");
-  assert.match(first.seedHex, /^[0-9a-f]{64}$/);
-  assert.match(first.wif, /^KwDi[0-9a-f]{40}$/, "WIF-shaped, not checksummed — never spendable");
-  assert.match(first.xprv, /^xprv9s21ZrQH143K[0-9a-f]{48}$/, "xprv-shaped, not a real key");
-  assert.equal(first.passphrase, "TREZOR");
+  assert.equal(first.mnemonic, "letter advice cage absurd amount doctor acoustic avoid letter advice cage above", "the published BIP39 0x80 vector");
+  assert.match(first.seedHex, /^[0-9a-f]{128}$/);
+  assert.equal(base58check(sha256).decode(first.wif).length, 34, "a checksummed compressed mainnet WIF");
+  assert.equal(ReferenceHDKey.fromExtendedKey(first.xprv).depth, 0, "a valid master key");
+  assert.equal(first.passphrase, "EntropyLab residue audit 750 - PUBLIC TEST ONLY");
 });
 
 test("needles cover every secret in UTF-8 and UTF-16LE, plus a base64 form", () => {
   const needles = makeNeedles();
   const byLabel = new Map();
   for (const needle of needles) byLabel.set(needle.label, (byLabel.get(needle.label) || 0) + 1);
-  for (const label of ["mnemonic", "passphrase", "seedHex", "wif", "xprv"]) {
-    assert.equal(byLabel.get(label), 2, `${label} needs both encodings`);
+  for (const label of ["mnemonic", "passphrase", "seedHex", "wif", "xprv", "privateKeyHex"]) {
+    assert.equal(byLabel.get(label), ["seedHex", "privateKeyHex"].includes(label) ? 3 : 2, `${label} needs its string/binary encodings`);
   }
   assert.equal(byLabel.get("mnemonic-base64"), 1, "the audit found encoded copies; scan for one");
   const utf16 = needles.find((n) => n.label === "passphrase" && n.encoding === "utf16le");
-  assert.deepEqual([...utf16.bytes.subarray(0, 4)], [0x54, 0x00, 0x52, 0x00], "UTF-16LE: T\\0R\\0");
+  assert.deepEqual([...utf16.bytes.subarray(0, 4)], [0x45, 0x00, 0x6e, 0x00], "UTF-16LE: E/NUL/n/NUL");
 });
 
 test("the scanner finds needles in both encodings with correct offsets, and reports zero for clean buffers", async () => {
@@ -137,20 +314,21 @@ test("the scanner catches a needle split across the chunk boundary", async () =>
   }
 });
 
-test("the driver script embeds only the fake secrets and parses as JavaScript", () => {
+test("the bootstrap parses as JavaScript and retains no fixture or session driver", () => {
   const secrets = makeSecrets();
   const script = driverScript(secrets);
-  assert.match(script, new RegExp(secrets.mnemonic));
-  assert.match(script, new RegExp(secrets.passphrase));
-  assert.doesNotMatch(script, /seedHex|fakeWif/, "the driver plants only the mnemonic and passphrase");
-  // Every checkpoint the harness expects is signalled, in order. The regex
-  // stops at the closing quote so `say("after-derive", value)` — the guard
-  // checkpoint also carries the field contents — still matches.
-  const order = [...script.matchAll(/say\("([a-z-]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(order, ["after-derive", "after-reveal", "after-copy", "after-wipe", "after-tab-close"]);
-  // The embedded script is syntactically valid JS (strip the wrapper tags).
-  const js = script.replace(/<\/?script>/g, "");
-  new Function(js); // throws on a syntax error
+  for (const value of Object.values(secrets)) assert.ok(!script.includes(value));
+  const context = vm.createContext({ window: { close() {} } });
+  vm.runInContext(script.replace(/<\/?script>/g, ""), context);
+  assert.equal(typeof context.window.close, "function");
+  assert.equal(context.window.__residueDrive, undefined);
+});
+
+test("the external driver completes every checkpoint in order, including the negative control", async () => {
+  const { checkpoints } = await exerciseDriver();
+  assert.deepEqual(checkpoints.map(row => row.name), [...CHECKPOINTS]);
+  assert.equal(checkpoints[0].derived, false);
+  assert.equal(checkpoints.at(-1).closed, true);
 });
 
 test("the reports carry the disclaimer and call out the positive control", () => {
@@ -160,7 +338,7 @@ test("the reports carry the disclaimer and call out the positive control", () =>
       outDir: dir,
       meta: { platform: "win32", browser: "firefox", tool: "procdump" },
       results: [
-        { name: "after-reveal", hits: [{ pid: 1234, label: "mnemonic", encoding: "utf16le", count: 3 }] },
+        { name: "after-reveal", hits: ["mnemonic", "xprv", "wif"].map(label => ({ pid: 1234, label, encoding: "utf16le", count: 3 })) },
         { name: "after-wipe", hits: [] },
       ],
     });

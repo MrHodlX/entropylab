@@ -1,132 +1,132 @@
 # Residue audit (developer harness)
 
-`npm run test:residue` drives the app in a real browser, plants deterministic
-**fake** secrets, captures every browser process's memory at fixed checkpoints,
-and scans the captures for those secrets. It answers one question: *when the
-app says it wiped a secret, is the secret actually gone from the browser's
-memory?*
+`npm run test:residue -- --browser chrome` runs a public fixture through the
+app, captures browser-process memory at defined checkpoints, and searches
+those captures for the fixture's actual secrets. This is a manual developer
+tool, outside `npm test` and CI. Its pure regression tests do run in the suite.
 
-This is a manual developer tool. It is not part of `npm test` or CI, and it
-never touches real key material.
+**Never fund the fixture wallet.** Its mnemonic, passphrase, and valid derived
+keys are public test data. The harness launches a new, temporary profile; it
+does not attach to an existing browser or accept a user's wallet as input.
 
-## What it needs (detected, never bundled)
+## Requirements
 
-The harness captures memory with an external tool and refuses to run without
-one, with an install hint:
+Capture tools are detected, never bundled:
 
-| Platform | Tool | Install |
+| Platform | Capture tool | Setup |
 |---|---|---|
-| Windows | **ProcDump** | <https://learn.microsoft.com/sysinternals/downloads/procdump>, or set `PROCDUMP_BINARY` to its path |
-| Linux | **gcore** (from gdb) | `sudo apt install gdb` / `sudo dnf install gdb`, or set `GCORE_BINARY` |
-| macOS | — | No reliable capture tool; the harness stops with a clear message |
+| Windows | ProcDump | <https://learn.microsoft.com/sysinternals/downloads/procdump>, or `PROCDUMP_BINARY` |
+| Linux | gcore from gdb | `sudo apt install gdb` / `sudo dnf install gdb`, or `GCORE_BINARY` |
+| macOS | Unsupported | Fails before launching a browser |
 
-An optional deeper path: if **MemProcFS** is installed and its mount point is
-set in `MEMPROCFS_MOUNT`, the harness scans the live per-process files instead
-of writing dumps — but only where the mount actually exposes the process: it
-looks for `<mount>/<pid>/` and `<mount>/proc/<pid>/`, and when neither exists
-the capture is recorded as **skipped** with the paths it tried. Never a
-silent zero.
+Chrome/Chromium and Edge are supported. Set `CHROME_BINARY` / `CHROMIUM_BINARY`
+or `EDGE_BINARY` when they are not on PATH or in the usual install locations.
+The default is Chrome, falling back to Edge. An explicit `--browser` does not
+fall back. Node 20.19+ is sufficient; no new npm dependency is needed.
 
-## What it does
+**Firefox is currently unsupported.** The former in-page driver retained
+fixture literals and could not reliably close the tab. It has been removed.
+`--browser firefox` fails explicitly; a future implementation needs an external
+driver with the same isolation and checkpoint contracts.
 
-1. Builds deterministic fake secrets from a fixed seed: the published BIP39
-   test mnemonic ("legal winner … yellow", recognizably test data), the
-   passphrase `TREZOR`, a fake seed hex, and WIF/xprv-shaped strings that are
-   not checksummed and can never spend anything.
-2. Stages the app the way the browser suite does — a `--test-hooks` build in
-   a temp directory outside the repository, with the scripted driver injected
-   before `</body>` — serves it on `127.0.0.1`, and opens it in a headless
-   browser. `--browser firefox|chrome|edge` picks the engine (default
-   `firefox`, falling back to whichever supported engine is installed when
-   the preference is absent); binaries resolve through `FIREFOX_BINARY` /
-   `CHROME_BINARY` / `EDGE_BINARY`, then the usual install locations.
-3. Runs the scripted session through the app's real UI: pick 12-word seed
-   phrase mode, type the fixture mnemonic and passphrase, derive, reveal the
-   private values, copy once, then End session.
-4. At each checkpoint — `after-derive`, `after-reveal`, `after-copy`,
-   `after-wipe` (End session), `after-tab-close` — enumerates the browser's
-   whole process tree (Chrome/Edge/Firefox are multi-process) and captures
-   each process with the external tool.
-5. Scans every capture for every secret in UTF-8 **and** UTF-16LE (page JS
-   strings are UTF-16; WASM linear memory is raw UTF-8 bytes), plus a base64
-   form of the mnemonic, and reports per-process, per-secret, per-encoding hit
-   counts and offsets.
+Linux ptrace permissions and browser sandboxing can prevent gcore from reading
+some processes. Capture failures are reported and invalidate the run; they
+are not interpreted as zero residue. The harness does not change OS permissions.
 
-## The checkpoint channel
+If `MEMPROCFS_MOUNT` is set, the optional live-file path scans per-process
+files instead of creating dumps. It recognizes `<mount>/<pid>/` and
+`<mount>/proc/<pid>/`; other layouts are recorded as unavailable. A recognized
+directory does not guarantee that every memory region is exposed. Incomplete
+captures invalidate the run. A primary capture tool must still be detected.
 
-The app ships `connect-src 'none'`: the page cannot fetch anything, including
-the harness. Each checkpoint therefore arrives as a **same-origin image
-request** (`img-src 'self'`) at `/__residue?name=…&seed=…`. The harness holds
-that response open until it has captured and scanned the checkpoint — the
-hold is what keeps the driver paused exactly where the audit is looking —
-then answers with a 1×1 GIF and the page continues. An in-page failure uses
-the same route with `name=residue-error`; the harness acknowledges it
-immediately and fails the run carrying the page's message.
+## Fixture and search targets
 
-For `after-tab-close` the page reports the checkpoint and stops. On Chromium
-the harness then closes the tab over the browser's debugging port
-(`--remote-debugging-port=0`, whose port it reads from the profile's
-`DevToolsActivePort` file) and scans whatever browser processes survive.
-Firefox exposes no such port to this harness, so where no port came up the
-checkpoint is recorded **skipped** with that reason instead of pretending a
-zero.
+The fixture uses the published BIP39 128-bit `80…80` vector, starting
+“letter advice cage”, with the public passphrase
+`EntropyLab residue audit 750 - PUBLIC TEST ONLY`.
 
-## The positive control
+`makeSecrets()` contains the actual 64-byte BIP39 seed, master xprv, and first
+compressed mainnet WIF/private scalar at `m/84'/0'/0'/0/0`. These constants
+were established independently with Node's PBKDF2 and the repository's pinned
+`@scure/bip32` / `@scure/base` dependencies. Tests re-derive and compare them.
+No app-derived output is used as its own expected answer.
 
-At `after-reveal` the secrets **must** be found — they are on screen. The
-control passes only on a hit labelled `mnemonic`: finding the passphrase or
-an encoding while the phrase itself went unseen does not prove the scanner
-can find the phrase. If the control does not pass, the harness itself is
-broken (wrong process, wrong encoding, a capture that silently failed), and
-the run is marked **INVALID** — the report says so and `npm run test:residue`
-exits non-zero. A residue tool that cannot find a secret it knows is on
-screen proves nothing when it later reports zero.
+The scanner searches UTF-8 and UTF-16LE text, raw seed/private-scalar bytes,
+and the mnemonic's base64 text. It does not cover every possible encoding.
 
-## Reading the results
+## Driver and checkpoints
 
-Two reports land in `out/residue/` (gitignored — captures can be gigabytes and
-contain real process memory):
+The harness stages a **release build**, without test hooks, in a temporary
+directory and serves it on loopback. The only injected statement suppresses
+`window.close()` until after the wipe capture. No fixture literal or session
+driver is injected. The staged file itself must contain none of the needles.
 
-- `residue-report.json` — the machine record: tool, platform, browser and its
-  pid, the per-checkpoint process lists, every capture attempt with its skip
-  reason where there is one, and per-checkpoint × per-pid × per-secret ×
-  per-encoding counts and offsets, plus the disclaimer.
-- `residue-report.md` — the human version: one table per checkpoint, the
-  positive-control verdict first, and a `SKIPPED` heading for any checkpoint
-  where **no** dump was captured — a blind checkpoint never reads as a clean
-  zero.
-- `browser.log` — the browser's own log from the run, copied out of the
-  temp staging directory (which is deleted) whenever the run ends.
+Node drives the UI through Chromium's debugging pipe. Fixture text arrives
+through native input events, never evaluated JavaScript source, page globals,
+or checkpoint URLs. Values returned by the browser are compared on the host;
+protocol object groups are released. No debugging TCP listener is opened.
 
-See `docs/examples/residue-report.example.md` for a sanitised real output.
+The session selects 12-word seed mode, enters the public mnemonic/passphrase,
+checks the input, and switches to the word-number view, which exposes the
+app's real **Copy seed phrase** control. The derived, revealed mnemonic,
+master xprv and first WIF must match the host's expected fixture.
 
-## Limitations — read this before trusting a zero
+| Checkpoint | Required state |
+|---|---|
+| `before-input` | App booted; no fixture entered; complete captures and no needle hits |
+| `after-derive` | Derive clicked and the completed wallet rendered |
+| `after-reveal` | The expected mnemonic, master xprv and first WIF are revealed |
+| `after-copy` | The app's seed-copy control ran and the clipboard equals the fixture mnemonic |
+| `after-wipe` | End Session completed and the ended screen is present |
+| `after-tab-close` | The fixture tab is confirmed closed; surviving processes are enumerated again |
 
-**Zero hits is not proof of erasure.** It means only that these bytes were not
-found in these processes at this moment, on this OS, with this allocator
-state. A positive hit *is* proof of residue.
+The clipboard is cleared before the copy step to prevent a stale value passing
+the check. The check reads the clipboard after the real app copy; it never
+substitutes a successful mock write. Clipboard failure aborts the run.
+A blank keeper tab lets the browser process survive closing the fixture tab.
 
-The harness cannot see:
+## Controls and reports
 
-- **Memory the OS already paged out** (pagefile/swap), hibernation files, or
-  crash dumps — the page's residue may be on disk, not in RAM. That is what
-  the [Computer Hardening Checklist](Computer_Hardening_Checklist.md) is for.
-- **GPU or driver buffers** holding rendered pixels of a revealed secret.
-- **Copies inside the OS** (clipboard history, screen capture, accessibility
-  trees serialized elsewhere).
-- Anything about a **different browser build or OS** — residue is
-  allocator-dependent; a zero on Firefox/Linux says nothing about
-  Chrome/Windows. That is why the report names the platform and browser.
+A contaminated or incomplete `before-input` capture stops the run before input.
+At `after-reveal`, the scanner must find **each** of the mnemonic, xprv and WIF.
+Missing checkpoints or any skipped/failed process capture invalidate the run.
+Invalid runs exit nonzero (2 for harness/tool errors), retaining partial reports.
 
-## Guard rails
+Calibration is also listed per needle. A seed may have been wiped during
+derivation, before the first post-derive capture. If a needle was never seen
+before End Session, a later zero is **NOT CALIBRATED**, not evidence of erasure.
 
-- Before deriving, the driver checks the seed field against the fixture and
-  refuses to continue if it holds anything else; it also reports the field's
-  contents at `after-derive`, and the harness refuses — **before any
-  capture** — to run against a session that reported any other mnemonic. The
-  fixture is published test data; the harness must never be pointed at a
-  session holding real material.
-- Each dump is size-capped (4 GB) and deleted rather than kept if exceeded;
-  a MemProcFS live file above the same cap is skipped with the reason.
-- `--browser-process` dumps only the browser's parent process when the
-  question is about browser-process residue (faster, much less disk).
+Reports and captures are written to gitignored `out/residue/`:
+
+- `residue-report.json`: metadata, overall validity/reasons, calibration,
+  attempted processes, skipped captures, hits and file offsets.
+- `residue-report.md`: human-readable equivalent, including invalid/uncalibrated
+  results and skipped checkpoints.
+- `browser.log`: browser diagnostics retained after temporary-profile cleanup.
+
+`--browser-process` restricts captures to the parent process. It can fail the
+positive controls if the fixture is found only in a renderer; that result is
+invalid, not a clean browser. Dumps exceeding 4 GiB are deleted **after capture**;
+this is not a streaming disk quota. Provision disk space for all checkpoints.
+
+The [example report](examples/residue-report.example.md) is illustrative,
+not a claim about a measured OS/browser combination.
+
+## Limits
+
+**Zero hits is not proof of erasure.** It only describes the scanned processes,
+representations and times on this OS/browser. A hit proves those bytes were in
+the captured data; it does not identify which app, browser, debugger or OS
+subsystem retained a copy.
+
+Automation, protocol input/return buffers, and clipboard verification can add
+copies of their own. Moving the driver outside the page removes persistent
+fixture literals, not every observer effect. Compare identical harness settings;
+do not treat counts as an exact inventory of application-owned allocations.
+
+Process captures are sequential, not an atomic snapshot, and processes can
+appear or exit between enumeration and capture. The test does not cover swap,
+hibernation, old crash dumps, GPU buffers, clipboard history or every browser
+encoding. Results do not generalize to another browser/OS build. See the
+[Computer Hardening Checklist](Computer_Hardening_Checklist.md) for disk and OS
+exposure outside this measurement.

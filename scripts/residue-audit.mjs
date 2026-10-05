@@ -1,5 +1,5 @@
 // Dev-only memory-residue harness: drives the app in a real browser, plants
-// deterministic fake secrets, captures each browser process's memory at fixed
+// deterministic public test secrets, captures each browser process's memory at fixed
 // checkpoints with an external tool, and scans the captures for the secrets.
 //
 // This is NOT part of `npm test` or CI. It needs a capture tool that is
@@ -17,7 +17,6 @@
 //
 // Run: npm run test:residue
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, createReadStream } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -33,6 +32,7 @@ export const DISCLAIMER =
 // The checkpoints, in order. after-tab-close scans the browser's surviving
 // processes (the browser process, once the tab's renderer is gone).
 export const CHECKPOINTS = Object.freeze([
+  "before-input", // negative control: no fixture bytes may already be present
   "after-derive",
   "after-reveal", // the positive control: secrets MUST be found here
   "after-copy",
@@ -74,32 +74,25 @@ export const detectTools = ({ env = process.env, probe = runProbe, fs = { exists
   throw new ResidueToolError(`No capture tool support on ${os} (ProcDump is Windows, gcore is Linux). Nothing was run.`);
 };
 
-// --- Deterministic fake secrets --------------------------------------------
-// Derived from a fixed seed, and the mnemonic is the published BIP39 test
-// vector's — recognizably test data, never a real wallet. Everything the
-// harness plants comes from here; it never touches real key material.
-const SEED_TEXT = "entropylab-residue-audit-fixture";
-export const FAKE_MNEMONIC = "legal winner thank year wave sausage worth useful legal winner thank yellow";
-export const FAKE_PASSPHRASE = "TREZOR";
+// --- Public, deterministic fixture -------------------------------------------
+// The 128-bit 0x80 BIP39 vector, with a distinctive public passphrase. The
+// expected wallet values below were established outside the app using Node's
+// PBKDF2 and the already-pinned @scure/bip32/base implementations; the tests
+// independently re-derive them. These are VALID keys. NEVER send funds to them.
+export const FAKE_MNEMONIC = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+export const FAKE_PASSPHRASE = "EntropyLab residue audit 750 - PUBLIC TEST ONLY";
+export const makeSecrets = () => Object.freeze({
+  mnemonic: FAKE_MNEMONIC,
+  passphrase: FAKE_PASSPHRASE,
+  seedHex: "c2603fba231a90214aeb45b5e2667fdc7e5dc692edeba678a75416239dfbb21aaf2b5d2d7d87cf69e26b45f051c21c4c79ef32f4a0ab561f5bdafe32259509fa",
+  xprv: "xprv9s21ZrQH143K2qXGaTvSdde5a8BVcy8WFdroJT3ib1VxFxihVoZ7JxiYLY7xJXpqZMZcJniPyHuvqRPLzfsNW79wd9SvyomcervC1gTGdnV",
+  // Compressed mainnet WIF at m/84'/0'/0'/0/0, the default UI path.
+  wif: "L5hLeY8Kpd8GHzm18W7qRSswwPMVr6QT2Cn9xwmc6u6GJPUf4p43",
+  privateKeyHex: "fce993d6bcaa1c08520418bd7bfd1d9adaa52d91dc360324c002ea6bc1cb1eb9",
+});
 
-export const makeSecrets = () => {
-  const chain = (label) => createHash("sha256").update(`${SEED_TEXT}:${label}`).digest();
-  const fakeSeedHex = chain("seed").toString("hex");
-  const wifPayload = Buffer.concat([Buffer.from([0x80]), chain("wif"), Buffer.from([0x01])]);
-  const fakeWif = `KwDi${wifPayload.subarray(0, 20).toString("hex")}`; // WIF-shaped, not checksummed
-  const fakeXprv = `xprv9s21ZrQH143K${chain("xprv").subarray(0, 24).toString("hex")}`; // xprv-shaped
-  return Object.freeze({
-    mnemonic: FAKE_MNEMONIC,
-    passphrase: FAKE_PASSPHRASE,
-    seedHex: fakeSeedHex,
-    wif: fakeWif,
-    xprv: fakeXprv,
-  });
-};
-
-// Every needle, in every encoding the browser might hold: JS strings are
-// UTF-16, WASM linear memory and typed arrays are UTF-8 bytes, and the audit
-// that motivated this found encoded copies (hex, base64), not just plaintext.
+// Common representations: UTF-8/UTF-16LE text, raw seed/private-key bytes, and
+// the mnemonic's base64 form. This is not an exhaustive encoding inventory.
 export const makeNeedles = (secrets = makeSecrets()) => {
   const needles = [];
   const add = (label, text) => {
@@ -111,6 +104,11 @@ export const makeNeedles = (secrets = makeSecrets()) => {
   add("seedHex", secrets.seedHex);
   add("wif", secrets.wif);
   add("xprv", secrets.xprv);
+  add("privateKeyHex", secrets.privateKeyHex);
+  // WASM/typed-array secret bytes are binary, not the characters of their hex.
+  for (const label of ["seedHex", "privateKeyHex"]) {
+    needles.push({ label, encoding: "raw", bytes: Buffer.from(secrets[label], "hex") });
+  }
   needles.push({ label: "mnemonic-base64", encoding: "utf8", bytes: Buffer.from(Buffer.from(secrets.mnemonic, "utf8").toString("base64"), "utf8") });
   return needles;
 };
@@ -185,7 +183,7 @@ export const processTree = ({ pid, platform: os = platform, exec = spawnSync } =
 
 // --- Capture ----------------------------------------------------------------
 
-const MAX_DUMP_BYTES = 4 * 1024 * 1024 * 1024; // fail closed before filling a disk
+const MAX_DUMP_BYTES = 4 * 1024 * 1024 * 1024; // post-capture retention limit, not a disk quota
 export const capture = async ({ tool, pid, outDir, checkpoint, execFile = spawn } = {}) => {
   const out = join(outDir, `${checkpoint}-pid${pid}.dmp`);
   if (tool.memprocfs) return { pid, out: null, skipped: "memprocfs-live" };
@@ -207,13 +205,36 @@ export const capture = async ({ tool, pid, outDir, checkpoint, execFile = spawn 
 
 // --- Reports ----------------------------------------------------------------
 
-// The control passes only on a hit labelled `mnemonic` — the value known to
-// be on screen at CONTROL_CHECKPOINT. A hit on any other needle (the
-// passphrase, a seed-hex encoding) does not prove the scanner can find the
-// phrase itself.
+const CONTROL_LABELS = ["mnemonic", "xprv", "wif"];
+// Each of these values is verified in the revealed wallet by the host.
 const controlPassed = (checkpoint) =>
   Boolean(checkpoint) && checkpoint.name === CONTROL_CHECKPOINT
-  && checkpoint.hits.some((hit) => hit.label === "mnemonic" && hit.count > 0);
+  && CONTROL_LABELS.every(label => checkpoint.hits.some(hit => hit.label === label && hit.count > 0));
+
+const capturedCompletely = checkpoint => Boolean(checkpoint?.entries?.length)
+  && checkpoint.entries.every(entry => entry.scanned > 0 && !entry.skipped);
+const cleanBaseline = checkpoint => capturedCompletely(checkpoint) && checkpoint.hits.length === 0;
+
+export const assessRun = (results) => {
+  const reasons = [];
+  const baseline = results.find(result => result.name === "before-input");
+  if (!cleanBaseline(baseline)) reasons.push("negative control missing, contaminated, or incompletely captured");
+  for (const name of CHECKPOINTS) {
+    if (!capturedCompletely(results.find(result => result.name === name))) reasons.push(`${name}: incomplete capture`);
+  }
+  const control = results.find(result => result.name === CONTROL_CHECKPOINT);
+  for (const label of CONTROL_LABELS) {
+    if (!control?.hits.some(hit => hit.label === label && hit.count > 0)) reasons.push(`${label}: positive control failed`);
+  }
+  const beforeWipe = results.filter(result => ["after-derive", "after-reveal", "after-copy"].includes(result.name));
+  // A transient seed may already have been wiped during derivation. Never turn
+  // its absence at every checkpoint into a claim that End Session erased it.
+  const coverage = [...new Set(makeNeedles().map(needle => needle.label))].map(label => ({
+    label,
+    calibrated: cleanBaseline(baseline) && beforeWipe.some(result => result.hits.some(hit => hit.label === label && hit.count > 0)),
+  }));
+  return { valid: reasons.length === 0, reasons, coverage };
+};
 
 export const writeReports = ({ outDir, meta, results }) => {
   const blind = (checkpoint) =>
@@ -224,12 +245,19 @@ export const writeReports = ({ outDir, meta, results }) => {
     tool: "residue-audit",
     disclaimer: DISCLAIMER,
     meta,
+    assessment: assessRun(results),
     checkpoints: results,
   };
   writeFileSync(join(outDir, "residue-report.json"), JSON.stringify(json, null, 2));
 
   const lines = ["# Residue audit report", "", `> ${DISCLAIMER}`, ""];
   lines.push(`Platform: ${meta.platform} · Browser: ${meta.browser} · Capture: ${meta.tool}`, "");
+  lines.push(json.assessment.valid ? "Controls passed. Zero hits still do not prove erasure." : "**INVALID RUN**", "");
+  for (const reason of json.assessment.reasons) lines.push(`- ${reason}`);
+  if (meta.error) lines.push(`- Run stopped: ${meta.error}`);
+  lines.push("", "| Needle | Pre-wipe calibration |", "|---|---|");
+  for (const row of json.assessment.coverage) lines.push(`| ${row.label} | ${row.calibrated ? "Observed after a clean baseline" : "NOT CALIBRATED — a later zero is inconclusive"} |`);
+  lines.push("");
   for (const checkpoint of results) {
     const suffix = checkpoint.name !== CONTROL_CHECKPOINT ? ""
       : controlPassed(checkpoint) ? " — POSITIVE CONTROL PASSED" : " — POSITIVE CONTROL FAILED (run invalid)";
@@ -257,133 +285,174 @@ export const writeReports = ({ outDir, meta, results }) => {
 
 const parseArgs = (argv) => ({
   browserProcessOnly: argv.includes("--browser-process"),
-  browser: argv.find((a, i) => argv[i - 1] === "--browser") || "firefox",
+  browser: argv.find((a, i) => argv[i - 1] === "--browser") || "chrome",
   browserExplicit: argv.includes("--browser"),
 });
 
 const CHECKPOINT_TIMEOUT = 60000;
-const GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The guard's normalization, defined as real code: a /\s+/ written literally
-// inside the driver's template string would arrive in the page as /s+/ (an
-// unrecognized escape drops the backslash) and corrupt every "s" in the
-// field. Interpolating this function's own source keeps the regex intact.
+// Normalize only on the host, after reading the input by value.
 const normalizeSeed = (text) => String(text).trim().toLowerCase().replace(/\s+/g, " ");
 
-// The driver page: a copy of the app (built with --test-hooks, as the browser
-// suite stages it) plus a script that plays the scripted session through the
-// real UI. Checkpoints arrive as same-origin image requests — the app ships
-// `connect-src 'none'`, so the page cannot fetch, but `img-src 'self'` allows
-// an image against the harness — and the harness holds each response until it
-// has captured that checkpoint, which is what pauses the driver exactly where
-// the audit is looking.
-export const driverScript = (secrets) => `
-<script>
-window.__residueDrive = async () => {
-  const send = (name, params) => new Promise((resolve) => {
-    const query = new URLSearchParams({ name });
-    if (params) for (const [key, value] of Object.entries(params)) query.set(key, value);
-    const image = new Image();
-    image.onload = () => resolve();
-    image.onerror = () => resolve();
-    image.src = "/__residue?" + query.toString();
-  });
-  const say = send; // say() marks a checkpoint; the error path uses send() directly
-  const input = (el, value) => {
-    el.value = value;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  };
-  const until = async (fn, label, timeout = 30000) => {
-    const deadline = Date.now() + timeout;
-    while (Date.now() < deadline) { const out = fn(); if (out) return out; await new Promise((r) => setTimeout(r, 100)); }
-    throw new Error("residue driver: timed out waiting for " + label);
-  };
-  try {
-    // Boot assigns data-workspace after load; Firefox can fire load first.
-    await until(() => document.querySelector('#workspace [data-workspace="calc"]'), "the workspace tab strip");
-    document.querySelector('#workspace [data-workspace="calc"]').click();
-    await until(() => !document.getElementById("key-manager").hidden, "key workspace");
-    const length = document.getElementById("seed-length-select");
-    if (length) { length.value = "12"; length.dispatchEvent(new Event("change", { bubbles: true })); }
-    // Seed phrase mode through the real mode buttons, as the suite's
-    // chooseMode("Seed phrase") does.
-    [...document.querySelectorAll("#modes button")].find((item) => item.textContent.includes("Seed phrase"))?.click();
-    await until(() => document.getElementById("seed"), "seed field");
-    input(document.getElementById("seed"), ${JSON.stringify(secrets.mnemonic)});
-    input(document.getElementById("pass"), ${JSON.stringify(secrets.passphrase)});
-    await until(() => !document.getElementById("go").disabled, "Derive Key");
-    // Guard rail: never derive anything but the fixture. Normalization
-    // (case, whitespace) cannot turn a different phrase into the fixture, so
-    // it is safe here and still refuses anything else. The mismatch message
-    // carries shapes only — lengths and the codepoints at the first
-    // difference — never field contents.
-    const norm = ${normalizeSeed.toString()};
-    const field = document.getElementById("seed").value;
-    const value = norm(field);
-    const fixture = ${JSON.stringify(secrets.mnemonic)};
-    if (value !== fixture) {
-      let diff = -1;
-      for (let i = 0; i < Math.max(value.length, fixture.length); i++) {
-        if (value[i] !== fixture[i]) { diff = i; break; }
-      }
-      throw new Error(
-        "the seed field does not hold the fixture; refusing to derive"
-        + " (rawLen=" + field.length + ", words=" + value.split(" ").length
-        + ", len=" + value.length + ", fixture=" + fixture.length
-        + ", diff@" + diff + ": field U+" + (value.charCodeAt(diff) || 0).toString(16)
-        + " fixture U+" + (fixture.charCodeAt(diff) || 0).toString(16) + ")"
-      );
-    }
-    // after-derive reports what the field actually holds; the harness refuses
-    // to capture anything before comparing it against the fixture.
-    await say("after-derive", { seed: value });
-    document.getElementById("go").click();
-    await until(() => document.getElementById("reveal"), "the privacy switch");
-    const reveal = document.getElementById("reveal");
-    if (!reveal.checked) reveal.click();
-    await until(() => document.getElementById("out").textContent.includes("legal winner"), "the revealed phrase");
-    await say("after-reveal");
-    await until(() => document.querySelector("#out [data-copy-field]"), "a copy button in the derived wallet");
-    document.querySelector("#out [data-copy-field]").click();
-    await new Promise((r) => setTimeout(r, 500));
-    await say("after-copy");
-    // End session finishes with window.close(); keep this page alive to signal
-    // the last two checkpoints — the harness closes the tab itself.
-    window.close = () => {};
-    document.getElementById("end-session")?.click();
-    await until(() => document.getElementById("end-session-confirm"), "the End session dialog");
-    document.getElementById("end-session-confirm").click();
-    await until(() => document.querySelector("[data-session-ended]"), "the ended screen");
-    await new Promise((r) => setTimeout(r, 500));
-    await say("after-wipe");
-    await say("after-tab-close"); // the harness closes the tab after this
-    document.title = "residue-done";
-  } catch (error) {
-    const message = String((error && error.message) || error);
-    document.title = "residue-error: " + message;
-    await send("residue-error", { message });
-  }
-};
-window.addEventListener("load", () => window.__residueDrive());
-</script>`;
+// The only injected code suppresses the application's automatic tab close so
+// that after-wipe can be captured. No fixture, driver state, or callback stays
+// in the page; Node performs the drive over Chromium's debugging pipe.
+export const driverScript = () => "<script>window.close = () => {};</script>";
 
-// Binary resolution for the three engines, mirroring the browser suite.
-const ENGINES = [
-  {
-    id: "firefox", kind: "firefox",
-    envVars: ["FIREFOX_BINARY"],
-    pathNames: ["firefox", "firefox-developer-edition"],
-    extraPaths: {
-      darwin: ["/Applications/Firefox.app/Contents/MacOS/firefox"],
-      win32: [
-        "C:\\Program Files\\Firefox Developer Edition\\firefox.exe",
-        "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
-        "C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe",
-      ],
-      linux: ["/usr/bin/firefox", "/usr/local/bin/firefox", "/snap/bin/firefox", "/opt/firefox/firefox"],
+// The page adapter accepts fixture text ONLY through native input events.
+// Never interpolate it into evaluate(), function arguments, page globals, URLs,
+// or clipboard instrumentation. Host-side equality checks receive values by
+// value and release protocol object groups after every evaluation.
+export const driveSession = async (page, secrets, checkpoint) => {
+  await page.waitFor(`document.documentElement?.dataset.selfTestsFailed === "0"`);
+  await page.waitFor(`document.querySelector('#workspace [data-workspace="calc"]')`);
+  // Dismiss the real two-stage disclaimer without changing the release app.
+  if (await page.evaluate(`!!document.getElementById("beta-disclaimer-accept")`)) {
+    await page.click("#beta-disclaimer-accept");
+    await page.evaluate(`(() => {
+      const visible = [...document.querySelectorAll('[id^="beta-disclaimer-proof-text-"]')].find(el => !el.hidden);
+      const input = document.getElementById("beta-disclaimer-proof");
+      input.value = visible.id.split("-").at(-1);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    })()`);
+    await page.click("#beta-disclaimer-confirm");
+    await page.waitFor(`!document.getElementById("beta-disclaimer")`);
+  }
+  await page.click('#workspace [data-workspace="calc"]');
+  await page.evaluate(`(() => {
+    const length = document.getElementById("seed-length-select");
+    length.value = "12"; length.dispatchEvent(new Event("change", { bubbles: true }));
+    [...document.querySelectorAll("#modes button")].find(el => el.textContent.includes("Seed phrase")).click();
+  })()`);
+  await page.waitFor(`document.getElementById("seed")`);
+  await checkpoint("before-input");
+  await page.type("#seed", secrets.mnemonic);
+  await page.type("#pass", secrets.passphrase);
+  const field = await page.evaluate(`document.getElementById("seed").value`);
+  if (normalizeSeed(field) !== secrets.mnemonic) throw new ResidueToolError("refusing to derive: the seed field is not the public fixture");
+  // The numbers view converts the entered words and exposes the app's real
+  // Copy seed phrase button. Direct word entry has no such button.
+  await page.click('input[name="seed-method"][value="numbers"]');
+  await page.waitFor(`!document.getElementById("go").disabled`);
+  await page.click("#go");
+  await page.waitFor(`document.querySelector('#out [data-key-group="identity"] [data-copy-field]')`);
+  await checkpoint("after-derive");
+  if (!await page.evaluate(`document.getElementById("reveal").checked`)) await page.click("#reveal");
+  const output = await page.evaluate(`document.getElementById("out").textContent`);
+  for (const label of ["mnemonic", "xprv", "wif"]) {
+    if (!output.includes(secrets[label])) throw new ResidueToolError(`the revealed wallet does not match the fixture's ${label}`);
+  }
+  await checkpoint("after-reveal");
+  // Remove any pre-existing clipboard value, then verify the real write. An
+  // xpub click, permission rejection, or a no-op must not pass this checkpoint.
+  await page.evaluate(`navigator.clipboard.writeText("")`);
+  await page.click("#form [data-copy-seed-phrase]");
+  await page.waitForClipboard(secrets.mnemonic);
+  await checkpoint("after-copy");
+  await page.click("#end-session");
+  await page.click("#end-session-confirm");
+  await page.waitFor(`document.querySelector("[data-session-ended]")`);
+  await checkpoint("after-wipe");
+  await page.close();
+  await checkpoint("after-tab-close");
+};
+
+// A small CDP pipe client: no new dependencies, WebSocket server, or debugging
+// listener. Chromium reads NUL-delimited JSON on fd 3 and writes it on fd 4.
+export const createPipeClient = (writer, reader, { timeoutMs = 15000 } = {}) => {
+  let sequence = 0, buffer = "", closed = false;
+  const pending = new Map();
+  const fail = () => {
+    closed = true;
+    for (const { reject, timer } of pending.values()) { clearTimeout(timer); reject(new ResidueToolError("browser debugging pipe closed")); }
+    pending.clear();
+  };
+  reader.setEncoding("utf8");
+  reader.on("data", chunk => {
+    buffer += chunk;
+    let end;
+    while ((end = buffer.indexOf("\0")) !== -1) {
+      const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+      let reply;
+      try { reply = JSON.parse(line); } catch { fail(); return; }
+      const waiter = pending.get(reply.id);
+      if (!waiter) continue;
+      pending.delete(reply.id); clearTimeout(waiter.timer);
+      if (reply.error) waiter.reject(new ResidueToolError(`browser command failed: ${waiter.method}`));
+      else waiter.resolve(reply.result);
+    }
+  });
+  reader.on("end", fail); reader.on("error", fail); writer.on("error", fail);
+  return {
+    send(method, params = {}, sessionId) {
+      if (closed) return Promise.reject(new ResidueToolError("browser debugging pipe closed"));
+      return new Promise((resolve, reject) => {
+        const id = ++sequence;
+        const timer = setTimeout(() => { pending.delete(id); reject(new ResidueToolError(`browser command timed out: ${method}`)); }, timeoutMs);
+        pending.set(id, { method, resolve, reject, timer });
+        writer.write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + "\0");
+      });
     },
-  },
+    dispose() { fail(); writer.destroy(); reader.destroy(); },
+  };
+};
+
+const createPage = async (client, origin) => {
+  const { targetId } = await client.send("Target.createTarget", { url: "about:blank" });
+  const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
+  const send = (method, params) => client.send(method, params, sessionId);
+  await client.send("Browser.grantPermissions", { origin, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] });
+  await send("Page.navigate", { url: origin });
+  const page = {
+    async evaluate(expression) {
+      try {
+        const reply = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true, userGesture: true, objectGroup: "residue" });
+        if (reply.exceptionDetails) throw new ResidueToolError(`browser evaluation failed in ${expression}`);
+        return reply.result.value;
+      } finally { await send("Runtime.releaseObjectGroup", { objectGroup: "residue" }); }
+    },
+    async click(selector) {
+      await page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+    },
+    async type(selector, text) {
+      await page.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.focus(); el.select(); })()`);
+      await send("Input.insertText", { text });
+    },
+    async waitFor(expression) {
+      const deadline = Date.now() + CHECKPOINT_TIMEOUT;
+      while (Date.now() < deadline) {
+        if (await page.evaluate(`Boolean(${expression})`)) return;
+        await sleep(100);
+      }
+      throw new ResidueToolError("timed out waiting for a browser state transition");
+    },
+    async waitForClipboard(expected) {
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        if (await page.evaluate(`navigator.clipboard.readText()`) === expected) return;
+        await sleep(100);
+      }
+      throw new ResidueToolError("secret copy did not succeed; after-copy was not captured");
+    },
+    async close() {
+      const { success } = await client.send("Target.closeTarget", { targetId });
+      if (!success) throw new ResidueToolError("could not close the fixture tab");
+      const deadline = Date.now() + 15000;
+      while (true) {
+        const { targetInfos } = await client.send("Target.getTargets");
+        if (!targetInfos.some(target => target.targetId === targetId)) break;
+        if (Date.now() >= deadline) throw new ResidueToolError("fixture tab still exists after close");
+        await sleep(100);
+      }
+      await sleep(1500);
+    },
+  };
+  return page;
+};
+
+// Binary resolution for the supported Chromium engines, mirroring the browser suite.
+const ENGINES = [
   {
     id: "chrome", kind: "chromium",
     envVars: ["CHROME_BINARY", "CHROMIUM_BINARY"],
@@ -424,18 +493,19 @@ const pickEngine = (definition) => {
 };
 
 export const resolveBrowser = ({ browser: want, browserExplicit } = {}) => {
+  if (want === "firefox") throw new ResidueToolError("Firefox residue capture is unsupported: it needs an external driver that does not retain fixture literals. Use --browser chrome or edge.");
   const definition = ENGINES.find((engine) => engine.id === want);
-  if (!definition) throw new ResidueToolError(`unknown --browser "${want}" (use firefox, chrome or edge)`);
+  if (!definition) throw new ResidueToolError(`unknown --browser "${want}" (use chrome or edge)`);
   const found = pickEngine(definition);
   if (found) return found;
   if (browserExplicit) throw new ResidueToolError(`no ${want} binary found (set ${definition.envVars.join(" or ")})`);
-  // Default preference is firefox; fall back to an installed engine.
+  // Default preference is chrome; fall back to an installed engine.
   for (const engine of ENGINES) {
     if (engine.id === want) continue;
     const alternative = pickEngine(engine);
     if (alternative) return alternative;
   }
-  throw new ResidueToolError("no browser found (set FIREFOX_BINARY, CHROME_BINARY or EDGE_BINARY)");
+  throw new ResidueToolError("no browser found (set CHROME_BINARY or EDGE_BINARY)");
 };
 
 const chromiumSandboxArgs = () => {
@@ -443,50 +513,34 @@ const chromiumSandboxArgs = () => {
   return [];
 };
 
-const spawnBrowser = (engine, { profile, url, logPath }) => {
+const spawnBrowser = (engine, { profile, logPath }) => {
   const logFd = openSync(logPath, "w");
-  const args = engine.kind === "firefox"
-    ? ["--headless", "--new-instance", "--profile", profile, url]
-    : [
-        "--headless",
-        ...chromiumSandboxArgs(),
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--window-size=1280,800",
-        `--user-data-dir=${profile}`,
-        // Random debugging port, written to <profile>/DevToolsActivePort;
-        // the harness uses it to close the tab for after-tab-close.
-        "--remote-debugging-port=0",
-        url,
-      ];
-  const child = spawn(engine.binary, args, { stdio: ["ignore", logFd, logFd] });
+  const args = [
+    "--headless", ...chromiumSandboxArgs(), "--no-first-run", "--no-default-browser-check",
+    "--disable-gpu", "--disable-dev-shm-usage", "--window-size=1280,800",
+    `--user-data-dir=${profile}`, "--remote-debugging-pipe", "about:blank",
+  ];
+  const child = spawn(engine.binary, args, { stdio: ["ignore", logFd, logFd, "pipe", "pipe"] });
   closeSync(logFd);
   child.on("error", () => {}); // surfaced by the missing pid check in main()
   return child;
 };
 
-// Build the staged app with test hooks and inject the driver, exactly the
-// way the browser suite stages its own document. Everything lives in a temp
-// directory outside the repository.
-export const stageRun = async (secrets) => {
+// Stage the release build, without test hooks or fixture literals. The only
+// bootstrap change delays window.close() until after the wipe capture.
+export const stageRun = async (secrets = makeSecrets()) => {
   const workDir = mkdtempSync(join(tmpdir(), "residue-audit-"));
   try {
-    execFileSync(process.execPath, [join(root, "scripts", "build.mjs"), "--test-hooks", "--out", workDir], { stdio: "pipe" });
+    execFileSync(process.execPath, [join(root, "scripts", "build.mjs"), "--out", workDir], { stdio: "pipe" });
     const html = readFileSync(join(workDir, "entropylab.html"), "utf8");
     const page = html.replace(/<\/body>\s*<\/html>\s*$/, () => `${driverScript(secrets)}</body></html>\n`);
     if (page === html) throw new ResidueToolError("could not find </body></html> in the staged page to inject the driver");
     writeFileSync(join(workDir, "residue.html"), page);
+    if ((await scanFile(join(workDir, "residue.html"), makeNeedles(secrets))).size) {
+      throw new ResidueToolError("fixture bytes already occur in the staged application; choose a distinct public fixture");
+    }
     const profile = join(workDir, "profile");
     mkdirSync(profile, { recursive: true });
-    writeFileSync(join(profile, "user.js"), [
-      'user_pref("browser.shell.checkDefaultBrowser", false);',
-      'user_pref("browser.startup.homepage_override.mstone", "ignore");',
-      'user_pref("datareporting.policy.dataSubmissionEnabled", false);',
-      'user_pref("toolkit.telemetry.enabled", false);',
-      "",
-    ].join("\n"));
     return { workDir, pagePath: join(workDir, "residue.html"), profile };
   } catch (error) {
     rmSync(workDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
@@ -494,93 +548,19 @@ export const stageRun = async (secrets) => {
   }
 };
 
-// The loopback server: serves the staged page, and holds every checkpoint
-// response until main() has captured that checkpoint — the page's image load
-// staying pending is what pauses the driver at the checkpoint.
-const createHarnessServer = ({ pagePath, workDir }) => {
-  const arrivals = [];
-  let notify = null;
-  const ack = (entry) => {
-    if (entry.res.writableEnded) return;
-    entry.res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store", "Content-Length": GIF.length });
-    entry.res.end(GIF);
-  };
+// Read-only loopback hosting. No checkpoint URLs or input values ever travel
+// through the page's network stack; the host controls checkpoint ordering.
+const createHarnessServer = ({ pagePath }) => {
   const server = createServer((request, response) => {
-    const url = new URL(request.url, "http://127.0.0.1");
-    if (url.pathname === "/__residue") {
-      arrivals.push({ name: url.searchParams.get("name"), params: url.searchParams, res: response });
-      notify?.();
-      return;
-    }
-    const file = url.pathname === "/" || url.pathname === "/residue.html"
-      ? pagePath
-      : url.pathname === "/service-worker.js" ? join(workDir, "service-worker.js") : null;
-    if (!file || !existsSync(file)) {
-      response.writeHead(404, { "Content-Type": "text/plain" });
-      response.end("Not found");
-      return;
-    }
-    response.writeHead(200, {
-      "Content-Type": url.pathname.endsWith(".js") ? "text/javascript" : "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-      "Content-Length": statSync(file).size,
-    });
-    response.end(readFileSync(file));
+    if (request.url !== "/") { response.writeHead(404); response.end(); return; }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    response.end(readFileSync(pagePath));
   });
   const listen = () => new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => resolve(server.address().port));
   });
-  const nextArrival = (timeoutMs) => new Promise((resolve, reject) => {
-    if (arrivals.length) return resolve(arrivals.shift());
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      notify = null;
-      reject(new ResidueToolError(`timed out after ${timeoutMs}ms waiting for the page to reach the next checkpoint (see the browser log)`));
-    }, timeoutMs);
-    notify = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      notify = null;
-      resolve(arrivals.shift());
-    };
-  });
-  return { server, listen, nextArrival, ack };
-};
-
-// Chromium publishes its debugging port in <user-data-dir>/DevToolsActivePort
-// when started with --remote-debugging-port=0. Firefox exposes nothing this
-// harness can drive, so its after-tab-close checkpoint records a skip instead.
-const chromiumDebugPort = async (profile, timeoutMs = 15000) => {
-  const file = join(profile, "DevToolsActivePort");
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const [port] = readFileSync(file, "utf8").split("\n");
-      if (/^\d+$/.test(port || "")) return Number(port);
-    } catch {
-      // Not written yet, or Chrome still holds it open (Windows: EBUSY).
-      // Both resolve on the next poll.
-    }
-    await sleep(200);
-  }
-  return null;
-};
-
-const closeTab = async (port, origin) => {
-  try {
-    const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
-    const target = targets.find((entry) => entry.type === "page" && entry.url.startsWith(origin))
-      || targets.find((entry) => entry.type === "page");
-    if (!target) return false;
-    await fetch(`http://127.0.0.1:${port}/json/close/${target.id}`);
-    return true;
-  } catch {
-    return false;
-  }
+  return { server, listen };
 };
 
 const addHits = (hits, pid, found) => {
@@ -627,8 +607,8 @@ const captureAll = async ({ tool, pids, outDir, checkpoint, needles }) => {
       entry = await scanLive({ mount: tool.memprocfs, pid, needles, hits });
     } else {
       // One PID refusing a dump (access denied, already exited) must not kill
-      // the audit: record the failure per process. The positive control still
-      // fails the run if nothing could be captured.
+      // the audit: record the failure per process. Incomplete captures still
+      // invalidate the run even when other processes contain control hits.
       try {
         entry = await capture({ tool, pid, outDir, checkpoint });
         if (entry.out) {
@@ -661,81 +641,41 @@ export const main = async (argv = process.argv.slice(2), { log = console.log, de
   log(`residue-audit: driving ${browser.id} at ${browser.binary}`);
   const startedAt = new Date().toISOString();
   const staged = await stage(secrets);
-  let child = null, served = null;
+  let child = null, served = null, client = null;
+  const results = [];
+  const meta = { platform, browser: browser.id, browserBinary: browser.binary, tool: tool.kind, captureBinary: tool.binary, startedAt };
   try {
     served = createHarnessServer(staged);
     const port = await served.listen();
     const origin = `http://127.0.0.1:${port}`;
     const logPath = join(staged.workDir, "browser.log");
-    child = spawnBrowser(browser, { profile: staged.profile, url: `${origin}/`, logPath });
-    if (!child.pid) throw new ResidueToolError(`the browser failed to start: ${browser.binary} (see ${logPath})`);
+    child = spawnBrowser(browser, { profile: staged.profile, logPath });
+    if (!child.pid) throw new ResidueToolError(`the browser failed to start: ${browser.binary}`);
+    meta.pid = child.pid;
+    client = createPipeClient(child.stdio[3], child.stdio[4]);
     log(`residue-audit: browser pid ${child.pid}; log ${logPath}`);
-    const debugPort = browser.kind === "chromium" ? await chromiumDebugPort(staged.profile) : null;
-
-    const results = [];
-    for (const checkpoint of CHECKPOINTS) {
-      const arrival = await served.nextArrival(CHECKPOINT_TIMEOUT);
-      if (arrival.name === "residue-error") {
-        served.ack(arrival);
-        throw new ResidueToolError(`the page reported an error: ${arrival.params.get("message") || "(no message)"}`);
+    const page = await createPage(client, origin);
+    await driveSession(page, secrets, async checkpoint => {
+      if (checkpoint !== CHECKPOINTS[results.length]) throw new ResidueToolError("unexpected checkpoint order");
+      const pids = options.browserProcessOnly ? [child.pid] : processTree({ pid: child.pid });
+      const captured = await captureAll({ tool, pids, outDir, checkpoint, needles });
+      const result = { name: checkpoint, ...captured };
+      results.push(result);
+      log(`residue-audit: ${checkpoint}: ${captured.entries.length} process(es), ${captured.hits.reduce((sum, hit) => sum + hit.count, 0)} hit(s)`);
+      if (checkpoint === "before-input" && !cleanBaseline(result)) {
+        throw new ResidueToolError("baseline is contaminated or incompletely captured; refusing to enter fixture data");
       }
-      if (arrival.name !== checkpoint) {
-        served.ack(arrival);
-        throw new ResidueToolError(`expected checkpoint ${checkpoint}, the page signalled ${arrival.name}`);
-      }
-      // Guard rail: the fixture only. Checked before any capture, so a
-      // session holding anything else is never scanned.
-      if (checkpoint === "after-derive" && (arrival.params.get("seed") || "") !== secrets.mnemonic) {
-        served.ack(arrival);
-        throw new ResidueToolError("refusing to capture: the seed field reported something other than the fixture — this harness must never scan a session holding real material");
-      }
-      const closing = checkpoint === "after-tab-close";
-      if (closing) served.ack(arrival); // let the page finish, then close the tab
-
-      const entries = [], hits = [];
-      let pids = null;
-      if (closing) {
-        if (debugPort && await closeTab(debugPort, origin)) {
-          await sleep(1500); // let the renderer exit before re-enumerating
-          pids = options.browserProcessOnly ? [child.pid] : processTree({ pid: child.pid });
-        } else {
-          entries.push({
-            pid: child.pid,
-            skipped: debugPort ? "the debugging port did not close the tab" : "no debugging port on this engine; the tab was not closed",
-          });
-        }
-      } else {
-        pids = options.browserProcessOnly ? [child.pid] : processTree({ pid: child.pid });
-      }
-      if (pids) {
-        const captured = await captureAll({ tool, pids, outDir, checkpoint, needles });
-        entries.push(...captured.entries);
-        hits.push(...captured.hits);
-      }
-      if (!closing) served.ack(arrival); // resume the page only after the capture
-
-      results.push({ name: checkpoint, entries, hits });
-      log(`residue-audit: ${checkpoint}: ${entries.length} process(es), ${hits.reduce((sum, hit) => sum + hit.count, 0)} hit(s)`);
-    }
-
-    const meta = {
-      platform,
-      browser: browser.id,
-      browserBinary: browser.binary,
-      tool: tool.kind,
-      captureBinary: tool.binary,
-      pid: child.pid,
-      startedAt,
-    };
+    });
     const paths = writeReports({ outDir, meta, results });
-    log(`residue-audit: report ${paths.mdPath}`);
-    const control = results.find((result) => result.name === CONTROL_CHECKPOINT);
-    if (!controlPassed(control)) {
-      throw new ResidueToolError(`positive control FAILED at ${CONTROL_CHECKPOINT}: the mnemonic was not found where it is known to be on screen — run INVALID. See ${paths.mdPath}`);
-    }
-    log("residue-audit: positive control passed. Read the limitations before trusting any zero.");
+    const assessment = assessRun(results);
+    if (!assessment.valid) throw new ResidueToolError(`run INVALID: ${assessment.reasons.join("; ")}. See ${paths.mdPath}`);
+    log(`residue-audit: controls passed; report ${paths.mdPath}. Uncalibrated needles prove nothing about erasure.`);
     return { tool, options, browser, outDir, checkpoints: results, ...paths };
+  } catch (error) {
+    writeReports({ outDir, meta: { ...meta, error: error.message }, results });
+    throw error;
   } finally {
+    client?.dispose();
     if (child) { try { child.kill("SIGKILL"); } catch { /* already gone */ } }
     if (served) { try { served.server.close(); } catch { /* already closed */ } }
     await sleep(300); // Windows releases profile file handles after the kill
