@@ -238,7 +238,9 @@ material. Its security posture rests on the following model:
   recovery experiments. EntropyLab does not claim that hashing a short input
   makes it secure. When the entered transcript is below the recommended
   entropy target, the result displays a prominent warning with the estimated
-  supplied entropy and says to use it only for testing. Users who intend to
+  supplied entropy and says to use it only for testing. Both hashed-dice
+  methods recommend 100 rolls for a 24-word seed; 99 rolls still trigger the
+  below-recommendation warning. Users who intend to
   secure funds must meet the displayed roll/card recommendation and verify
   their procedure independently.
 - Brain wallet — lab hashes the exact UTF-8 text with unsalted SHA-256 and
