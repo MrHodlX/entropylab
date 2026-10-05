@@ -377,9 +377,18 @@ EntropyLab uses it:
 
 - Browser translation. Chrome's and Edge's built-in translators send the
   page's text to Google or Microsoft. Everything that shows a seed word, a
-  key or a typed secret is marked `translate="no"`, so it is not sent, and a
-  warning appears if the page is translated anyway. Firefox translates on the
-  device.
+  key or a typed secret is marked `translate="no"`, the preventive opt-out
+  for browsers that honor it. EntropyLab warns when it detects Chrome/Google
+  translation through `translated-ltr` / `translated-rtl` classes on the
+  document root or Edge/Microsoft translation through `_msthash`,
+  `_msttexthash`, or `_mstmutation` attributes anywhere in the document.
+  It checks at initialization and observes relevant attribute changes and
+  inserted subtrees. Detection opens Important, keeps the warning visible
+  even if markers disappear, and records one security-log event through the
+  detection callback. This is best-effort, browser-marker-based detection
+  after the fact, not prevention or proof of which text was sent. The markers
+  are not a security boundary or a guaranteed future browser API. Firefox
+  translates on the device.
 - Writing aids. Edge's text prediction, which sends what you type to
   Microsoft, is off for the whole page. Every field opts out of Grammarly,
   which sends field text to its servers whatever the spell-check setting.

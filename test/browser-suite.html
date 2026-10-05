@@ -100,6 +100,45 @@
   });
 
   if (new URLSearchParams(location.search).get("offline-test") === "1") {
+    // This fresh file:// session exercises Edge independently of the hosted
+    // Chrome case below: a latched Chrome warning cannot make this pass.
+    await test("Edge-style translation markers open Important and latch a security-log warning", async () => {
+      const warning = document.getElementById("translated-warning");
+      const important = document.getElementById("important");
+      const output = document.getElementById("security-log-output");
+      const events = () => output.querySelectorAll('[data-event="page-translated"]').length;
+      const wrapper = document.createElement("div");
+      const child = document.createElement("span");
+      wrapper.append(child);
+      const wasOpen = important.open;
+      try {
+        important.open = false;
+        assert(warning.hidden && events() === 0, "translation was already detected before injection");
+        child.setAttribute("_mstfoo", "123");
+        child.setAttribute("data-ms-editor", "false");
+        document.body.append(wrapper);
+        await wait(0);
+        assert(warning.hidden && events() === 0 && !important.open, "non-translation mutations triggered detection");
+        wrapper.remove();
+        // Synthetic Edge output only; never invoke an online translator.
+        child.setAttribute("_msttexthash", "123");
+        document.body.append(wrapper);
+        await until(() => events() === 1, "Edge translation security event");
+        assert(!warning.hidden && warning.getClientRects().length > 0, "the translation warning is not visible");
+        assert(important.open, "translation did not open Important");
+        child.setAttribute("_msthash", "456");
+        child.setAttribute("_mstmutation", "1");
+        await wait(0);
+        equal(events(), 1);
+        wrapper.remove();
+        await wait(0);
+        assert(!warning.hidden, "removing Edge markers hid the warning");
+        equal(events(), 1);
+      } finally {
+        wrapper.remove();
+        important.open = wasOpen;
+      }
+    });
     await test("offline mode keeps online-only presentation disabled", () => {
       const warning = document.getElementById("online-warning");
       const logo = document.querySelector(".site-logo");
