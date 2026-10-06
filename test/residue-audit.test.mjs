@@ -596,6 +596,68 @@ test("capture: only ProcDump's no-such-process refusal, confirmed by a fresh enu
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+// A missing PID is evidence only after a successful, well-formed query.
+// In particular, ProcDump's refusal can also occur for a protected process;
+// a failed CIM query must not turn that refusal into a verified exit.
+test("process tree accepts complete Windows and Unix process listings", () => {
+  const rows = [
+    { ProcessId: 300, ParentProcessId: 200 },
+    { ProcessId: 100, ParentProcessId: 1 },
+    { ProcessId: 400, ParentProcessId: 1 },
+    { ProcessId: 200, ParentProcessId: 100 },
+  ];
+  for (const [platform, stdout] of [["win32", JSON.stringify(rows)], ["linux", "300 200\n100 1\n400 1\n200 100\n"]]) {
+    const pids = audit.processTree({ pid: 100, platform, exec: () => ({ status: 0, stdout }) });
+    assert.deepEqual(pids.sort((a, b) => a - b), [100, 200, 300]);
+  }
+  assert.deepEqual(audit.processTree({ pid: 100, platform: "win32", exec: () => ({
+    status: 0, stdout: JSON.stringify({ ProcessId: 100, ParentProcessId: 1 }),
+  }) }), [100], "PowerShell may serialize a single result as an object");
+});
+
+test("process tree rejects failed or malformed enumerations instead of assuming only the root remains", () => {
+  for (const [platform, stdout, malformed] of [
+    ["win32", '[{"ProcessId":100,"ParentProcessId":1}]', ["not JSON", "null", "[]", "{}", '[{"ProcessId":100}]', '[{"ProcessId":"100","ParentProcessId":1}]', '[{"ProcessId":200,"ParentProcessId":1}]']],
+    ["linux", "100 1\n", ["not a process table", "100\n", "100 1 unexpected\n", "200 1\n"]],
+  ]) {
+    const failures = [
+      { status: 1, stdout, stderr: "process query failed" },
+      { status: null, signal: "SIGTERM", stdout },
+      { status: 0, error: new Error("spawn failed"), stdout },
+      { status: 0, stdout: "" },
+      ...malformed.map(stdout => ({ status: 0, stdout })),
+    ];
+    for (const result of failures) {
+      assert.throws(() => audit.processTree({ pid: 100, platform, exec: () => result }),
+        ResidueToolError, `${platform}: ${JSON.stringify(result)}`);
+    }
+  }
+});
+
+test("capture regression: a failed fresh enumeration cannot certify a process exit", async () => {
+  const dir = tmp();
+  const noProcess = "No process matching the specified PID can be found.\r\n";
+  const sweep = result => audit.captureAll({
+    tool: { kind: "procdump", binary: "procdump64" }, pids: [200], outDir: dir,
+    checkpoint: "after-wipe", needles: makeNeedles(),
+    execFile: fakeProcdump({ output: noProcess, encoding: "utf16le", code: -2 }),
+    running: pid => audit.processTree({ pid: 100, platform: "win32", exec: () => result }).includes(pid),
+  });
+  try {
+    for (const result of [
+      { status: 1, stdout: "", stderr: "Get-CimInstance failed" },
+      { status: null, error: new Error("powershell unavailable"), stdout: "" },
+      { status: 0, stdout: "invalid JSON" },
+    ]) await assert.rejects(sweep(result), ResidueToolError);
+
+    const gone = await sweep({ status: 0, stdout: '[{"ProcessId":100,"ParentProcessId":1}]' });
+    assert.ok(gone.entries[0].exited, "a successful fresh enumeration can confirm absence");
+    const present = await sweep({ status: 0, stdout: '[{"ProcessId":100,"ParentProcessId":1},{"ProcessId":200,"ParentProcessId":100}]' });
+    assert.equal(present.entries[0].exited, undefined);
+    assert.match(present.entries[0].skipped, /capture failed/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("reports list every process that exited before its capture", () => {
   const dir = tmp();
   try {

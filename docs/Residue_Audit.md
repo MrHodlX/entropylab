@@ -194,8 +194,10 @@ for about half a minute) and for 6 s at later checkpoints, giving up after 120 s
 and 60 s. A set still changing then is captured as last seen, and the report
 says so. A process that exits during the sweep is recorded as an exit, not a
 failed capture, only when ProcDump reports `No process matching the specified
-PID` and a fresh enumeration of the browser's tree no longer lists it; the
-report lists every exit. Any other capture failure still invalidates the run,
+PID` and a successful fresh enumeration of the browser's tree no longer lists
+it; the report lists every exit. A failed process query, malformed output or
+missing browser root stops the run as invalid, rather than confirming an exit.
+Any other capture failure still invalidates the run,
 as does a checkpoint that scanned no process. An exited process was not scanned
 at that checkpoint. The test does not cover swap,
 hibernation, old crash dumps, GPU buffers, clipboard history or every browser

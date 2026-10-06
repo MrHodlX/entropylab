@@ -155,23 +155,45 @@ export const scanFile = async (file, needles) => {
 
 export const processTree = ({ pid, platform: os = platform, exec = spawnSync } = {}) => {
   const pids = new Set([pid]);
+  // An unavailable process list is not evidence that a child exited. This
+  // query also supplies captureAll's independent confirmation of an exit.
+  const query = (binary, args) => {
+    const result = exec(binary, args, { encoding: "utf8" });
+    if (result.error || result.status !== 0 || !result.stdout?.trim()) {
+      throw new ResidueToolError(`could not enumerate browser processes with ${binary}: ${result.error?.message || result.stderr?.trim() || `exit ${result.status}, empty or unavailable output`}`);
+    }
+    return result.stdout;
+  };
+  const validPid = value => Number.isSafeInteger(value) && value >= 0;
   if (os === "win32") {
     // wmic is deprecated; use PowerShell's CIM query for parent links.
-    const out = exec("powershell", ["-NoProfile", "-Command",
-      "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json"], { encoding: "utf8" }).stdout;
-    try {
-      const rows = JSON.parse(out || "[]"), list = Array.isArray(rows) ? rows : [rows];
-      let grew = true;
-      while (grew) {
-        grew = false;
-        for (const row of list) if (pids.has(row.ParentProcessId) && !pids.has(row.ProcessId)) { pids.add(row.ProcessId); grew = true; }
-      }
-    } catch { /* keep the root pid only */ }
+    const out = query("powershell", ["-NoProfile", "-Command",
+      "$ErrorActionPreference = 'Stop'; Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json"]);
+    let rows;
+    try { rows = JSON.parse(out); }
+    catch { throw new ResidueToolError("could not enumerate browser processes: invalid PowerShell JSON"); }
+    const list = Array.isArray(rows) ? rows : [rows];
+    if (!list.every(row => validPid(row?.ProcessId) && validPid(row?.ParentProcessId))
+      || !list.some(row => row.ProcessId === pid)) {
+      throw new ResidueToolError("could not enumerate browser processes: malformed PowerShell process list or missing browser root");
+    }
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const row of list) if (pids.has(row.ParentProcessId) && !pids.has(row.ProcessId)) { pids.add(row.ProcessId); grew = true; }
+    }
   } else {
-    const out = exec("ps", ["-eo", "pid=,ppid="], { encoding: "utf8" }).stdout || "";
+    const out = query("ps", ["-eo", "pid=,ppid="]);
+    const lines = out.trim().split(/\r?\n/);
+    if (!lines.every(line => /^\s*\d+\s+\d+\s*$/.test(line))) {
+      throw new ResidueToolError("could not enumerate browser processes: malformed ps output");
+    }
+    const rows = lines.map(line => line.trim().split(/\s+/).map(Number));
+    if (!rows.every(row => row.every(validPid)) || !rows.some(([cpid]) => cpid === pid)) {
+      throw new ResidueToolError("could not enumerate browser processes: malformed ps process list or missing browser root");
+    }
     const children = new Map();
-    for (const line of out.split("\n")) {
-      const [cpid, ppid] = line.trim().split(/\s+/).map(Number);
+    for (const [cpid, ppid] of rows) {
       if (cpid) (children.get(ppid) || children.set(ppid, []).get(ppid)).push(cpid);
     }
     const queue = [pid];
