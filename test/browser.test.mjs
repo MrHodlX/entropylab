@@ -325,7 +325,9 @@ const parseReport = (file) => {
   const lines = readFileSync(file, "utf8").trim().split("\n");
   const results = lines.map((line) => {
     const [status, name, error] = line.split("\t");
-    return { ok: status === "ok", name: name ?? "", error: error ?? "" };
+    // "skip" is a check the browser cannot run; its third field is the reason.
+    const skip = status === "skip";
+    return { ok: status === "ok" || skip, skip: skip ? error ?? "" : "", name: name ?? "", error: skip ? "" : error ?? "" };
   });
   return {
     checks: results.length,
@@ -379,7 +381,7 @@ const runEngine = (engine, staging, port) => async () => {
     for (const result of all) {
       counter += 1;
       if (result.ok) {
-        console.log(`ok ${counter} - ${engine.id}: ${result.name}`);
+        console.log(`ok ${counter} - ${engine.id}: ${result.name}${result.skip ? ` # SKIP ${result.skip}` : ""}`);
       } else {
         console.error(`not ok ${counter} - ${engine.id}: ${result.name}`);
         console.error(`  ${result.error}`);
@@ -392,7 +394,8 @@ const runEngine = (engine, staging, port) => async () => {
       0,
       `${failures.length} ${engine.label} integration test(s) failed: ${failures.map((f) => `${f.name}: ${f.error}`).join("; ")}`,
     );
-    console.log(`All ${counter} cryptographic and browser integration checks passed in ${engine.label}.`);
+    const skips = all.filter((result) => result.skip).length;
+    console.log(`All ${counter} cryptographic and browser integration checks passed in ${engine.label}${skips ? `, ${skips} skipped (see # SKIP above)` : ""}.`);
   } finally {
     for (const browser of browsers) {
       browser.kill("SIGKILL");
