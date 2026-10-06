@@ -3,7 +3,8 @@
 EntropyLab is a self-contained Bitcoin key and wallet calculator designed for
 offline, air-gapped use. It converts user-supplied entropy, seed phrases, and
 private keys into wallet recovery information without intentionally sending
-sensitive data to a server.
+sensitive data to a server. The whole application is one HTML file, and its
+markup passes the W3C HTML validator with zero errors.
 
 Current version: **v1.0.0**
 
