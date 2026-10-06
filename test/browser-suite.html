@@ -329,7 +329,7 @@
         const currentStation = tabs.firstElementChild, selected = tabs.children[1];
         return selected.classList.contains("active") && selected.getBoundingClientRect().left >= currentStation.getBoundingClientRect().right - 1;
       }, "the selected derived key tab to clear the pinned Station");
-      equal(document.getElementById("key-summary-method").textContent, "Dice rolls: Base 10 [0-9] / Hashed rolls", "the key overview names the method before its sub-method");
+      equal(document.getElementById("key-summary-method").textContent, "Dice rolls: Base 10 [1-6] / Hashed rolls", "the key overview names the method before its sub-method");
       const summaryLifehash = await until(() => {
         const image = document.getElementById("key-summary-lifehash");
         return !image.hidden ? image : null;

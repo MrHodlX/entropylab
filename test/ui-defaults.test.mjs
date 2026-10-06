@@ -2054,11 +2054,11 @@ test("Key Station stays put and a derived key opens a fingerprint tab with a sum
     assert.match(markup, /id="key-edit-inputs"/);
     assert.match(markup, /id="key-summary-path"/);
     assert.match(markup, /Open Key Station to derive another key/);
-    assert.match(markup, /Base 10 \[0-9\] \/ Hashed rolls/);
-    assert.match(markup, /Dice \[1-6\] \/ Hashed rolls/);
+    assert.match(markup, /Base 10 \[1-6\] \/ Hashed rolls/);
+    assert.match(markup, /Base 6 \[0-5\] \/ Hashed rolls/);
   }
-  assert.match(appSource, /hodlT\("Base 10 \[0-9\] \/ Hashed rolls"\)/);
-  assert.match(appSource, /hodlT\("Dice \[1-6\] \/ Hashed rolls"\)/);
+  assert.match(appSource, /hodlT\("Base 10 \[1-6\] \/ Hashed rolls"\)/);
+  assert.match(appSource, /hodlT\("Base 6 \[0-5\] \/ Hashed rolls"\)/);
   assert.match(appSource, /function hodlSizeKeySummaryLifehash\(\) \{[\s\S]*getBoundingClientRect\(\)\.height[\s\S]*image\.style\.height = image\.style\.width = `\$\{height\}px`/);
   assert.match(appSource, /function hodlSnapshotKeySummary\(/);
   assert.match(appSource, /state\.createdScript = hodlKeySummaryScript\(state\)/);
@@ -2073,8 +2073,8 @@ test("derived-key summaries put the selected sub-method after the method", () =>
   const source = appSource.match(/(function hodlKeySummaryMethod\(state\) \{[\s\S]*?\n\})\nfunction hodlKeySummaryScript/);
   assert.ok(source, "key summary method formatter");
   const summary = new Function(`${source[1]}; return hodlKeySummaryMethod;`)();
-  assert.equal(summary({ mode: "dice", diceMethod: "coldcard" }), "Dice rolls: Base 10 [0-9] / Hashed rolls");
-  assert.equal(summary({ mode: "dice", diceMethod: "coleman" }), "Dice rolls: Dice [1-6] / Hashed rolls");
+  assert.equal(summary({ mode: "dice", diceMethod: "coldcard" }), "Dice rolls: Base 10 [1-6] / Hashed rolls");
+  assert.equal(summary({ mode: "dice", diceMethod: "coleman" }), "Dice rolls: Base 6 [0-5] / Hashed rolls");
   assert.equal(summary({ mode: "dice", diceMethod: "bitbox" }), "Dice rolls: BitBox diceware / Direct word selection");
   assert.equal(summary({ mode: "dice", diceMethod: "dplus" }), "Dice rolls: D++ / Direct word selection");
   assert.equal(summary({ mode: "cards", cardMethod: "direct" }), "Cards: Direct word selection");
