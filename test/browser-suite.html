@@ -1642,6 +1642,30 @@
     }
   });
 
+  // What assistive tech is told about a tool tab matches what it does: it
+  // names the panels it shows, and opening the tool shows one of them.
+  await test("each tool tab points at the panels it opens", async () => {
+    const tabs = [...document.querySelectorAll("#workspace-tabs [data-workspace]")];
+    assert(tabs.length > 0, "No tool tabs found");
+    try {
+      for (const tab of tabs) {
+        const name = tab.getAttribute("aria-label");
+        const ids = (tab.getAttribute("aria-controls") || "").split(" ").filter(Boolean);
+        assert(ids.length > 0, `${name} names no panel`);
+        const panels = ids.map((id) => document.getElementById(id));
+        assert(panels.every(Boolean), `${name} points at a missing panel among: ${ids.join(" ")}`);
+        tab.click();
+        await until(
+          () => tab.getAttribute("aria-selected") === "true" && panels.some((panel) => !panel.hidden),
+          `${name} to show one of the panels it names`,
+        );
+      }
+    } finally {
+      document.querySelector('#workspace [data-workspace="calc"]').click();
+      await until(() => !document.getElementById("key-manager").hidden, "key workspace");
+    }
+  });
+
   await test("a disabled primary action looks unavailable, but a stopping derivation stays red", async () => {
     // Read after the colour transitions settle; a mid-fade value would pass
     // or fail by timing alone.

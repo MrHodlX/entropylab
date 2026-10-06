@@ -6131,7 +6131,7 @@ function hodlRenderKeyForm() {
       ${hodlDiceMethod === "bitbox" || hodlDiceMethod === "dplus" ? hodlCalculationsSwitchMarkup("manual", "dice-manual-calculations", hodlT("show how direct word selection produces each BIP39 index"), hodlManualCalculationsOpen) : ""}
       ${hodlDiceFairnessControlsMarkup(hodlDiceMethod, hodlKeys[hodlActiveKey]?.showDiceFairness)}
       ${hodlDerivedSeedRowMarkup()}
-      <div id="dice-words" translate="no" class="dice-word-grid" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div><div id="last-words" translate="no" class="row last-word-options"></div>`;
+      <div id="dice-words" translate="no" class="dice-word-grid" role="group" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div><div id="last-words" translate="no" class="row last-word-options"></div>`;
     let input = document.getElementById("dice");
     input.dataset.previousValue = input.value;
     let fairnessToggle = document.getElementById("dice-fairness-toggle");
@@ -6212,7 +6212,7 @@ function hodlRenderKeyForm() {
       <div class="dealt-cards" id="dealt-cards" translate="no" aria-live="polite"${showCards ? "" : " hidden"}></div>
       ${direct ? hodlCalculationsSwitchMarkup("manual", "cards-manual-calculations", hodlT("show how direct card selection produces each BIP39 index"), hodlManualCalculationsOpen) : ""}
       ${hodlDerivedSeedRowMarkup()}
-      <div id="dice-words" translate="no" class="dice-word-grid" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div>
+      <div id="dice-words" translate="no" class="dice-word-grid" role="group" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div>
     `;
     let input = document.getElementById(inputId);
     input.onbeforeinput = direct ? (event) => hodlHandleGroupedSeparatorDelete(input, event) : (event) => {
@@ -6317,7 +6317,7 @@ function hodlRenderKeyForm() {
       ${entropyPad}
       ${["bin", "base4", "base8", "hex"].includes(format.id) ? hodlCalculationsSwitchMarkup("number-base", "number-base-calculations", hodlT("show how each BIP39 word number is calculated"), state?.showNumberBaseCalculations) : ""}
       ${hodlDerivedSeedRowMarkup()}
-      <div id="entropy-words" translate="no" class="dice-word-grid" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div>`;
+      <div id="entropy-words" translate="no" class="dice-word-grid" role="group" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div>`;
     hodlFormEl.querySelectorAll('input[name="entropy-format"]').forEach((radio) => {
       radio.onchange = () => {
         let state2 = hodlKeys[hodlActiveKey], previous = document.getElementById(hodlEntropyFormat);
@@ -6378,7 +6378,7 @@ function hodlRenderKeyForm() {
       };
     });
     if (numbers) {
-      hodlFormEl.innerHTML = `${choices}<p class="label" id="seed-number-label">${hodlT("Your {words} BIP39 word numbers", { words: config.words })}</p>${hodlSeedMetaRowMarkup("seed-number-meta", true)}<div class="passphrase-keyboard-tools">${hodlSwitchRowMarkup("seed-zero-index", hodlT("Use zero-indexed word numbers"), { note: hodlT("0–2047 instead of the default 1–2048"), checked: hodlSeedZeroIndexed })}</div><div class="dice-input-shell seed-number-input-shell"><pre class="dice-input-highlight" translate="no" id="seed-number-highlight" aria-hidden="true"></pre><textarea id="seed-numbers" inputmode="numeric" placeholder="${hodlTAttr(hodlSeedZeroIndexed ? "0 1 2 …" : "1 2 3 …")}" aria-labelledby="seed-number-label" aria-describedby="seed-number-meta" autocomplete="off" spellcheck="false"></textarea></div><div class="dice-input-pad seed-number-pad" role="group" aria-label="${hodlTAttr("BIP39 word number keypad")}">${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => `<button type="button" data-seed-number-digit="${digit}" aria-label="${hodlTAttr("Enter {n}", { n: digit })}">${digit}</button>`).join("")}<button type="button" class="seed-keyboard-delete seed-number-delete" data-seed-number-delete aria-label="${hodlTAttr("Delete previous digit")}"><svg viewBox="0 0 24 18" aria-hidden="true" focusable="false"><path d="M9 2h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9L2 9l7-7Z"/><path d="m12 6 6 6m0-6-6 6"/></svg></button><button type="button" class="seed-number-next" data-seed-number-space>${hodlT("Next word")}</button></div>${hodlSeedPhraseRowMarkup(hodlT("Your seed phrase"))}<div id="seed-number-words" translate="no" class="dice-word-grid" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div>`;
+      hodlFormEl.innerHTML = `${choices}<p class="label" id="seed-number-label">${hodlT("Your {words} BIP39 word numbers", { words: config.words })}</p>${hodlSeedMetaRowMarkup("seed-number-meta", true)}<div class="passphrase-keyboard-tools">${hodlSwitchRowMarkup("seed-zero-index", hodlT("Use zero-indexed word numbers"), { note: hodlT("0–2047 instead of the default 1–2048"), checked: hodlSeedZeroIndexed })}</div><div class="dice-input-shell seed-number-input-shell"><pre class="dice-input-highlight" translate="no" id="seed-number-highlight" aria-hidden="true"></pre><textarea id="seed-numbers" inputmode="numeric" placeholder="${hodlTAttr(hodlSeedZeroIndexed ? "0 1 2 …" : "1 2 3 …")}" aria-labelledby="seed-number-label" aria-describedby="seed-number-meta" autocomplete="off" spellcheck="false"></textarea></div><div class="dice-input-pad seed-number-pad" role="group" aria-label="${hodlTAttr("BIP39 word number keypad")}">${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => `<button type="button" data-seed-number-digit="${digit}" aria-label="${hodlTAttr("Enter {n}", { n: digit })}">${digit}</button>`).join("")}<button type="button" class="seed-keyboard-delete seed-number-delete" data-seed-number-delete aria-label="${hodlTAttr("Delete previous digit")}"><svg viewBox="0 0 24 18" aria-hidden="true" focusable="false"><path d="M9 2h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9L2 9l7-7Z"/><path d="m12 6 6 6m0-6-6 6"/></svg></button><button type="button" class="seed-number-next" data-seed-number-space>${hodlT("Next word")}</button></div>${hodlSeedPhraseRowMarkup(hodlT("Your seed phrase"))}<div id="seed-number-words" translate="no" class="dice-word-grid" role="group" aria-label="${hodlTAttr("{n} seed-word slots", { n: config.words })}"></div>`;
       let input = document.getElementById("seed-numbers"), update = () => {
         let parsed = hodlRenderSeedNumberInputState(input, config.words, hodlSeedZeroIndexed), entered = parsed.entries.length, cue = null;
         hodlRenderDiceWordGrid(document.getElementById("seed-number-words"), parsed.wordSlots, config.words, false);
@@ -16802,6 +16802,12 @@ function hodlInitWorkspace() {
     button.dataset.workspace = id;
     button.setAttribute("role", "tab");
     button.setAttribute("aria-selected", String(active));
+    // The panels the tab shows: one card, or for PSBT and Journal whichever
+    // of their stations is current.
+    button.setAttribute("aria-controls", {
+      psbt: "psbt-card psbted-card nonce-card",
+      journal: "journal-card journal-notes-card journal-keymanager-card journal-state-card journal-log-card",
+    }[id] ?? `${id}-card`);
     let fullLabel = document.createElement("span"), shortLabel = document.createElement("span");
     fullLabel.className = "workspace-tab-full";
     shortLabel.className = "workspace-tab-short";
