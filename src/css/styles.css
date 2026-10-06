@@ -2684,10 +2684,10 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface-2);
   box-shadow: inset 0 1px 3px rgb(0 0 0 / .7);
 }
-/* "1 *" changes nothing: it types the position (set inline and from script)
-   as a length for the HTML conformance checker, which otherwise rejects it. */
+/* The 0% fallback is never used (the slider always sets the position, inline
+   and from script); it gives the HTML conformance checker a type to check. */
 .msig-threshold-track span {
-  position: absolute; top: -1px; bottom: -1px; left: var(--msig-m-position); right: calc(100% - 1 * var(--msig-n-position));
+  position: absolute; top: -1px; bottom: -1px; left: var(--msig-m-position); right: calc(100% - var(--msig-n-position, 0%));
   min-width: 0; border-radius: var(--radius-pill); background: var(--accent);
   box-shadow: 0 0 10px color-mix(in oklab, var(--accent) 38%, transparent);
 }
