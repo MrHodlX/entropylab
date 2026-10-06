@@ -356,10 +356,11 @@ const runEngine = (engine, staging, port) => async () => {
     const offlineReport = join(downloadDir, "offline-results.txt");
     // Watchdog, not a performance budget: this only detects a hung browser.
     // CI runners render in software and the online and offline instances share
-    // a CPU, so Firefox there needs close to a minute for the full suite.
+    // a CPU. Firefox there needs close to a minute alone, and longer when the
+    // job is also launching Chromium. 150s timed out on #802 with no report.
     const [onlineDone, offlineDone] = await Promise.all([
-      waitForFile(onlineReport, 150000),
-      waitForFile(offlineReport, 150000),
+      waitForFile(onlineReport, 240000),
+      waitForFile(offlineReport, 240000),
     ]);
     assert.ok(
       onlineDone && offlineDone,
