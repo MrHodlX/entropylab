@@ -88,11 +88,11 @@
       <p class="label">Dice roll options</p>
       <div class="choice-grid">
       <label class="choice"><input type="radio" name="dm" value="coldcard" checked="checked">
-        <span><strong>Base 10 [0-9] / Hashed rolls</strong>
+        <span><strong>Base 10 [1-6] / Hashed rolls</strong>
         <span class="desc">SHA-256 of the original dice digit string, matching the method used by COLDCARD and SeedSigner. Every entered roll is included.</span></span>
       </label>
       <label class="choice"><input type="radio" name="dm" value="coleman">
-        <span><strong>Dice [1-6] / Hashed rolls</strong>
+        <span><strong>Base 6 [0-5] / Hashed rolls</strong>
         <span class="desc">Convert every rolled 6 to 0, hash the complete
 digit string with SHA-256, then use the selected BIP39 entropy length.
 This matches the method used by Keystone, and all rolls are included.</span></span>
