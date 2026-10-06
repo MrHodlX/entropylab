@@ -60,9 +60,10 @@ material. Its security posture rests on the following model:
    image on three machines outside GitHub, by three people: Windows with
    WSL2 and bare-metal Linux on x86_64, and macOS on ARM64 (the image under
    Rosetta). The `psbt-wasm` module has changed since those rebuilds, and
-   no outside rebuild of its current bytes is recorded yet. The page is
-   rebuilt per commit, since the build stamps the commit into it; the log
-   lists which pages were reproduced where. [docs/Reproductions.md](docs/Reproductions.md)
+   no outside rebuild of its current bytes is recorded yet. The page's
+   footer names the source commit to rebuild it from, so pages are
+   reproduced by that commit; the log lists which pages were reproduced
+   where. [docs/Reproductions.md](docs/Reproductions.md)
    records each rebuild by commit. Build-host paths are remapped out of the
    binary.
   iOS/macOS Lockdown Mode disables WebAssembly. Exclude the site in Safari
