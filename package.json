@@ -28,7 +28,7 @@
     "test:cards": "node --test test/cards.test.mjs",
     "test:number-bases": "node --test test/number-bases.test.mjs",
     "test:validate": "node --test test/validate.test.mjs",
-    "test:browser": "node --test test/browser.test.mjs test/residue-browser.test.mjs",
+    "test:browser": "node --test --test-concurrency=1 test/browser.test.mjs test/residue-browser.test.mjs",
     "test:residue": "node scripts/residue-audit.mjs",
     "testmode": "node scripts/testmode.mjs",
     "verify": "node scripts/verify-site.mjs",

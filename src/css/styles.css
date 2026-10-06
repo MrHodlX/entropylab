@@ -648,6 +648,8 @@ input[type="checkbox"]:not(:disabled):hover {
 }
 label.field { display: block; margin-top: var(--space-component); font-size: var(--text-label); font-weight: 600; }
 .label { font-size: var(--text-label); font-weight: 600; margin: var(--space-section) 0 var(--space-control); color: var(--fg); }
+/* A section heading can use the same appearance as a field label. */
+h3.label { font-family: inherit; letter-spacing: inherit; }
 /* The part of a label that changes with a selection, set in regular weight so
    the fixed title still reads as the title. */
 .label-value { font-weight: 400; }

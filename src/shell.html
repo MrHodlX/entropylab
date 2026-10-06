@@ -59,10 +59,10 @@
         <h2>Create. Derive. Verify.</h2>
         <p class="muted tool-intro-note">You supply dice, cards, hex, a seed, or a key. EntropyLab derives the BIP-39 seed, master fingerprint, xpubs, and receive addresses. It does not generate entropy for you. Nothing leaves this page.</p>
       </div>
-      <section class="key-manager no-print" id="key-manager">
+      <div class="key-manager no-print" id="key-manager">
       <div class="key-tab-strip"><div class="key-tabs" id="key-tabs" role="tablist" aria-label="Keys"></div><div class="add-item-control"><button class="add-key" id="add-key" type="button" aria-label="Open Key Station to derive another key" aria-describedby="add-key-tooltip" disabled>+</button><span class="add-item-tooltip" id="add-key-tooltip" role="tooltip">Open Key Station to derive another key</span></div><div class="add-item-control"><button class="add-key remove-key" id="delete-key" type="button" aria-label="Delete current key" aria-describedby="delete-key-tooltip" disabled>−</button><span class="add-item-tooltip" id="delete-key-tooltip" role="tooltip">Delete this key</span></div></div>
-    </section>
-    <section class="card no-print tool-card" id="calc-card" role="tabpanel" hidden>
+    </div>
+    <div class="card no-print tool-card" id="calc-card" role="tabpanel" hidden>
       <div class="key-mode-select" id="modes"><p class="label" id="key-method-label">Derivation method</p></div>
       <div class="key-summary" id="key-summary" hidden>
         <img class="key-summary-lifehash" id="key-summary-lifehash" width="72" height="72" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" hidden>
@@ -78,7 +78,7 @@
       <p class="edge-note is-public" id="key-edit-note" role="status" hidden></p>
       <div class="global-sync-host" id="global-sync-host"></div>
       <section class="seed-length-control" id="seed-length" aria-labelledby="seed-length-label">
-        <p class="label" id="seed-length-label">Seed phrase length</p>
+        <h3 class="label" id="seed-length-label">Seed phrase length</h3>
         <div class="seed-length-select">
           <select id="seed-length-select" aria-labelledby="seed-length-label"><option value="12">12 words</option><option value="15">15 words</option><option value="18">18 words</option><option value="21">21 words</option><option value="24" selected="selected">24 words</option></select>
         </div>
@@ -120,20 +120,20 @@ words, pick one of the checksum words.</span></span>
       <div class="passphrase-field" id="passphrase-field">
         <label for="pass">Passphrase (optional)</label>
         <div class="passphrase-keyboard-tools" id="passphrase-keyboard-toggle-host" hidden></div>
-        <div class="dice-input-shell passphrase-input-shell"><pre class="dice-input-highlight" id="passphrase-highlight" translate="no" aria-hidden="true"></pre><input id="pass" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Enter a passphrase, or leave blank for none" aria-describedby="passphrase-bip39-status" /></div>
+        <div class="dice-input-shell passphrase-input-shell"><pre class="dice-input-highlight" id="passphrase-highlight" translate="no" aria-hidden="true"></pre><input id="pass" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Enter a passphrase, or leave blank for none" aria-describedby="passphrase-bip39-status"></div>
         <p class="field-note passphrase-bip39-status" id="passphrase-bip39-status" aria-live="polite" hidden></p>
       </div>
       <div class="passphrase-keyboard-host" id="passphrase-keyboard-host" hidden></div>
       <div class="master-fingerprint-preview" id="master-fingerprint-preview" role="status" aria-live="polite" aria-atomic="true">
         <p class="label master-fingerprint-heading">Master fingerprint</p>
         <div class="master-fingerprint-card is-disabled" id="base-master-fingerprint-card" role="group" data-state="unavailable" aria-label="Base seed master fingerprint unavailable">
-          <span class="master-fingerprint-lifehash-frame" aria-hidden="true"><img class="master-fingerprint-lifehash" id="base-master-fingerprint-lifehash" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="96" height="96" hidden /></span>
+          <span class="master-fingerprint-lifehash-frame" aria-hidden="true"><img class="master-fingerprint-lifehash" id="base-master-fingerprint-lifehash" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="96" height="96" hidden></span>
           <span class="master-fingerprint-label">Base seed</span>
           <code class="master-fingerprint-value" id="base-master-fingerprint"></code>
         </div>
         <span class="master-fingerprint-arrow is-disabled" id="master-fingerprint-arrow" aria-hidden="true">→</span>
         <div class="master-fingerprint-card master-fingerprint-derived is-disabled" id="passphrase-master-fingerprint-card" role="group" data-state="unavailable" aria-label="With passphrase master fingerprint unavailable">
-          <span class="master-fingerprint-lifehash-frame" aria-hidden="true"><img class="master-fingerprint-lifehash" id="passphrase-master-fingerprint-lifehash" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="96" height="96" hidden /></span>
+          <span class="master-fingerprint-lifehash-frame" aria-hidden="true"><img class="master-fingerprint-lifehash" id="passphrase-master-fingerprint-lifehash" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="96" height="96" hidden></span>
           <span class="master-fingerprint-label">With passphrase</span>
           <code class="master-fingerprint-value" id="passphrase-master-fingerprint"></code>
         </div>
@@ -193,19 +193,19 @@ words, pick one of the checksum words.</span></span>
       <p class="field-note address-estimate derivation-estimate edge-note is-muted" id="address-estimate" role="status">Measuring this device…</p>
       <div class="derive-progress" id="derive-progress" role="progressbar" aria-label="Key derivation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete" hidden><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
       <div class="row key-action-row current-item-actions tool-actions">
-        <button class="btn primary" id="go" disabled aria-disabled="true">Derive Key</button>
-        <button class="btn secondary" id="key-update" type="button" aria-describedby="key-edit-note" hidden disabled aria-disabled="true">Update Existing Key</button>
-        <button class="btn red clear-current-action" id="wipe" type="button" disabled aria-disabled="true">Clear Current Key</button>
+        <button class="btn primary" id="go" disabled>Derive Key</button>
+        <button class="btn secondary" id="key-update" type="button" aria-describedby="key-edit-note" hidden disabled>Update Existing Key</button>
+        <button class="btn red clear-current-action" id="wipe" type="button" disabled>Clear Current Key</button>
       </div>
       <p class="err" id="error"></p>
       </div>
       <div id="out"></div>
-    </section>
+    </div>
       <div class="tool-intro edge-note is-info" id="vanity-tool-intro" hidden>
         <h2>Grind a vanity address from a key you already hold</h2>
         <p class="muted tool-intro-note">Walks either the passphrase or the account number until the address matches your prefix. Same key and same counter always give the same address. Key Station matches can be written back; BIP-85 children stay unchanged. Generates no new entropy.</p>
       </div>
-      <section class="card no-print tool-card" id="vanity-card" role="tabpanel" hidden>
+      <div class="card no-print tool-card" id="vanity-card" role="tabpanel" hidden>
         <section class="edge-note-titled" aria-labelledby="vanity-grind-heading">
           <h3 class="edge-note-title is-private" id="vanity-grind-heading">Before you grind</h3>
           <div class="edge-note is-private" id="vanity-grind-warning" role="note">
@@ -317,17 +317,17 @@ words, pick one of the checksum words.</span></span>
         <div class="row current-item-actions tool-actions">
           <button class="btn primary" id="vanity-go" type="button">Start Grinding</button>
           <div class="derive-progress" id="vanity-progress" role="progressbar" aria-label="Vanity grinding progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete" hidden><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
-          <button class="btn red clear-current-action" id="vanity-wipe" type="button" disabled aria-disabled="true">Clear Results</button>
+          <button class="btn red clear-current-action" id="vanity-wipe" type="button" disabled>Clear Results</button>
         </div>
-      </section>
+      </div>
       <div class="tool-intro edge-note is-info" id="bip85-tool-intro" hidden>
         <h2>Child seeds from a parent key</h2>
         <p class="muted tool-intro-note">Same parent, same settings, same child every time. English BIP-39 children match COLDCARD. No new entropy is generated.</p>
       </div>
-      <section class="key-manager no-print" id="bip85-manager" hidden>
+      <div class="key-manager no-print" id="bip85-manager" hidden>
         <div class="key-tab-strip"><div class="key-tabs" id="bip85-tabs" role="tablist" aria-label="BIP-85 child seeds"></div><div class="add-item-control"><button class="add-key" id="add-bip85" type="button" aria-label="Open BIP-85 Station to derive another child" aria-describedby="add-bip85-tooltip">+</button><span class="add-item-tooltip" id="add-bip85-tooltip" role="tooltip">Open BIP-85 Station</span></div><div class="add-item-control"><button class="add-key remove-key" id="delete-bip85" type="button" aria-label="Delete current BIP-85 child" aria-describedby="delete-bip85-tooltip" disabled>−</button><span class="add-item-tooltip" id="delete-bip85-tooltip" role="tooltip">Delete this BIP-85 child</span></div></div>
-      </section>
-      <section class="card no-print tool-card" id="bip85-card" role="tabpanel" hidden>
+      </div>
+      <div class="card no-print tool-card" id="bip85-card" role="tabpanel" hidden>
       <div class="bip85-bench" id="bip85-bench">
       <section class="edge-note-titled" aria-labelledby="bip85-safety-heading">
         <h3 class="edge-note-title is-private" id="bip85-safety-heading">Safety notes</h3>
@@ -380,20 +380,20 @@ words, pick one of the checksum words.</span></span>
       <p class="edge-note is-muted bip85-path-row">Path <code id="bip85-path">m/83696968'/39'/0'/24'/0'</code></p>
       <p class="err" id="bip85-error" role="alert"></p>
       <div class="row bip85-actions current-item-actions tool-actions">
-        <button class="btn primary" id="bip85-go" type="button" disabled aria-disabled="true">Derive Child Key</button>
-        <button class="btn red clear-current-action" id="bip85-wipe" type="button" disabled aria-disabled="true">Clear Parent Key</button>
+        <button class="btn primary" id="bip85-go" type="button" disabled>Derive Child Key</button>
+        <button class="btn red clear-current-action" id="bip85-wipe" type="button" disabled>Clear Parent Key</button>
       </div>
       </div>
       <div id="bip85-out" aria-live="polite"></div>
-    </section>
+    </div>
       <div class="tool-intro edge-note is-info" id="msig-tool-intro" hidden>
         <h2>Build a watch-only multisig</h2>
         <p class="muted tool-intro-note">You supply individual co-signer xpubs, choose from keys entered in the Key Station, or paste in an existing multisig wallet descriptor. Verify the derived addresses, or any other info needed to setup a watch-only multisig wallet.</p>
       </div>
-      <section class="key-manager no-print" id="msig-manager" hidden>
+      <div class="key-manager no-print" id="msig-manager" hidden>
       <div class="key-tab-strip"><div class="key-tabs" id="msig-tabs" role="tablist" aria-label="Multisigs"></div><div class="add-item-control"><button class="add-key" id="add-msig" type="button" aria-label="Open MS Station to derive another multisig" aria-describedby="add-msig-tooltip" disabled>+</button><span class="add-item-tooltip" id="add-msig-tooltip" role="tooltip">Open MS Station</span></div><div class="add-item-control"><button class="add-key remove-key" id="delete-msig" type="button" aria-label="Delete current multisig" aria-describedby="delete-msig-tooltip" disabled>−</button><span class="add-item-tooltip" id="delete-msig-tooltip" role="tooltip">Delete this multisig</span></div></div>
-    </section>
-    <section class="card no-print tool-card" id="msig-card" role="tabpanel" hidden>
+    </div>
+    <div class="card no-print tool-card" id="msig-card" role="tabpanel" hidden>
       <div class="key-summary" id="msig-summary" hidden>
         <div class="key-summary-text">
           <code class="key-summary-fingerprint" id="msig-summary-policy"></code>
@@ -409,7 +409,7 @@ words, pick one of the checksum words.</span></span>
         <label class="field"><span class="muted label-value">Paste a wallet-exported multisig descriptor here — the quorum, script type, key order, and co-signer xpubs will be filled in below.</span>
           <textarea id="msig-descriptor" placeholder="wsh(sortedmulti(2,[fingerprint/48h/0h/0h/2h]Zpub…/0/*, …))" autocomplete="off" spellcheck="false" aria-describedby="msig-descriptor-help"></textarea>
         </label>
-        <button class="btn secondary" id="msig-descriptor-import" type="button" disabled aria-disabled="true">Import Descriptor</button>
+        <button class="btn secondary" id="msig-descriptor-import" type="button" disabled>Import Descriptor</button>
         <p class="field-note edge-note is-muted" id="msig-descriptor-help">Only accepts watch-only public keys; a descriptor carrying private keys will be refused.</p>
         <p class="hint" id="msig-descriptor-status" role="status" hidden></p>
       </details>
@@ -464,7 +464,7 @@ words, pick one of the checksum words.</span></span>
       <div class="key-settings msig-output-settings">
         <!-- Parsed co-signer origins remain the internal source of truth for
              these values; they are not one editable global derivation path. -->
-        <div id="msig-origin-state" hidden aria-hidden="true">
+        <div id="msig-origin-state" hidden>
           <input id="msig-purpose" type="number" value="48"><input id="msig-purpose-harden" type="checkbox" checked>
           <input id="msig-network" type="number" value="0"><input id="msig-network-harden" type="checkbox" checked>
           <input id="msig-account" type="text" value="" disabled><input id="msig-account-harden" type="checkbox" checked>
@@ -499,23 +499,23 @@ words, pick one of the checksum words.</span></span>
       <p class="field-note address-estimate derivation-estimate edge-note is-muted" id="msig-address-estimate" role="status">Measuring this device…</p>
       <p class="edge-note is-private msig-spec-warning" id="msig-spec-warning" role="status" hidden></p>
       <div class="row current-item-actions tool-actions">
-        <button class="btn primary" id="msig-go" type="button" aria-describedby="msig-script-warning msig-spec-warning" disabled aria-disabled="true">Derive Multisig</button>
-        <button class="btn secondary" id="msig-update" type="button" aria-describedby="msig-edit-note msig-script-warning msig-spec-warning" hidden disabled aria-disabled="true">Update Existing Multisig</button>
+        <button class="btn primary" id="msig-go" type="button" aria-describedby="msig-script-warning msig-spec-warning" disabled>Derive Multisig</button>
+        <button class="btn secondary" id="msig-update" type="button" aria-describedby="msig-edit-note msig-script-warning msig-spec-warning" hidden disabled>Update Existing Multisig</button>
         <div class="derive-progress" id="msig-derive-progress" role="progressbar" aria-label="Multisig derivation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% complete" hidden><span class="derive-progress-track"><span class="derive-progress-bar"></span></span><span class="derive-progress-label">0%</span></div>
-        <button class="btn red clear-current-action" id="msig-wipe" type="button" disabled aria-disabled="true">Clear Current Multisig</button>
+        <button class="btn red clear-current-action" id="msig-wipe" type="button" disabled>Clear Current Multisig</button>
       </div>
       <p class="err" id="msig-error"></p>
       </div>
       <div id="msig-out"></div>
-    </section>
+    </div>
     <div class="tool-intro edge-note is-info" id="sp-tool-intro" hidden>
         <h2>Silent Payments, offline</h2>
         <p class="muted tool-intro-note" data-i18n-rich>Get an <code>sp1q…</code> address to reuse. Print the URI and DNS text if you want to publish it. Make a sender output or check pasted outputs against your scan key. No chain. No network.</p>
       </div>
-      <section class="key-manager no-print" id="sp-manager" hidden>
+      <div class="key-manager no-print" id="sp-manager" hidden>
         <div class="key-tab-strip"><div class="key-tabs" id="sp-tabs" role="tablist" aria-label="Silent Payments"></div><div class="add-item-control"><button class="add-key" id="add-sp" type="button" aria-label="Open SP Station to derive another address" aria-describedby="add-sp-tooltip">+</button><span class="add-item-tooltip" id="add-sp-tooltip" role="tooltip">Open SP Station</span></div><div class="add-item-control"><button class="add-key remove-key" id="delete-sp" type="button" aria-label="Delete current silent payment address" aria-describedby="delete-sp-tooltip" disabled>−</button><span class="add-item-tooltip" id="delete-sp-tooltip" role="tooltip">Delete this silent payment address</span></div></div>
-      </section>
-      <section class="card no-print tool-card" id="sp-card" role="tabpanel" hidden>
+      </div>
+      <div class="card no-print tool-card" id="sp-card" role="tabpanel" hidden>
       <div id="sp-bench">
       <p class="edge-note is-public">Session keys remain in this page only and are never intentionally stored or sent. Memory clearing is best-effort because browsers may retain internal copies; close the page before reconnecting the computer.</p>
       <p class="label" id="sp-mode-label">Mode</p>
@@ -589,14 +589,14 @@ words, pick one of the checksum words.</span></span>
       <p class="err" id="sp-error" role="alert"></p>
       <p class="edge-note is-muted" id="sp-session" aria-live="polite">No session key. Receive and verify need a seed or root xprv.</p>
       <div class="row psbt-actions tool-actions current-item-actions">
-        <button class="btn primary" id="sp-derive" type="button" disabled aria-disabled="true" data-sp-action="receive">Derive silent payment address</button>
-        <button class="btn primary" id="sp-send-go" type="button" disabled aria-disabled="true" data-sp-action="send" hidden>Compute taproot outputs</button>
-        <button class="btn primary" id="sp-verify-go" type="button" disabled aria-disabled="true" data-sp-action="verify" hidden>Scan pasted outputs</button>
-        <button class="btn red clear-current-action" id="sp-wipe" type="button" disabled aria-disabled="true">Clear Station</button>
+        <button class="btn primary" id="sp-derive" type="button" disabled data-sp-action="receive">Derive silent payment address</button>
+        <button class="btn primary" id="sp-send-go" type="button" disabled data-sp-action="send" hidden>Compute taproot outputs</button>
+        <button class="btn primary" id="sp-verify-go" type="button" disabled data-sp-action="verify" hidden>Scan pasted outputs</button>
+        <button class="btn red clear-current-action" id="sp-wipe" type="button" disabled>Clear Station</button>
       </div>
       </div>
       <div id="sp-address-view" hidden></div>
-    </section>
+    </div>
     <div class="tool-intro-stack" id="psbt-tool-intros" hidden>
     <div class="tool-intro edge-note is-info active" id="psbt-tool-intro" aria-hidden="false">
         <h2>See what’s in a transaction</h2>
@@ -611,7 +611,7 @@ words, pick one of the checksum words.</span></span>
         <p class="muted tool-intro-note">Paste a PSBT or a signed transaction. Every ECDSA signature’s nonce is compared for reuse — the sign of a bad or leaking hardware wallet. Add a key to check RFC 6979, or a Jade transcript to verify anti-exfil.</p>
       </div>
     </div>
-    <section class="key-manager no-print" id="psbt-manager" hidden>
+    <div class="key-manager no-print" id="psbt-manager" hidden>
       <div class="key-tab-strip">
         <div class="key-tabs" id="psbt-tool-tabs" role="tablist" aria-label="PSBT stations">
           <button class="tab key-tab active" id="psbt-inspector-tab" type="button" role="tab" aria-selected="true" aria-controls="psbt-card" data-psbt-tool="inspector"><span class="key-tab-label">PSBT Inspector</span></button>
@@ -619,8 +619,8 @@ words, pick one of the checksum words.</span></span>
           <button class="tab key-tab" id="psbt-nonce-tab" type="button" role="tab" aria-selected="false" aria-controls="nonce-card" data-psbt-tool="nonce"><span class="key-tab-label">Nonce Inspector</span></button>
         </div>
       </div>
-    </section>
-      <section class="card no-print tool-card" id="psbt-card" role="tabpanel" hidden>
+    </div>
+      <div class="card no-print tool-card" id="psbt-card" role="tabpanel" hidden>
       <p class="edge-note is-public">A “PSBT” is a Partially Signed Bitcoin Transaction.</p>
       <label class="field">PSBT v0 or raw transaction (base64 or hex)
         <textarea id="psbt-text" placeholder="cHNidP8B… or 020000000001…" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
@@ -650,29 +650,29 @@ words, pick one of the checksum words.</span></span>
       </div>
       <p class="err" id="psbt-error" role="alert"></p>
       <div class="row psbt-actions tool-actions current-item-actions">
-        <button class="btn primary" id="psbt-go" type="button" disabled aria-disabled="true">Inspect</button>
+        <button class="btn primary" id="psbt-go" type="button" disabled>Inspect</button>
         <button class="btn secondary" id="psbt-upload" type="button">Upload .psbt File</button>
         <input type="file" id="psbt-file" accept=".psbt,.txn,.txt,.hex" hidden>
-        <button class="btn secondary" id="psbt-download" type="button" disabled aria-disabled="true">Download .psbt</button>
-        <button class="btn red clear-current-action" id="psbt-wipe" type="button" disabled aria-disabled="true">Clear Inspectors</button>
+        <button class="btn secondary" id="psbt-download" type="button" disabled>Download .psbt</button>
+        <button class="btn red clear-current-action" id="psbt-wipe" type="button" disabled>Clear Inspectors</button>
       </div>
-    </section>
-      <section class="card no-print tool-card" id="psbted-card" role="tabpanel" hidden>
+    </div>
+      <div class="card no-print tool-card" id="psbted-card" role="tabpanel" hidden>
       <label class="field">PSBT v0 (base64 or hex)
         <textarea id="psbted-text" placeholder="cHNidP8B..." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
       <div class="row psbt-actions psbted-actions tool-actions current-item-actions">
-        <button class="btn primary" id="psbted-load" type="button" disabled aria-disabled="true">Load PSBT</button>
+        <button class="btn primary" id="psbted-load" type="button" disabled>Load PSBT</button>
         <button class="btn secondary" id="psbted-upload" type="button">Upload .psbt File</button>
         <input type="file" id="psbted-file" accept=".psbt,.txt,.hex" hidden>
-        <button class="btn red clear-current-action" id="psbted-wipe" type="button" disabled aria-disabled="true">Clear Editor</button>
+        <button class="btn red clear-current-action" id="psbted-wipe" type="button" disabled>Clear Editor</button>
       </div>
       <div class="switch-row" id="psbted-insane-row"><label class="switch-toggle"><input type="checkbox" id="psbted-insane" aria-describedby="psbted-insane-note"><span class="label">Insane editing</span></label><p class="switch-note" id="psbted-insane-note">Disable the consensus layer: edits are no longer checked against Bitcoin's rules (transaction sanity, UTXO claims, signatures, witness data) and a violating result builds and exports anyway. The problem list still reports what it finds.</p><p class="edge-note is-private">“Insane editing” is for deliberately broken files only.</p></div>
       <p class="err" id="psbted-error" role="alert"></p>
       <p class="label" id="psbted-editor-label">Editor</p>
       <div id="psbted-out" role="region" aria-labelledby="psbted-editor-label" aria-live="polite"></div>
       <section class="psbted-compare" id="psbted-compare">
-        <p class="label">Compare with another PSBT</p>
+        <h3 class="label">Compare with another PSBT</h3>
         <p class="muted label-description">Paste a second PSBT to see what changed relative to the one in the editor. The comparison reads the decoded contents, so reordered maps are not a difference; transaction, signing-state, and metadata changes are reported separately. It describes differences only — it does not judge whether a change is safe.</p>
         <label class="field">Other PSBT (base64 or hex)
           <textarea id="psbted-compare-text" placeholder="cHNidP8B..." spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
@@ -684,12 +684,12 @@ words, pick one of the checksum words.</span></span>
         </div>
         <p class="err" id="psbted-compare-error" role="alert"></p>
         <div class="row psbt-actions psbted-actions tool-actions">
-          <button class="btn secondary" id="psbted-compare-go" type="button" disabled aria-disabled="true">Compare</button>
-          <button class="btn secondary" id="psbted-compare-clear" type="button" disabled aria-disabled="true">Clear Comparison</button>
+          <button class="btn secondary" id="psbted-compare-go" type="button" disabled>Compare</button>
+          <button class="btn secondary" id="psbted-compare-clear" type="button" disabled>Clear Comparison</button>
         </div>
       </section>
-    </section>
-      <section class="card no-print tool-card" id="nonce-card" role="tabpanel" hidden>
+    </div>
+      <div class="card no-print tool-card" id="nonce-card" role="tabpanel" hidden>
       <label class="field">PSBT v0 or signed raw transaction (base64 or hex)
         <textarea id="nonce-text" placeholder="cHNidP8B… or 020000000001…" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
       </label>
@@ -735,17 +735,17 @@ words, pick one of the checksum words.</span></span>
       </div>
       <p class="err" id="nonce-error" role="alert"></p>
       <div class="row psbt-actions tool-actions current-item-actions">
-        <button class="btn primary" id="nonce-go" type="button" disabled aria-disabled="true">Inspect Nonces</button>
+        <button class="btn primary" id="nonce-go" type="button" disabled>Inspect Nonces</button>
         <button class="btn secondary" id="nonce-upload" type="button">Upload .psbt File</button>
         <input type="file" id="nonce-file" accept=".psbt,.txn,.txt,.hex" hidden>
-        <button class="btn red clear-current-action" id="nonce-wipe" type="button" disabled aria-disabled="true">Clear Inspectors</button>
+        <button class="btn red clear-current-action" id="nonce-wipe" type="button" disabled>Clear Inspectors</button>
       </div>
-    </section>
+    </div>
       <div class="tool-intro edge-note is-info" id="ln-tool-intro" hidden>
         <h2>Derive a Lightning node key</h2>
         <p class="muted tool-intro-note">LND seed → LND node key. BIP-39 seed → LDK node key. Decode only. Does not create a seed. Nothing leaves this page.</p>
       </div>
-      <section class="card no-print tool-card" id="ln-card" role="tabpanel" hidden>
+      <div class="card no-print tool-card" id="ln-card" role="tabpanel" hidden>
         <div class="ln-grid tool-section">
           <label class="field">Seed format
             <select id="ln-format" aria-describedby="ln-format-help">
@@ -778,27 +778,27 @@ words, pick one of the checksum words.</span></span>
         <p class="err" id="ln-error" role="alert"></p>
         <div id="ln-out" aria-live="polite"></div>
         <p class="muted">Seeds and derived keys remain in this page only and are never stored or sent. Memory clearing is best-effort because browsers may retain internal copies; close the page before reconnecting the computer.</p>
-      </section>
+      </div>
     <div class="tool-intro edge-note is-info" id="journal-tool-intro" hidden>
         <h2>Entropy Journal</h2>
         <p class="muted tool-intro-note">A local notebook of entropy you already produced. Password is optional. No password means anyone with the file can open it. Not a password manager. Does not generate entropy.</p>
         <div class="row journal-global-actions tool-actions">
-          <button class="btn secondary green journal-download-action" id="journal-global-download" type="button" disabled aria-disabled="true"><svg class="download-mark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg><span>Download journal</span></button>
-          <button class="btn red clear-current-action" id="journal-global-clear" type="button" disabled aria-disabled="true">Clear journal</button>
+          <button class="btn secondary green journal-download-action" id="journal-global-download" type="button" disabled><svg class="download-mark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg><span>Download journal</span></button>
+          <button class="btn red clear-current-action" id="journal-global-clear" type="button" disabled>Clear journal</button>
         </div>
       </div>
-    <section class="key-manager no-print" id="journal-manager" hidden>
+    <div class="key-manager no-print" id="journal-manager" hidden>
       <div class="key-tab-strip">
         <div class="key-tabs" id="journal-tool-tabs" role="tablist" aria-label="Journal stations">
-          <button class="tab key-tab is-lab" id="journal-book-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-card" aria-disabled="true" data-journal-tool="book" disabled>Entries</button>
-          <button class="tab key-tab is-lab" id="journal-notes-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-notes-card" aria-disabled="true" data-journal-tool="notes" disabled>Notepad</button>
-          <button class="tab key-tab is-lab" id="journal-keymanager-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-keymanager-card" aria-disabled="true" data-journal-tool="keymanager" disabled>Key manager</button>
-          <button class="tab key-tab is-lab" id="journal-state-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-state-card" aria-disabled="true" data-journal-tool="state" disabled>Session state</button>
-          <button class="tab key-tab is-lab" id="journal-log-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-log-card" aria-disabled="true" data-journal-tool="log" disabled>Session log</button>
+          <button class="tab key-tab is-lab" id="journal-book-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-card" data-journal-tool="book" disabled>Entries</button>
+          <button class="tab key-tab is-lab" id="journal-notes-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-notes-card" data-journal-tool="notes" disabled>Notepad</button>
+          <button class="tab key-tab is-lab" id="journal-keymanager-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-keymanager-card" data-journal-tool="keymanager" disabled>Key manager</button>
+          <button class="tab key-tab is-lab" id="journal-state-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-state-card" data-journal-tool="state" disabled>Session state</button>
+          <button class="tab key-tab is-lab" id="journal-log-tab" type="button" role="tab" aria-selected="false" aria-controls="journal-log-card" data-journal-tool="log" disabled>Session log</button>
         </div>
       </div>
-    </section>
-      <section class="card no-print tool-card" id="journal-card" role="region" aria-label="Journal" hidden>
+    </div>
+      <section class="card no-print tool-card" id="journal-card" aria-label="Journal" hidden>
       <div id="journal-locked-panel">
         <div class="row segmented-control" id="journal-gate-modes" role="group" aria-label="Journal start">
           <button type="button" class="tab active" data-journal-gate="create" aria-pressed="true">Create</button>
@@ -938,7 +938,7 @@ words, pick one of the checksum words.</span></span>
         <span class="desc">Same rule as the recovery sheet. Off by default. The file is then a secret — treat the download like a seed backup.</span></span>
       </label>
       <label class="field">Session snapshot
-        <textarea id="journal-state-text" spellcheck="false" autocomplete="off" autocapitalize="off" readonly aria-readonly="true"></textarea>
+        <textarea id="journal-state-text" spellcheck="false" autocomplete="off" autocapitalize="off" readonly></textarea>
       </label>
       <div class="row psbt-actions tool-actions">
         <div class="journal-download-options"><button class="btn secondary green journal-download-action journal-file-button" id="journal-state-download" type="button" aria-label="Download session state" title="Download session state"><svg class="download-mark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg><span class="control-label">Download session state</span></button><label class="journal-encrypt-option"><input class="journal-encrypt-download" id="journal-state-encrypt" type="checkbox" checked><span>Use Journal file encryption</span></label></div>
