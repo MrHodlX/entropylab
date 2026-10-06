@@ -2,9 +2,9 @@
 // Contract: a commit that touches no build input (docs, the changelog,
 // release signatures) must leave entropylab.html byte-identical, so the sums
 // signed for a release stay valid after they land on rock; a commit that
-// touches any build input must move the stamp to itself; and a release build
-// must refuse a shallow clone, where the lookup cannot see past the
-// truncated history and would name the wrong commit.
+// touches any build input must move the stamp to itself; and a build must
+// refuse a shallow clone, where the lookup cannot see past the truncated
+// history and would name the wrong commit.
 //
 // Each case builds a throwaway git repository holding a copy of the build's
 // sources, so the expected commit is the one the test itself just made and
@@ -102,7 +102,7 @@ test("a commit to any build input moves the stamp to that commit", { timeout: 30
   });
 });
 
-test("a release build refuses a shallow clone; a test-hook staging build stamps unknown", { timeout: 120000 }, () => {
+test("a build refuses a shallow clone, release and test-hook staging alike", { timeout: 120000 }, () => {
   withRepo(({ dir, repo }) => {
     writeFileSync(join(repo, "NOTES.md"), "docs\n");
     commit(repo, "docs");
@@ -110,12 +110,10 @@ test("a release build refuses a shallow clone; a test-hook staging build stamps 
     git(dir, "clone", "-q", "--depth", "1", pathToFileURL(repo).href, shallow);
     linkModules(shallow);
 
-    const release = build(shallow, join(dir, "out-release"));
-    assert.notEqual(release.status, 0, "a release build must not guess the commit from truncated history");
-    assert.match(release.stderr, /shallow/);
-
-    const staging = build(shallow, join(dir, "out-staging"), "--test-hooks");
-    assert.equal(staging.status, 0, staging.stderr);
-    assert.equal(stampOf(readFileSync(join(dir, "out-staging", "entropylab.html"), "utf8")), "unknown");
+    for (const flags of [[], ["--test-hooks"]]) {
+      const result = build(shallow, join(dir, "out-shallow"), ...flags);
+      assert.notEqual(result.status, 0, `a build (${flags.join(" ") || "release"}) must not guess the commit from truncated history`);
+      assert.match(result.stderr, /shallow/);
+    }
   });
 });

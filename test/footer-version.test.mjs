@@ -17,7 +17,7 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 
 test("the build stamps the commit tokens from git, with a snapshot fallback", () => {
   const build = read("scripts/build.mjs");
-  assert.match(build, /return "unknown";/);
+  assert.match(read("scripts/build-commit.mjs"), /return "unknown";/);
   assert.match(build, /!\/\^\(\?:\[0-9a-f\]\{40\}\|unknown\)\$\/\.test\(commit\)/);
   assert.match(build, /\.split\("\{\{COMMIT\}\}"\)\.join\(commit\)/);
   assert.match(build, /\.split\("\{\{COMMIT_SHORT\}\}"\)\.join\(commit === "unknown" \? "unknown" : commit\.slice\(0, 7\)\)/);

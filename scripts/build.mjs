@@ -40,16 +40,8 @@ if (!/^\d+(?:\.\d+)*$/.test(version)) {
 
 // The footer identifies the exact source revision the build was cut from: the
 // last commit that changed a build input. A build from a snapshot without git
-// metadata stamps "unknown"; so does a test-hook staging build in a shallow
-// clone, which never ships. A release build refuses a shallow clone.
-const commit = (() => {
-  try {
-    return buildCommit(root);
-  } catch (error) {
-    if (testHooks) return "unknown";
-    throw error;
-  }
-})();
+// metadata stamps "unknown"; a shallow clone is refused.
+const commit = buildCommit(root);
 if (!/^(?:[0-9a-f]{40}|unknown)$/.test(commit)) {
   throw new Error(`Unexpected git commit id: ${commit}`);
 }
