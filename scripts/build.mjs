@@ -85,7 +85,7 @@ const siteLogo = `<span class="site-logo" aria-hidden="true">${logoSvg("logo-dar
 const favicon = readFileSync(join(root, "assets/favicon.png")).toString("base64");
 const faviconSvg = read("assets/favicon.svg").trim()
   .replace(/\s+/g, " ")
-  .replace(/[#<>"%]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  .replace(/[#<>"% ]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 // The app bundle is minified with legalComments "none", which strips the
 // generated WASM module's header comment — but that module compiles in the
 // MIT-licensed AEZ v5 vendored at entropylab-wasm/src/aez/ (zears 0.2.1),
@@ -132,7 +132,11 @@ const jsMain = buildSync({
   loader: { ".html": "text" },
   banner: { js: wasmAezNotice },
   define: { __ENTROPYLAB_TEST_HOOKS__: testHooks ? "true" : "false" },
-}).outputFiles[0].text.split(siteLogoSpan).join(siteLogo);
+}).outputFiles[0].text.split(siteLogoSpan).join(siteLogo)
+  // @scure/base probes TextDecoder with "A0+" and a DEL (U+007F). Its source
+  // spells DEL as an escape, but esbuild writes the character itself, which
+  // HTML forbids in a script. Put the escape back: the string is unchanged.
+  .split(String.fromCharCode(0x7f)).join(String.fromCharCode(92) + "x7f");
 const jsSqliteWriter = read("js/sqlite-writer.js");
 const jsWalletExport = read("js/wallet-export.js");
 const jsOnline = read("js/online.js");
@@ -177,6 +181,15 @@ const worker = workerTemplate.split("{{PWA_VERSION}}").join(pwaVersion);
 
 for (const leftover of `${html}\n${worker}`.match(/\/\*@@|{{(?:VERSION|PWA_VERSION|COMMIT|COMMIT_SHORT)}}/g) || []) {
   throw new Error(`Unreplaced build token in output: ${leftover}`);
+}
+// HTML forbids control characters other than whitespace, and noncharacters,
+// anywhere in a document. A dependency that starts emitting one fails the
+// build here rather than shipping a page that does not conform.
+for (const char of html) {
+  const code = char.codePointAt(0);
+  const control = (code < 0x20 && ![0x09, 0x0a, 0x0c, 0x0d].includes(code)) || (code >= 0x7f && code <= 0x9f);
+  const nonCharacter = (code >= 0xfdd0 && code <= 0xfdef) || (code & 0xfffe) === 0xfffe;
+  if (control || nonCharacter) throw new Error(`Code point HTML forbids in output: U+${code.toString(16).toUpperCase().padStart(4, "0")}`);
 }
 
 if (outDir === root) {

@@ -1160,7 +1160,7 @@ test("the beta notice sits at the top of the page as a banner", () => {
     const live = markup.slice(wrapper).replace(/<!--[\s\S]*?-->/g, "");
     // It is a load-time warning again, so it keeps the alert role and leads
     // the wrap, ahead of the hosted-site warning and the pitch card.
-    assert.match(live, /<aside class="beta-warning no-print" id="beta-warning" role="alert">\s*<div class="beta-warning-text"(?: [^>]*)?><strong>[^<]+<\/strong> [^<]+<\/div>/);
+    assert.match(live, /<div class="beta-warning no-print" id="beta-warning" role="alert">\s*<div class="beta-warning-text"(?: [^>]*)?><strong>[^<]+<\/strong> [^<]+<\/div>/);
     assert.ok(
       live.indexOf('id="beta-warning"') < live.indexOf('id="online-warning"'),
       "the beta banner must precede the online warning",
@@ -1186,7 +1186,7 @@ test("the page closes on a footer in both markups", () => {
     // spellings.
     assert.match(
       markup,
-      /<footer class="page-footer muted no-print"><div>Team Ooga Booga<\/div><div class="page-footer-emoji">(?:🪨|\\u\{1FAA8\}) (?:🔥|\\u\{1F525\}) (?:🎲|\\u\{1F3B2\}) (?:🍌|\\u\{1F34C\})<\/div><div data-i18n-skip>Since 964013 (?:·|\\x[Bb]7|\\u00[Bb]7) <span class="page-footer-build">v\{\{VERSION\}\} (?:·|\\x[Bb]7|\\u00[Bb]7) commit <code>\{\{COMMIT_SHORT\}\}<\/code> <img class="page-footer-lifehash" id="page-footer-lifehash" data-commit="\{\{COMMIT\}\}" width="20" height="20" alt="LifeHash of the build commit" hidden><\/span><\/div><div class="page-footer-links">/,
+      /<footer class="page-footer muted no-print"><div>Team Ooga Booga<\/div><div class="page-footer-emoji">(?:🪨|\\u\{1FAA8\}) (?:🔥|\\u\{1F525\}) (?:🎲|\\u\{1F3B2\}) (?:🍌|\\u\{1F34C\})<\/div><div data-i18n-skip>Since 964013 (?:·|\\x[Bb]7|\\u00[Bb]7) <span class="page-footer-build">v\{\{VERSION\}\} (?:·|\\x[Bb]7|\\u00[Bb]7) commit <code>\{\{COMMIT_SHORT\}\}<\/code> <img class="page-footer-lifehash" id="page-footer-lifehash" data-commit="\{\{COMMIT\}\}" width="20" height="20" src="data:[^"]*" alt="LifeHash of the build commit" hidden><\/span><\/div><div class="page-footer-links">/,
     );
     // A fourth row closes it, in this order: network, language, theme, and
     // the repository link last.
@@ -1392,7 +1392,7 @@ test("the site header is fixed, carries the logo, and holds the version, downloa
     // The wrapper opens on the beta banner; the static template follows with
     // a no-JS notice the runtime page has no need of. Both then carry the
     // conditional warnings, which start hidden.
-    assert.match(live, /<div class="wrap">\s*<aside class="beta-warning no-print" id="beta-warning" role="alert">[\s\S]*?<\/aside>\s*(?:<noscript>[\s\S]*?<\/noscript>\s*)?(?:<aside[^>]*online-warning[\s\S]*?<\/aside>\s*)*<section[^>]*id="site-intro">/);
+    assert.match(live, /<div class="wrap">\s*<div class="beta-warning no-print" id="beta-warning" role="alert">[\s\S]*?<\/div>\s*(?:<noscript>[\s\S]*?<\/noscript>\s*)?(?:<div[^>]*online-warning[\s\S]*?<\/div>\s*)*<section[^>]*id="site-intro">/);
     assert.doesNotMatch(markup.slice(wrapper), /<header>|download-controls/);
   }
   // The mark's own art margin supplies the lockup gap, so the flex gap is
@@ -2019,6 +2019,20 @@ test("the workspace switcher keeps every tool on screen as a tab strip", () => {
   assert.match(appSource, /hint\.hidden = strip\.scrollWidth - strip\.clientWidth - strip\.scrollLeft <= 1;/);
   assert.match(appSource, /strip\.addEventListener\("scroll", hodlSyncWorkspaceOverflow, \{ passive: true \}\);/);
   assert.match(appSource, /new ResizeObserver\(hodlSyncWorkspaceOverflow\)\.observe\(strip\);/);
+});
+
+// First paint and no-JS show the static strip, so its tabs carry the same aria
+// wiring the runtime strip gets: each names the tab panel it shows.
+test("each static tool tab points at a tab panel the shell has", () => {
+  const start = shell.indexOf('id="workspace-tabs"');
+  const strip = shell.slice(start, shell.indexOf("</div>", start));
+  const tabs = strip.match(/<button[^>]*role="tab"[^>]*>/g) ?? [];
+  assert.equal(tabs.length, 6, "the static strip carries the six release tools");
+  for (const tab of tabs) {
+    const ids = tab.match(/aria-controls="([^"]*)"/)?.[1].split(" ").filter(Boolean) ?? [];
+    assert.ok(ids.length, `${tab} names no panel`);
+    for (const id of ids) assert.ok(shell.includes(`id="${id}" role="tabpanel"`), `${tab} points at #${id}, which is not a tab panel in the shell`);
+  }
 });
 
 test("Key Station stays put and a derived key opens a fingerprint tab with a summary", () => {
