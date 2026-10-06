@@ -55,10 +55,12 @@ material. Its security posture rests on the following model:
    rootfs, one Ubuntu snapshot, clang 18.1.3) and requires a second build in
    that image to match the bytes it publishes; the artifact commit and the
    Pages deploy wait for that check. Their digests are published in
-   `WASM-SHA256SUMS.txt`. A host clang is a different compiler. The 1.0.0
-   WASM hashes have been reproduced in that image on three machines outside
-   GitHub, by three people: Windows with WSL2 and bare-metal Linux on
-   x86_64, and macOS on ARM64 (the image under Rosetta). The page is
+   `WASM-SHA256SUMS.txt`. A host clang is a different compiler. The
+   `entropylab-wasm` and `vanity-wasm` modules have been reproduced in that
+   image on three machines outside GitHub, by three people: Windows with
+   WSL2 and bare-metal Linux on x86_64, and macOS on ARM64 (the image under
+   Rosetta). The `psbt-wasm` module has changed since those rebuilds, and
+   no outside rebuild of its current bytes is recorded yet. The page is
    rebuilt per commit, since the build stamps the commit into it; the log
    lists which pages were reproduced where. [docs/Reproductions.md](docs/Reproductions.md)
    records each rebuild by commit. Build-host paths are remapped out of the

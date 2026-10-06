@@ -39,7 +39,7 @@ A row records one match: what was rebuilt, where, and the SHA-256 it matched.
 | 2026-09-29 | `cb55bd9` (the 1.0.0 merge) | `src/js/psbt-wasm-b64.js`, `npm run build:wasm` | `98f801939635980600edfe9ab7320ee3f76c046cd2f90baa01a0dcf2defad468` | the dev image (see the note), linux/amd64 under Rosetta in Colima 0.10.3 on the same Mac, network off | w-s-bitcoin |
 | 2026-09-29 | `cb55bd9` (the 1.0.0 merge) | `src/js/vanity-wasm-b64.js`, `npm run build:wasm` | `8f9b26cf68b8f77584564b5ecc957d55db5ec7bcc75f3b1195046f69cb2a57f1` | the dev image (see the note), linux/amd64 under Rosetta in Colima 0.10.3 on the same Mac, network off | w-s-bitcoin |
 | 2026-09-29 | `cb55bd9` (the 1.0.0 merge) | `entropylab.html`, from the modules rebuilt above | `2b9828abadad8030588d2de512d73519f7ce06d3764fd5c3e1caaed34693131a` | the dev image (see the note), linux/amd64 under Rosetta in Colima 0.10.3 on the same Mac, network off | w-s-bitcoin |
-| 2026-09-30 | `92b8a3a` (proposed v1.0.0 tag, #650) | `entropylab.html`, from the committed WASM modules (unchanged since `cb55bd9`, rows above) | `ac19c8d411d51523a6135b2e8ba4e06faeef137672a62ddd682162caafda05ef` | Windows 11 Home 10.0.26200, x86_64, Node 24.14.0, on the host (no container) | MrHodlX |
+| 2026-10-06 | `c503e17` (v1.0.0rc2, #817) | `entropylab.html`, from the committed WASM modules | `a50cab01494b343d666bc502f1bdcd81c896390873c964de12ceb983c489cf22` | Windows 11 Home 10.0.26200, x86_64, Node 24.14.0, on the host (no container) | MrHodlX |
 
 For MrHodlX's rows, the dev image was built on his laptop on 2026-09-24
 from the Dockerfile as it stands at `cb55bd9` (unchanged since `8a9eae4`):
