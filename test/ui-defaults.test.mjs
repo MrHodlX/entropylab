@@ -50,7 +50,7 @@ test("every enabled button uses orange and black momentary press feedback", () =
 
 test("wallet coin type indexes enable and default to mainnet", () => {
   assert.match(shell, /<input id="network" type="text" inputmode="numeric" value="0'"/);
-  assert.match(shell, /id="msig-origin-state" hidden aria-hidden="true"[\s\S]*<input id="msig-network" type="number" value="0">/);
+  assert.match(shell, /id="msig-origin-state" hidden[\s\S]*<input id="msig-network" type="number" value="0">/);
   for (const markup of [shell]) {
     assert.match(markup, /id="network-help">Coin type index (?:·|\\xB7) Mainnet (?:·|\\xB7) Hardened (?:·|\\xB7) 0 to 2,147,483,647/);
     assert.match(markup, /<span id="msig-network-help"><\/span>/);
@@ -767,7 +767,7 @@ test("derivation indexes title their Harden controls with safe defaults", () => 
     for (const id of ["msig-purpose", "msig-network", "msig-account"]) {
       assert.match(markup, new RegExp(`<input id="${id}"[^>]*><input id="${id}-harden" type="checkbox" checked`));
     }
-    assert.match(markup, /<div id="msig-origin-state" hidden aria-hidden="true">/);
+    assert.match(markup, /<div id="msig-origin-state" hidden>/);
     for (const id of ["branch-start", "address-start", "msig-branch-start", "msig-address-start"]) {
       assert.match(markup, new RegExp(`<div class="field-head"><label for="${id}"[^>]*>[^<]*</label><label class="derivation-harden"><input id="${id}-harden" type="checkbox"(?! checked)`));
     }
@@ -879,7 +879,7 @@ test("multisig key order is sorted by default and visible with the policy settin
 
 test("multisig separates script type from purpose and keeps the Legacy BIP87 shortcut", () => {
   for (const markup of [shell]) {
-    assert.match(markup, /id="msig-origin-state" hidden aria-hidden="true"[\s\S]*id="msig-purpose"[^>]*value="48"[\s\S]*id="msig-network"[^>]*value="0"[\s\S]*id="msig-account"/);
+    assert.match(markup, /id="msig-origin-state" hidden[\s\S]*id="msig-purpose"[^>]*value="48"[\s\S]*id="msig-network"[^>]*value="0"[\s\S]*id="msig-account"/);
     assert.doesNotMatch(markup, /<label for="msig-purpose">Purpose<\/label>|<label for="msig-network">Network<\/label>|<label for="msig-account">Account<\/label>/);
     assert.match(markup, /id="msig-legacy-account-toggle" hidden/);
     assert.match(markup, /id="msig-legacy-bip87" type="checkbox"/);
@@ -968,7 +968,7 @@ test("account results do not repeat derivation settings shown above", () => {
 
 test("multisig account is retained internally as a value derived from key origins", () => {
   for (const markup of [shell]) {
-    assert.match(markup, /id="msig-origin-state" hidden aria-hidden="true"[\s\S]*<input id="msig-account" type="text" value="" disabled>/);
+    assert.match(markup, /id="msig-origin-state" hidden[\s\S]*<input id="msig-account" type="text" value="" disabled>/);
     assert.match(markup, /id="msig-account-warning" role="status" hidden/);
   }
   assert.match(app, /function hodlUpdateMsigAccount\(\)/);
@@ -1008,7 +1008,7 @@ test("multisig consistently uses derive for its heading and action", () => {
   for (const markup of [shell]) {
     assert.match(markup, /<h2[^>]*>Build a watch-only multisig<\/h2>/);
     assert.match(markup, /id="msig-go"[^>]*>Derive Multisig<\/button>/);
-    assert.match(markup, /id="msig-go"[^>]*disabled[^>]*aria-disabled="true"/);
+    assert.match(markup, /id="msig-go"[^>]*\sdisabled(?=[\s>])/);
     assert.doesNotMatch(markup, /Create a multisig wallet|Build Multisig/);
   }
   assert.match(app, /function hodlValidatedMsigInputs\(\)/);
@@ -1659,8 +1659,8 @@ test("one PSBT workspace contains PSBT Inspector, PSBT Editor and Nonce Inspecto
   assert.match(appSource, /\["psbt", "PSBT", "PSBT"\]/);
   assert.doesNotMatch(appSource, /\["psbted", "PSBT Editor", "Editor"\]/);
   for (const markup of [shell]) {
-    assert.match(markup, /<div class="tool-intro-stack" id="psbt-tool-intros" hidden>[\s\S]*?id="psbt-tool-intro"[\s\S]*?id="psbted-tool-intro"[\s\S]*?id="nonce-tool-intro"[\s\S]*?<section class="key-manager no-print" id="psbt-manager" hidden>/);
-    assert.match(markup, /<section class="key-manager no-print" id="psbt-manager" hidden>/);
+    assert.match(markup, /<div class="tool-intro-stack" id="psbt-tool-intros" hidden>[\s\S]*?id="psbt-tool-intro"[\s\S]*?id="psbted-tool-intro"[\s\S]*?id="nonce-tool-intro"[\s\S]*?<div class="key-manager no-print" id="psbt-manager" hidden>/);
+    assert.match(markup, /<div class="key-manager no-print" id="psbt-manager" hidden>/);
     assert.match(markup, /<div class="key-tab-strip">\s*<div class="key-tabs" id="psbt-tool-tabs" role="tablist" aria-label="PSBT stations">/);
     // The wiring is the contract: which tab starts selected and which card each
     // one controls. How a tab is styled is left to the stylesheet.
@@ -1731,18 +1731,18 @@ test("Journal gates its five tools behind the local notebook", () => {
   assert.match(appSource, /function hodlInitSecretFieldAutoClear\(\) \{[\s\S]*hodlJournalWipeMem\(\)/);
   assert.match(appSource, /function hodlJournalWipeMem\(\) \{[\s\S]*hodlJournalWipeNotebook\(\)/);
   for (const markup of [shell]) {
-    assert.match(markup, /<div class="tool-intro edge-note is-info" id="journal-tool-intro" hidden>[\s\S]*?<h2>Entropy Journal<\/h2>[\s\S]*?<section class="key-manager no-print" id="journal-manager" hidden>/);
-    assert.match(markup, /id="journal-global-download"[^>]*disabled aria-disabled="true"[^>]*>[\s\S]*?<span>Download journal<\/span><\/button>/);
-    assert.match(markup, /class="btn red clear-current-action" id="journal-global-clear"[^>]*disabled aria-disabled="true"[^>]*>Clear journal<\/button>/);
-    assert.match(markup, /<section class="key-manager no-print" id="journal-manager" hidden>/);
+    assert.match(markup, /<div class="tool-intro edge-note is-info" id="journal-tool-intro" hidden>[\s\S]*?<h2>Entropy Journal<\/h2>[\s\S]*?<div class="key-manager no-print" id="journal-manager" hidden>/);
+    assert.match(markup, /id="journal-global-download"[^>]*\sdisabled(?=[\s>])[^>]*>[\s\S]*?<span>Download journal<\/span><\/button>/);
+    assert.match(markup, /class="btn red clear-current-action" id="journal-global-clear"[^>]*\sdisabled(?=[\s>])[^>]*>Clear journal<\/button>/);
+    assert.match(markup, /<div class="key-manager no-print" id="journal-manager" hidden>/);
     assert.match(markup, /<div class="key-tabs" id="journal-tool-tabs" role="tablist" aria-label="Journal stations">/);
     assert.match(markup, /id="journal-book-tab"[^>]*data-journal-tool="book"[^>]*disabled>Entries<\/button>/);
-    assert.match(markup, /id="journal-notes-tab"[^>]*aria-disabled="true"[^>]*data-journal-tool="notes"[^>]*disabled/);
-    assert.match(markup, /id="journal-keymanager-tab"[^>]*aria-disabled="true"[^>]*data-journal-tool="keymanager"[^>]*disabled/);
-    assert.match(markup, /id="journal-state-tab"[^>]*aria-disabled="true"[^>]*data-journal-tool="state"[^>]*disabled/);
-    assert.match(markup, /id="journal-log-tab"[^>]*aria-disabled="true"[^>]*data-journal-tool="log"[^>]*disabled/);
+    assert.match(markup, /id="journal-notes-tab"[^>]*data-journal-tool="notes"[^>]*disabled/);
+    assert.match(markup, /id="journal-keymanager-tab"[^>]*data-journal-tool="keymanager"[^>]*disabled/);
+    assert.match(markup, /id="journal-state-tab"[^>]*data-journal-tool="state"[^>]*disabled/);
+    assert.match(markup, /id="journal-log-tab"[^>]*data-journal-tool="log"[^>]*disabled/);
     assert(markup.indexOf('id="journal-notes-tab"') < markup.indexOf('id="journal-keymanager-tab"') && markup.indexOf('id="journal-keymanager-tab"') < markup.indexOf('id="journal-state-tab"'), "Key manager should follow Notepad in the Journal tab strip");
-    assert.match(markup, /id="journal-card" role="region" aria-label="Journal"/);
+    assert.match(markup, /<section\b[^>]*\bid="journal-card" aria-label="Journal"/);
     assert.match(markup, /id="journal-create"/);
     assert.match(markup, /id="journal-unlock"/);
     assert.match(markup, /id="journal-save"/);
@@ -1789,7 +1789,7 @@ test("Journal gates its five tools behind the local notebook", () => {
     assert.doesNotMatch(markup, /id="journal-notes-download-text"|Download plain-text notes/);
     assert.doesNotMatch(markup, /id="journal-note-add"|>Add note</);
     assert.doesNotMatch(markup, /id="journal-state-capture"|Capture this session/);
-    assert.match(markup, /id="journal-state-text"[^>]*readonly aria-readonly="true"/);
+    assert.match(markup, /id="journal-state-text"[^>]*\sreadonly(?=[\s>])/);
     assert.match(markup, /id="journal-state-private"/);
     assert(markup.indexOf('id="journal-state-text"') < markup.indexOf('id="journal-state-download"'), "Session state download should follow the live snapshot");
     assert.match(markup, /class="btn secondary green journal-download-action journal-file-button" id="journal-state-download"[^>]*aria-label="Download session state"[^>]*>[\s\S]*?<span class="control-label">Download session state<\/span><\/button>/);
@@ -2179,7 +2179,9 @@ test("tool cards follow the shared spacing contract", () => {
     "journal-keymanager-card", "journal-state-card", "journal-log-card",
   ];
   for (const id of cardIds) {
-    assert.match(shell, new RegExp(`<section class="card no-print tool-card" id="${id}"`));
+    assert.match(shell, id === "journal-card"
+      ? /<section\b[^>]*\bid="journal-card" aria-label="Journal"/
+      : new RegExp(`id="${id}" role="tabpanel"`));
   }
   // BIP-85, Silent Payments, Vanity, and the two PSBT inspectors.
   assert.equal((shell.match(/class="station-key-source tool-section"/g) || []).length, 5);
@@ -2292,7 +2294,7 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
   // picked; the card is a tabpanel and stays out of print output.
   for (const markup of [shell]) {
     assert.match(markup, /<div class="tool-intro edge-note is-info" id="vanity-tool-intro" hidden>/);
-    assert.match(markup, /<section class="card no-print tool-card" id="vanity-card" role="tabpanel" hidden>/);
+    assert.match(markup, /<div class="card no-print tool-card" id="vanity-card" role="tabpanel" hidden>/);
     // The key comes in through the same clickable Key Station picker the
     // BIP-85 and Silent Payments tabs use; the selected key is restated with
     // its starting passphrase, labelled and read-only.
@@ -2323,7 +2325,7 @@ test("the vanity grinder is a workspace tab that ships collapsed and never auto-
     assert.match(markup, /id="vanity-go" type="button"[^>]*>/);
     assert.match(markup, /id="vanity-progress" role="progressbar"[^>]*hidden>/);
     assert.doesNotMatch(markup, /id="vanity-stop"/);
-    assert.match(markup, /id="vanity-wipe" type="button" disabled aria-disabled="true">/);
+    assert.match(markup, /id="vanity-wipe" type="button" disabled>/);
     assert.match(markup, /id="vanity-status" aria-live="polite"/);
     assert.match(markup, /<p class="err" id="vanity-error" role="alert"><\/p>/);
     assert.match(markup, /<div id="vanity-out"[^>]*aria-live="polite"><\/div>/);

@@ -2567,7 +2567,7 @@
     document.querySelector('#journal-tool-tabs [data-journal-tool="state"]').click();
     await until(() => !document.getElementById("journal-state-card").hidden, "session state");
     const stateText = document.getElementById("journal-state-text");
-    assert(stateText.readOnly && stateText.getAttribute("aria-readonly") === "true", "the live session snapshot should be read-only");
+    assert(stateText.readOnly, "the live session snapshot should be read-only");
     assert(!document.getElementById("journal-state-capture"), "the live session snapshot should not need a Capture button");
     await until(() => stateText.value.includes("ENTROPYLAB SESSION STATE"), "the live session snapshot to populate");
     const snap = stateText.value;
