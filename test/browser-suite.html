@@ -6451,6 +6451,10 @@
     button.click();
     assert(!overlay().hidden, "End session did not ask first");
     equal(document.activeElement?.id, "end-session-cancel");
+    // Only Edge adds the quit-Edge warning (#816). The harness names the
+    // engine it launched, independently of the page's own detection.
+    const engine = new URLSearchParams(location.search).get("engine");
+    if (engine) equal(Boolean(overlay().querySelector("#end-session-edge")), engine === "edge");
     document.getElementById("end-session-cancel").click();
     assert(overlay().hidden && document.getElementById("btc-calc") && leaves.length === 0 && closed === 0, "Cancel ended the session");
 
