@@ -621,9 +621,10 @@ npm ci
 npm run build
 ```
 
-To modify the Rust bindings (`entropylab-wasm/`, `psbt-wasm/`), Rust (with the
-`wasm32-unknown-unknown` target, installed automatically by rustup) is also
-required; regenerate the committed artifacts with `npm run build:wasm`.
+To modify the Rust bindings (`entropylab-wasm/`, `psbt-wasm/`, `vanity-wasm/`),
+Rust (with the `wasm32-unknown-unknown` target, installed automatically by
+rustup) is also required; regenerate the committed artifacts with
+`npm run build:wasm`.
 
 Build output (generated; CI rebuilds it for every run and commits it back to
 `rock` after each merge so the file stays downloadable from the repository):
