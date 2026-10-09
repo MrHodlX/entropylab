@@ -45,7 +45,7 @@ export const isEdge = (nav) => {
 
 // The dialog's extra warning in Edge; null in every other browser.
 export const endSessionEdgeWarning = (nav) => isEdge(nav)
-  ? t("You are using Microsoft Edge. In our tests, Edge kept copies of a copied seed phrase after the tab closed, until Edge itself was quit. Quit Edge completely, and turn off Startup boost and background apps in its System settings.")
+  ? t("You are using Microsoft Edge. In our tests, Edge kept copies of a copied seed phrase after the tab closed, until Edge itself was quit. Assume it does the same with any secret you copy, such as a private key. Quit Edge completely, and turn off Startup boost and background apps in its System settings.")
   : null;
 
 // Static card skeleton; its words are set through textContent at init, so no
