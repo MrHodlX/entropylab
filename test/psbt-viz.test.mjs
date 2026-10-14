@@ -348,8 +348,11 @@ test("the testnet network renders testnet addresses", () => {
 // program at all gets no note. v2-v16, and v1 at any other length, warn that
 // anyone can spend the output until a soft fork defines it (drafts such as
 // BIP460 propose v2). v1 <4e73> is pay-to-anchor, anyone-can-spend by design.
-// v0 at any other length can never be spent. Notes never block export: BIP350
-// says wallets must be able to pay future versions.
+// v0 at any other length can never be spent, and neither can a v1-v16 program
+// whose bytes are zero-valued (all zeros, or negative zero): Bitcoin Core's
+// VerifyScript fails a false top stack item (CastToBool) before it looks at
+// the witness program. Notes never block export: BIP350 says wallets must be
+// able to pay future versions.
 const program = (version, bytes) => `${version === 0 ? "00" : (0x50 + version).toString(16)}${bytes.toString(16).padStart(2, "0")}${"ab".repeat(bytes)}`;
 
 test("witness programs the consensus rules leave undefined are classified, and defined ones are not", () => {
@@ -376,7 +379,7 @@ test("witness programs the consensus rules leave undefined are classified, and d
   assert.equal(odd.label, "SegWit v1, 20-byte (undefined)");
   assert.equal(odd.tone, "warn");
   assert.equal(odd.note(2), "Output #2 pays to a 20-byte SegWit v1 program, which Taproot does not define. Until a soft fork does, anyone can spend it.");
-  assert.equal(witnessProgramNote("51020000").label, "SegWit v1, 2-byte (undefined)", "only 4e73 is P2A");
+  assert.equal(witnessProgramNote("51024e74").label, "SegWit v1, 2-byte (undefined)", "only 4e73 is P2A");
 
   const anchor = witnessProgramNote("51024e73");
   assert.equal(anchor.label, "P2A (anchor)");
@@ -387,6 +390,27 @@ test("witness programs the consensus rules leave undefined are classified, and d
   assert.equal(burned.label, "SegWit v0, 25-byte (unspendable)");
   assert.equal(burned.tone, "bad");
   assert.equal(burned.note(4), "Output #4 is a 25-byte SegWit v0 program: no one can ever spend it.");
+});
+
+test("a zero-valued v1-v16 witness program is unspendable, not anyone-can-spend", () => {
+  // Bitcoin Core (interpreter.cpp): VerifyScript returns SCRIPT_ERR_EVAL_FALSE
+  // when CastToBool(stack.back()) is false, before the witness-program branch.
+  // CastToBool is false for all-zero bytes and for zeros ending in 0x80
+  // (negative zero), so these outputs burn their coins (BIP141 footnote 2).
+  const { witnessProgramNote } = vizModule;
+  for (const [script, version, bytes] of [
+    ["51020000", 1, 2], ["51020080", 1, 2], ["52020000", 2, 2], ["60020080", 16, 2],
+    [`5228${"00".repeat(40)}`, 2, 40], [`5314${"00".repeat(19)}80`, 3, 20], [`5114${"00".repeat(20)}`, 1, 20],
+  ]) {
+    const found = witnessProgramNote(script);
+    assert.equal(found?.label, `SegWit v${version}, ${bytes}-byte (unspendable)`, script);
+    assert.equal(found.tone, "bad", script);
+    assert.equal(found.note(5), `Output #5 pays to a zero-valued SegWit v${version} program, which the script check reads as false: no one can ever spend it.`, script);
+  }
+  // One nonzero byte anywhere but a trailing 0x80 makes the program true: still undefined.
+  for (const script of ["52020001", "52028000", "52020100", "51020001", "52020180"]) {
+    assert.equal(witnessProgramNote(script)?.tone, "warn", script);
+  }
 });
 
 test("the diagram labels undefined witness programs instead of a bare 'script'", () => {

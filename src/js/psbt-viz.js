@@ -59,8 +59,14 @@ const groupSats = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 // v0 length fails every spend, so nothing can ever spend it. v1 at another
 // length, and v2-v16 at any length, are spendable by anyone until a soft fork
 // defines them (BIP460, for one, proposes v2). v1 <4e73> is pay-to-anchor
-// (P2A, BIP-433), spendable by anyone on purpose. These are notes, never a
-// block: BIP350 says wallets must be able to pay future versions.
+// (P2A, BIP-433), spendable by anyone on purpose. A v1-v16 program whose
+// bytes are zero-valued is the exception: script evaluation reads it as false
+// (all zeros, or zeros ending in 0x80: Bitcoin Core's CastToBool), and
+// VerifyScript fails a false result before it looks at the witness program,
+// so those coins are burned, not up for grabs (BIP141 footnote 2). These are
+// notes, never a block: BIP350 says wallets must be able to pay future
+// versions.
+const zeroValued = (programHex) => /^(?:00)*(?:00|80)$/.test(programHex);
 export const witnessProgramNote = (scriptHex) => {
   const match = /^(00|5[1-9a-f]|60)([0-9a-f]{2})([0-9a-f]*)$/.exec(String(scriptHex ?? "").toLowerCase());
   if (!match) return null;
@@ -71,8 +77,9 @@ export const witnessProgramNote = (scriptHex) => {
     if (bytes === 20 || bytes === 32) return null;
     return { label: `SegWit v0, ${bytes}-byte (unspendable)`, tone: "bad", note: (index) => `Output #${index} is a ${bytes}-byte SegWit v0 program: no one can ever spend it.` };
   }
+  if (version === 1 && bytes === 32) return null;
+  if (zeroValued(match[3])) return { label: `SegWit v${version}, ${bytes}-byte (unspendable)`, tone: "bad", note: (index) => `Output #${index} pays to a zero-valued SegWit v${version} program, which the script check reads as false: no one can ever spend it.` };
   if (version === 1) {
-    if (bytes === 32) return null;
     if (match[3] === "4e73") return { label: "P2A (anchor)", tone: "info", note: (index) => `Output #${index} is a pay-to-anchor (P2A): anyone can spend it, by design, to bump the fee.` };
     return { label: `SegWit v1, ${bytes}-byte (undefined)`, tone: "warn", note: (index) => `Output #${index} pays to a ${bytes}-byte SegWit v1 program, which Taproot does not define. Until a soft fork does, anyone can spend it.` };
   }
