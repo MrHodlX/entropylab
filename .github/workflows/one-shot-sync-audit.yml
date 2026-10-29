@@ -1,0 +1,163 @@
+name: one-shot-sync-audit
+on:
+  workflow_dispatch:
+jobs:
+  sync-and-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Sync rock + attempt main + audit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_SHA: ""
+        run: |
+          set -euo pipefail
+          UPSTREAM_SHA=$(gh api repos/OogaBoogaX/entropylab/commits/rock --jq .sha)
+          echo "UPSTREAM_ROCK_SHA=$UPSTREAM_SHA"
+          echo "UPSTREAM_ROCK_SHA=$UPSTREAM_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+          before_main=$(gh api repos/MrHodlX/entropylab/git/ref/heads/main --jq .object.sha)
+          before_rock=$(gh api repos/MrHodlX/entropylab/git/ref/heads/rock --jq .object.sha)
+          echo "BEFORE_MAIN=$before_main"
+          echo "BEFORE_ROCK=$before_rock"
+          echo "BEFORE_MAIN=$before_main" >> "$GITHUB_STEP_SUMMARY"
+          echo "BEFORE_ROCK=$before_rock" >> "$GITHUB_STEP_SUMMARY"
+
+          # Verify FF-safe (behind_by==0)
+          for b in main rock; do
+            behind=$(gh api "repos/MrHodlX/entropylab/compare/${b}...OogaBoogaX:rock" --jq .behind_by)
+            echo "COMPARE_${b}_behind_by=$behind"
+            echo "COMPARE_${b}_behind_by=$behind" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$behind" != "0" ]; then
+              echo "REFUSING $b: behind_by=$behind (unique commits)" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 2
+            fi
+          done
+
+          # Sync rock (unprotected) via merge-upstream (targets upstream default=rock)
+          echo "=== merge-upstream rock ===" | tee -a "$GITHUB_STEP_SUMMARY"
+          if gh api -X POST repos/MrHodlX/entropylab/merge-upstream -f branch=rock 2> /tmp/rock_err | tee /tmp/rock_out; then
+            echo "ROCK_SYNC_OK" | tee -a "$GITHUB_STEP_SUMMARY"
+            cat /tmp/rock_out >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            echo "ROCK_SYNC_FAIL" | tee -a "$GITHUB_STEP_SUMMARY"
+            cat /tmp/rock_err | tee -a "$GITHUB_STEP_SUMMARY" || true
+            # Fallback: non-force PATCH ref if object known
+            if gh api -X PATCH repos/MrHodlX/entropylab/git/refs/heads/rock -f sha="$UPSTREAM_SHA" -F force=false 2> /tmp/rock_err2 | tee /tmp/rock_out2; then
+              echo "ROCK_PATCH_OK" | tee -a "$GITHUB_STEP_SUMMARY"
+              cat /tmp/rock_out2 >> "$GITHUB_STEP_SUMMARY" || true
+            else
+              echo "ROCK_PATCH_FAIL" | tee -a "$GITHUB_STEP_SUMMARY"
+              cat /tmp/rock_err2 | tee -a "$GITHUB_STEP_SUMMARY" || true
+            fi
+          fi
+
+          # Attempt main (likely blocked by Protect main ruleset)
+          echo "=== merge-upstream main ===" | tee -a "$GITHUB_STEP_SUMMARY"
+          if gh api -X POST repos/MrHodlX/entropylab/merge-upstream -f branch=main 2> /tmp/main_err | tee /tmp/main_out; then
+            echo "MAIN_SYNC_OK" | tee -a "$GITHUB_STEP_SUMMARY"
+            cat /tmp/main_out >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            echo "MAIN_SYNC_FAIL" | tee -a "$GITHUB_STEP_SUMMARY"
+            cat /tmp/main_err | tee -a "$GITHUB_STEP_SUMMARY" || true
+            if gh api -X PATCH repos/MrHodlX/entropylab/git/refs/heads/main -f sha="$UPSTREAM_SHA" -F force=false 2> /tmp/main_err2 | tee /tmp/main_out2; then
+              echo "MAIN_PATCH_OK" | tee -a "$GITHUB_STEP_SUMMARY"
+              cat /tmp/main_out2 >> "$GITHUB_STEP_SUMMARY" || true
+            else
+              echo "MAIN_PATCH_FAIL" | tee -a "$GITHUB_STEP_SUMMARY"
+              cat /tmp/main_err2 | tee -a "$GITHUB_STEP_SUMMARY" || true
+            fi
+          fi
+
+          after_main=$(gh api repos/MrHodlX/entropylab/git/ref/heads/main --jq .object.sha)
+          after_rock=$(gh api repos/MrHodlX/entropylab/git/ref/heads/rock --jq .object.sha)
+          echo "AFTER_MAIN=$after_main"
+          echo "AFTER_ROCK=$after_rock"
+          echo "AFTER_MAIN=$after_main" >> "$GITHUB_STEP_SUMMARY"
+          echo "AFTER_ROCK=$after_rock" >> "$GITHUB_STEP_SUMMARY"
+
+          # Open PRs whose head is on this fork
+          echo "=== OPEN_PRS ===" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh api --paginate "search/issues?q=is:pr+is:open+head:MrHodlX/" --jq '.items[] | select(.repository_url|test("entropylab")) | {number, html_url, title, repository_url}' | tee /tmp/prs.json | tee -a "$GITHUB_STEP_SUMMARY" || true
+          gh pr list -R MrHodlX/entropylab --state open --json number,url,title,headRefName | tee /tmp/fork_prs.json | tee -a "$GITHUB_STEP_SUMMARY" || true
+          gh pr list -R OogaBoogaX/entropylab --state open --head MrHodlX --json number,url,title,headRefName | tee /tmp/up_prs.json | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+          # Audit all fork branches vs OogaBoogaX:rock
+          echo "=== BRANCH_AUDIT ===" | tee -a "$GITHUB_STEP_SUMMARY"
+          mkdir -p /tmp/audit
+          : > /tmp/audit/safe.txt
+          : > /tmp/audit/keep.txt
+          page=1
+          while true; do
+            mapfile -t lines < <(gh api "repos/MrHodlX/entropylab/branches?per_page=100&page=$page" --jq '.[] | [.name,.commit.sha] | @tsv')
+            if [ ${#lines[@]} -eq 0 ]; then break; fi
+            for line in "${lines[@]}"; do
+              name=${line%%$'\t'*}
+              sha=${line#*$'\t'}
+              # skip comparing during rate issues with retry
+              behind=""
+              for attempt in 1 2 3; do
+                if behind=$(gh api "repos/MrHodlX/entropylab/compare/${name}...OogaBoogaX:rock" --jq .behind_by 2>/dev/null); then
+                  break
+                fi
+                sleep $((attempt*2))
+              done
+              if [ -z "$behind" ]; then
+                echo "ERROR\t$name\t$sha" | tee -a /tmp/audit/keep.txt
+                continue
+              fi
+              # Check open PR head match (fork PRs + upstream PRs from fork)
+              pr_hit=$(python3 - <<'PY' "$name"
+import json,sys
+name=sys.argv[1]
+hits=[]
+for path in ["/tmp/fork_prs.json","/tmp/up_prs.json"]:
+  try:
+    data=json.load(open(path))
+  except Exception:
+    data=[]
+  if isinstance(data, dict):
+    data=data.get("data", data)
+  for pr in data or []:
+    if pr.get("headRefName")==name:
+      hits.append(pr.get("url") or pr.get("html_url") or str(pr.get("number")))
+print(",".join(hits))
+PY
+)
+              if [ "$behind" = "0" ] && [ -z "$pr_hit" ]; then
+                echo "$name" >> /tmp/audit/safe.txt
+                echo "SAFE\t$name\tbehind=$behind\tsha=$sha" >> /tmp/audit/all.tsv
+              else
+                echo "$name\t$behind\t$pr_hit" >> /tmp/audit/keep.txt
+                echo "KEEP\t$name\tbehind=$behind\tsha=$sha\tprs=$pr_hit" >> /tmp/audit/all.tsv
+              fi
+            done
+            page=$((page+1))
+            if [ ${#lines[@]} -lt 100 ]; then break; fi
+          done
+
+          safe_count=$(wc -l < /tmp/audit/safe.txt | tr -d ' ')
+          keep_count=$(wc -l < /tmp/audit/keep.txt | tr -d ' ')
+          echo "SAFE_COUNT=$safe_count" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "KEEP_COUNT=$keep_count" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "## Safe-to-delete candidates ($safe_count)" >> "$GITHUB_STEP_SUMMARY"
+          sort /tmp/audit/safe.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "## Keep (unique commits or open PR) ($keep_count)" >> "$GITHUB_STEP_SUMMARY"
+          sort /tmp/audit/keep.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          cp /tmp/audit/safe.txt /tmp/audit/keep.txt /tmp/audit/all.tsv "$GITHUB_WORKSPACE"/ 2>/dev/null || true
+          # write artifacts into step summary already; also dump files for artifact upload
+          mkdir -p audit-out
+          cp /tmp/audit/* audit-out/
+          echo "$UPSTREAM_SHA" > audit-out/upstream_rock_sha.txt
+          echo "$before_main" > audit-out/before_main.txt
+          echo "$before_rock" > audit-out/before_rock.txt
+          echo "$after_main" > audit-out/after_main.txt
+          echo "$after_rock" > audit-out/after_rock.txt
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fork-sync-audit
+          path: audit-out/
